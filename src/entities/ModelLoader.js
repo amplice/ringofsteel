@@ -344,10 +344,11 @@ export class ModelLoader {
     // Create idle clip: single-frame extract at frame 32 of walk_right
     const idle = ModelLoader._sliceClip(srcClip, 'idle', 32, 33, true);
 
-    // Attack clip
+    // Attack clip — strip root bone Y-rotation so the animation doesn't spin the character
     const attackClip = attackGltf.animations[0];
     attackClip.name = 'attack';
     attackClip.trim();
+    ModelLoader._lockRootRotation(attackClip);
 
     console.log('Fight animations loaded:', { idle: idle.duration, walkRight: walkRight.duration, walkLeft: walkLeft.duration, attack: attackClip.duration });
 
@@ -411,6 +412,44 @@ export class ModelLoader {
     }
 
     return new THREE.AnimationClip(name, duration, subTracks);
+  }
+
+  /**
+   * Lock root bone (spine) Y-rotation to first-frame value so the animation
+   * doesn't spin the character. Keeps X/Z rotation for natural body tilt.
+   */
+  static _lockRootRotation(clip) {
+    for (const track of clip.tracks) {
+      if (track.name === 'spine.quaternion') {
+        const vpk = track.values.length / track.times.length; // 4 for quaternion
+        if (vpk !== 4) continue;
+
+        // Extract Y-rotation from first frame, lock all frames to it
+        // We decompose each quaternion, lock the Y-axis rotation to frame 0's value
+        const q = new THREE.Quaternion();
+        const euler = new THREE.Euler();
+
+        // Get first frame Y rotation
+        q.set(track.values[0], track.values[1], track.values[2], track.values[3]);
+        euler.setFromQuaternion(q, 'YXZ');
+        const lockedY = euler.y;
+
+        // Apply locked Y to all frames
+        for (let i = 0; i < track.times.length; i++) {
+          const off = i * 4;
+          q.set(track.values[off], track.values[off+1], track.values[off+2], track.values[off+3]);
+          euler.setFromQuaternion(q, 'YXZ');
+          euler.y = lockedY;
+          q.setFromEuler(euler);
+          track.values[off] = q.x;
+          track.values[off+1] = q.y;
+          track.values[off+2] = q.z;
+          track.values[off+3] = q.w;
+        }
+        console.log(`Locked root Y-rotation to ${(lockedY * 180/Math.PI).toFixed(1)}° for attack clip`);
+        break;
+      }
+    }
   }
 
   /**

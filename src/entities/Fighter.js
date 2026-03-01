@@ -116,15 +116,20 @@ export class Fighter {
       const dx = opponent.position.x - this.position.x;
       const dz = opponent.position.z - this.position.z;
       this.facingRight = dx >= 0;
-      // atan2(dz, dx) gives 0 when opponent is to +X, PI when to -X
-      // Add PI/2 because Cartwheel GLB model faces +Z at rotation.y=0
-      // +PI/2 rotates +Z face toward +X (the opponent direction)
-      const targetY = Math.atan2(dz, dx) + Math.PI / 2;
-      // Smooth rotation with angle wrapping
-      let diff = targetY - this.group.rotation.y;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      this.group.rotation.y += diff * 0.15;
+
+      // Don't update rotation during attacks — lock facing to attack direction
+      const isAttacking =
+        this.state === FighterState.ATTACK_STARTUP ||
+        this.state === FighterState.ATTACK_ACTIVE ||
+        this.state === FighterState.ATTACK_RECOVERY;
+
+      if (!isAttacking) {
+        const targetY = Math.atan2(dz, dx) + Math.PI / 2;
+        let diff = targetY - this.group.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.group.rotation.y += diff * 0.15;
+      }
     }
 
     // Update stance

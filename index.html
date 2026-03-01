@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wuxia Warrior</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Georgia', 'Times New Roman', serif; }
+    canvas { display: block; }
+
+    #ui-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #ui-overlay > * { pointer-events: auto; }
+
+    /* Title Screen */
+    #title-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #0a0a0a 0%, #1a0a0a 50%, #0a0a0a 100%);
+    }
+    #title-screen h1 {
+      font-size: 72px;
+      color: #c8a84e;
+      text-shadow: 0 0 30px rgba(200, 168, 78, 0.5);
+      letter-spacing: 12px;
+      margin-bottom: 20px;
+    }
+    #title-screen .subtitle {
+      font-size: 18px;
+      color: #887744;
+      letter-spacing: 6px;
+      margin-bottom: 60px;
+    }
+    #title-screen .prompt {
+      font-size: 20px;
+      color: #c8a84e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    /* Character Select */
+    #select-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 10, 0.95);
+    }
+    #select-screen h2 {
+      font-size: 36px;
+      color: #c8a84e;
+      letter-spacing: 6px;
+      margin-bottom: 40px;
+    }
+    .select-options {
+      display: flex;
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+    .select-btn {
+      background: none;
+      border: 1px solid #c8a84e;
+      color: #c8a84e;
+      font-family: 'Georgia', serif;
+      font-size: 18px;
+      padding: 15px 40px;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 2px;
+    }
+    .select-btn:hover, .select-btn.active {
+      background: rgba(200, 168, 78, 0.2);
+      box-shadow: 0 0 15px rgba(200, 168, 78, 0.3);
+    }
+    .select-section { margin-bottom: 30px; text-align: center; }
+    .select-section h3 {
+      color: #887744;
+      font-size: 14px;
+      letter-spacing: 4px;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+    }
+
+    /* HUD */
+    #hud {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+    }
+    .fighter-hud {
+      position: absolute;
+      top: 20px;
+    }
+    .fighter-hud.p1 { left: 30px; }
+    .fighter-hud.p2 { right: 30px; text-align: right; }
+    .fighter-name {
+      font-size: 14px;
+      color: #887744;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .stance-indicator {
+      font-size: 16px;
+      color: #c8a84e;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+    .body-diagram {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .body-zone {
+      width: 60px;
+      height: 20px;
+      border: 1px solid #444;
+      background: rgba(0, 0, 0, 0.5);
+      transition: background 0.3s;
+      font-size: 9px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      letter-spacing: 1px;
+    }
+    .body-zone.damaged {
+      background: rgba(180, 40, 40, 0.8);
+      border-color: #a33;
+      color: #faa;
+    }
+    .p2 .body-diagram { align-items: flex-end; }
+
+    .round-pips {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .p2 .round-pips { justify-content: flex-end; }
+    .pip {
+      width: 12px;
+      height: 12px;
+      border: 1px solid #c8a84e;
+      border-radius: 50%;
+    }
+    .pip.won { background: #c8a84e; }
+
+    #round-announce {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      display: none;
+    }
+    #round-announce .round-text {
+      font-size: 48px;
+      color: #c8a84e;
+      letter-spacing: 8px;
+      text-shadow: 0 0 30px rgba(200, 168, 78, 0.5);
+    }
+    #round-announce .fight-text {
+      font-size: 64px;
+      color: #e8c85e;
+      letter-spacing: 12px;
+      text-shadow: 0 0 40px rgba(232, 200, 94, 0.7);
+    }
+
+    /* Victory Screen */
+    #victory-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 10, 0.9);
+    }
+    #victory-screen h2 {
+      font-size: 48px;
+      color: #c8a84e;
+      letter-spacing: 8px;
+      margin-bottom: 20px;
+      text-shadow: 0 0 30px rgba(200, 168, 78, 0.5);
+    }
+    #victory-screen .score {
+      font-size: 24px;
+      color: #887744;
+      letter-spacing: 4px;
+      margin-bottom: 40px;
+    }
+    #victory-screen .prompt {
+      font-size: 18px;
+      color: #c8a84e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    /* Animation Player */
+    #anim-player-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      pointer-events: none;
+    }
+    #anim-player-screen > * { pointer-events: auto; }
+
+    .anim-sidebar {
+      position: absolute;
+      top: 0; right: 0;
+      width: 280px; height: 100%;
+      background: rgba(10, 10, 10, 0.9);
+      border-left: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .anim-sidebar h3 {
+      color: #c8a84e;
+      font-size: 16px;
+      letter-spacing: 3px;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+    }
+    .anim-clip-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .anim-clip-btn {
+      background: none;
+      border: 1px solid #444;
+      color: #999;
+      font-family: 'Georgia', serif;
+      font-size: 13px;
+      padding: 8px 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+      word-break: break-all;
+    }
+    .anim-clip-btn:hover { border-color: #888; color: #ccc; }
+    .anim-clip-btn.active {
+      border-color: #c8a84e;
+      color: #c8a84e;
+      background: rgba(200, 168, 78, 0.1);
+    }
+
+    .anim-now-playing {
+      color: #887744;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .anim-current-name {
+      color: #c8a84e;
+      font-size: 15px;
+      margin-bottom: 12px;
+      word-break: break-all;
+    }
+    .anim-time {
+      color: #888;
+      font-size: 13px;
+      margin-bottom: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .anim-progress {
+      width: 100%;
+      margin-bottom: 15px;
+      accent-color: #c8a84e;
+      cursor: pointer;
+    }
+
+    .anim-controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .anim-ctrl-btn {
+      background: none;
+      border: 1px solid #555;
+      color: #aaa;
+      font-family: 'Georgia', serif;
+      font-size: 13px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .anim-ctrl-btn:hover {
+      border-color: #c8a84e;
+      color: #c8a84e;
+    }
+
+    .anim-speed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .anim-speed-row span {
+      color: #888;
+      font-size: 13px;
+    }
+    .anim-speed-value {
+      color: #c8a84e;
+      font-size: 14px;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    .anim-back-btn {
+      margin-top: auto;
+      background: none;
+      border: 1px solid #c8a84e;
+      color: #c8a84e;
+      font-family: 'Georgia', serif;
+      font-size: 14px;
+      padding: 10px 20px;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+    }
+    .anim-back-btn:hover {
+      background: rgba(200, 168, 78, 0.2);
+    }
+
+    /* Screen flash overlay */
+    #screen-flash {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.05s;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui-overlay">
+    <!-- Title Screen -->
+    <div id="title-screen">
+      <h1>WUXIA WARRIOR</h1>
+      <div class="subtitle">THE WAY OF THE SWORD</div>
+      <div class="prompt">PRESS ENTER TO BEGIN</div>
+      <button class="select-btn" id="anim-player-btn" style="margin-top: 30px; font-size: 14px; padding: 10px 30px; opacity: 0.7;">ANIMATION PLAYER</button>
+    </div>
+
+    <!-- Select Screen -->
+    <div id="select-screen">
+      <h2>CHOOSE YOUR PATH</h2>
+
+      <div class="select-section">
+        <h3>Mode</h3>
+        <div class="select-options" id="mode-options">
+          <button class="select-btn active" data-mode="ai">VS COMPUTER</button>
+          <button class="select-btn" data-mode="pvp">VS PLAYER</button>
+        </div>
+      </div>
+
+      <div class="select-section" id="difficulty-section">
+        <h3>Difficulty</h3>
+        <div class="select-options" id="difficulty-options">
+          <button class="select-btn" data-diff="easy">EASY</button>
+          <button class="select-btn active" data-diff="medium">MEDIUM</button>
+          <button class="select-btn" data-diff="hard">HARD</button>
+        </div>
+      </div>
+
+      <div class="select-section">
+        <h3>P1 Weapon</h3>
+        <div class="select-options" id="p1-weapon-options">
+          <button class="select-btn active" data-weapon="jian">JIAN</button>
+          <button class="select-btn" data-weapon="dao">DAO</button>
+          <button class="select-btn" data-weapon="staff">STAFF</button>
+        </div>
+      </div>
+
+      <div class="select-section" id="p2-weapon-section">
+        <h3>P2 Weapon</h3>
+        <div class="select-options" id="p2-weapon-options">
+          <button class="select-btn" data-weapon="jian">JIAN</button>
+          <button class="select-btn active" data-weapon="dao">DAO</button>
+          <button class="select-btn" data-weapon="staff">STAFF</button>
+        </div>
+      </div>
+
+      <button class="select-btn" id="start-fight-btn" style="margin-top: 20px; font-size: 22px; padding: 18px 60px;">FIGHT</button>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud">
+      <div class="fighter-hud p1">
+        <div class="fighter-name">PLAYER 1</div>
+        <div class="round-pips" id="p1-pips"></div>
+        <div class="stance-indicator" id="p1-stance">MID</div>
+        <div class="body-diagram" id="p1-body">
+          <div class="body-zone" data-zone="high">HEAD</div>
+          <div class="body-zone" data-zone="mid">TORSO</div>
+          <div class="body-zone" data-zone="low">LEGS</div>
+        </div>
+      </div>
+      <div class="fighter-hud p2">
+        <div class="fighter-name">PLAYER 2</div>
+        <div class="round-pips" id="p2-pips"></div>
+        <div class="stance-indicator" id="p2-stance">MID</div>
+        <div class="body-diagram" id="p2-body">
+          <div class="body-zone" data-zone="high">HEAD</div>
+          <div class="body-zone" data-zone="mid">TORSO</div>
+          <div class="body-zone" data-zone="low">LEGS</div>
+        </div>
+      </div>
+      <div id="round-announce">
+        <div class="round-text"></div>
+        <div class="fight-text"></div>
+      </div>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victory-screen">
+      <h2 id="winner-text">PLAYER 1 WINS</h2>
+      <div class="score" id="final-score">3 - 1</div>
+      <div class="prompt">PRESS ENTER TO CONTINUE</div>
+    </div>
+
+    <!-- Animation Player -->
+    <div id="anim-player-screen">
+      <div class="anim-sidebar">
+        <h3>Animation Player</h3>
+
+        <div class="anim-clip-list" id="anim-clip-list"></div>
+
+        <div class="anim-now-playing">NOW PLAYING</div>
+        <div class="anim-current-name" id="anim-current-name">-</div>
+        <div class="anim-time" id="anim-time">0.00s / 0.00s</div>
+        <div class="anim-time" id="anim-frame" style="color:#c8a84e;font-size:16px;">Frame 0 / 0</div>
+        <input type="range" class="anim-progress" id="anim-progress" min="0" max="100" value="0" step="0.1">
+
+        <div class="anim-controls">
+          <button class="anim-ctrl-btn" id="anim-btn-play">PLAY</button>
+          <button class="anim-ctrl-btn" id="anim-btn-pause">PAUSE</button>
+          <button class="anim-ctrl-btn" id="anim-btn-restart">RESTART</button>
+        </div>
+
+        <div class="anim-speed-row">
+          <button class="anim-ctrl-btn" id="anim-btn-speed-down">-</button>
+          <span>Speed:</span>
+          <span class="anim-speed-value" id="anim-speed-value">1.00x</span>
+          <button class="anim-ctrl-btn" id="anim-btn-speed-up">+</button>
+        </div>
+
+        <button class="anim-ctrl-btn" id="anim-btn-orbit" style="margin-bottom:15px;">STOP ORBIT</button>
+        <button class="anim-back-btn" id="anim-btn-back">BACK TO TITLE</button>
+      </div>
+    </div>
+
+    <!-- Screen Flash -->
+    <div id="screen-flash"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

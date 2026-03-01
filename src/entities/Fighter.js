@@ -117,8 +117,9 @@ export class Fighter {
       const dz = opponent.position.z - this.position.z;
       this.facingRight = dx >= 0;
       // atan2(dz, dx) gives 0 when opponent is to +X, PI when to -X
-      // Subtract PI/2 because Cartwheel GLB model faces +Z at rotation.y=0
-      const targetY = Math.atan2(dz, dx) - Math.PI / 2;
+      // Add PI/2 because Cartwheel GLB model faces +Z at rotation.y=0
+      // +PI/2 rotates +Z face toward +X (the opponent direction)
+      const targetY = Math.atan2(dz, dx) + Math.PI / 2;
       // Smooth rotation with angle wrapping
       let diff = targetY - this.group.rotation.y;
       while (diff > Math.PI) diff -= Math.PI * 2;
@@ -651,7 +652,7 @@ export class Fighter {
 
   resetForRound(xPos) {
     this.position.set(xPos, 0, 0);
-    this.group.rotation.y = xPos < 0 ? -Math.PI / 2 : Math.PI / 2;
+    this.group.rotation.y = xPos < 0 ? Math.PI / 2 : -Math.PI / 2;
     this.fsm.reset();
     this.stanceSystem.reset();
     this.damageSystem.reset();

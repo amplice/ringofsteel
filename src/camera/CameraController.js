@@ -61,9 +61,15 @@ export class CameraController {
 
     this.targetLookAt.set(midX, midY, midZ);
 
-    // Smooth follow
-    this.camera.position.lerp(this.targetPosition, 0.05);
-    this.currentLookAt.lerp(this.targetLookAt, 0.08);
+    // Snap on first frame, then smooth follow
+    if (this._needsSnap) {
+      this.camera.position.copy(this.targetPosition);
+      this.currentLookAt.copy(this.targetLookAt);
+      this._needsSnap = false;
+    } else {
+      this.camera.position.lerp(this.targetPosition, 0.08);
+      this.currentLookAt.lerp(this.targetLookAt, 0.1);
+    }
 
     // Apply shake
     if (this.shakeIntensity > 0.001) {
@@ -107,10 +113,9 @@ export class CameraController {
   }
 
   reset() {
-    this.camera.position.set(0, 3, 10);
     this.shakeIntensity = 0;
     this.killCamActive = false;
     this.killCamTarget = null;
-    this.currentLookAt.set(0, 1, 0);
+    this._needsSnap = true;
   }
 }

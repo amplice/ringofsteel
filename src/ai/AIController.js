@@ -1,6 +1,8 @@
 import { AI_PRESETS } from './AIPersonality.js';
 import { FighterState, AttackType } from '../core/Constants.js';
 
+const MAX_BLOCK_FRAMES = 40; // ~0.67s max block hold
+
 export class AIController {
   constructor(difficulty = 'medium') {
     this.personality = { ...AI_PRESETS[difficulty] };
@@ -8,6 +10,7 @@ export class AIController {
     this.pendingAction = null;
     this.currentAction = null;
     this.sideDir = 1;
+    this.blockHeldFrames = 0;
   }
 
   setDifficulty(difficulty) {
@@ -16,6 +19,32 @@ export class AIController {
 
   update(fighter, opponent, frameCount, dt) {
     this._opponent = opponent;
+
+    // Track block duration and force release when too long
+    if (this.currentAction === 'block') {
+      this.blockHeldFrames++;
+      if (this.blockHeldFrames >= MAX_BLOCK_FRAMES) {
+        // Force release block
+        if (fighter.state === FighterState.BLOCK) {
+          fighter.fsm.transition(FighterState.IDLE);
+        }
+        this.currentAction = null;
+        this.blockHeldFrames = 0;
+      }
+    } else {
+      this.blockHeldFrames = 0;
+    }
+
+    // Release block between decisions if opponent isn't attacking anymore
+    if (this.currentAction === 'block' && fighter.state === FighterState.BLOCK) {
+      const opponentThreat = opponent.state === FighterState.ATTACK_STARTUP ||
+                              opponent.state === FighterState.ATTACK_ACTIVE;
+      if (!opponentThreat) {
+        fighter.fsm.transition(FighterState.IDLE);
+        this.currentAction = null;
+      }
+    }
+
     if (frameCount - this.lastDecisionFrame < this.personality.reactionFrames) {
       this._executePersistent(fighter, dt);
       return;
@@ -26,6 +55,12 @@ export class AIController {
   }
 
   _makeDecision(fighter, opponent, dt) {
+    // Allow re-evaluation even while blocking
+    if (fighter.state === FighterState.BLOCK) {
+      fighter.fsm.transition(FighterState.IDLE);
+      this.currentAction = null;
+    }
+
     if (!fighter.fsm.isActionable) return;
 
     const dist = fighter.distanceTo(opponent);
@@ -123,6 +158,7 @@ export class AIController {
         break;
       case 'block':
         fighter.block();
+        this.blockHeldFrames = 0;
         break;
       case 'parry':
         fighter.parry();
@@ -155,5 +191,6 @@ export class AIController {
     this.lastDecisionFrame = 0;
     this.pendingAction = null;
     this.currentAction = null;
+    this.blockHeldFrames = 0;
   }
 }

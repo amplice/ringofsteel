@@ -126,12 +126,14 @@ export class Fighter {
   set hitApplied(v) { this.fsm.hitApplied = v; }
 
   update(dt, opponent) {
-    // Always face toward opponent
+    // Face toward opponent — but lock facing and rotation during attacks
     if (opponent) {
-      const dx = opponent.position.x - this.position.x;
-      const dz = opponent.position.z - this.position.z;
-      this.facingRight = dx >= 0;
-      this.group.rotation.y = Math.atan2(dx, dz);
+      if (!this.fsm.isAttacking) {
+        const dx = opponent.position.x - this.position.x;
+        const dz = opponent.position.z - this.position.z;
+        this.facingRight = dx >= 0;
+        this.group.rotation.y = Math.atan2(dx, dz);
+      }
     }
 
     // Update FSM

@@ -335,12 +335,17 @@ export class Game {
     // Check combat hits
     this._checkHits();
 
-    // Arena bounds
-    this.arena.clampToArena(this.fighter1.position);
-    this.arena.clampToArena(this.fighter2.position);
-
     // Ring-out check
     this._checkRingOut();
+
+    // Arena bounds — don't clamp fighters being pushed back (block/block stun)
+    // so block pushback can cause ring out
+    if (this.fighter1.state !== FighterState.BLOCK && this.fighter1.state !== FighterState.BLOCK_STUN) {
+      this.arena.clampToArena(this.fighter1.position);
+    }
+    if (this.fighter2.state !== FighterState.BLOCK && this.fighter2.state !== FighterState.BLOCK_STUN) {
+      this.arena.clampToArena(this.fighter2.position);
+    }
 
     // Update debug facing arrows
     this._updateDebugArrows();

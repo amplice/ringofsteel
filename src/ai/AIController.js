@@ -1,5 +1,5 @@
 import { AI_PRESETS } from './AIPersonality.js';
-import { FighterState, AttackType, Stance } from '../core/Constants.js';
+import { FighterState, AttackType } from '../core/Constants.js';
 
 export class AIController {
   constructor(difficulty = 'medium') {
@@ -16,9 +16,7 @@ export class AIController {
 
   update(fighter, opponent, frameCount, dt) {
     this._opponent = opponent;
-    // Throttle decisions by reaction time
     if (frameCount - this.lastDecisionFrame < this.personality.reactionFrames) {
-      // Continue executing persistent actions (movement)
       this._executePersistent(fighter, dt);
       return;
     }
@@ -34,40 +32,35 @@ export class AIController {
     const p = this.personality;
     const noise = () => (Math.random() - 0.5) * p.decisionNoise;
 
-    // Score each possible action
     const scores = {};
 
-    // Attack scoring
     const inRange = dist < 2.5;
     const closeRange = dist < 1.8;
 
+    // Attack scoring — single type for now
     if (inRange) {
       scores.quickAttack = 0.4 + p.aggression * 0.3 + noise();
-      scores.heavyAttack = 0.15 + p.aggression * 0.2 + noise();
-      scores.thrust = 0.25 + p.aggression * 0.2 + noise();
-
       if (closeRange) {
         scores.quickAttack += 0.2;
       }
     }
 
-    // Defense scoring - react to opponent attacking
-    if (opponent.state === FighterState.ATTACK_STARTUP ||
-        opponent.state === FighterState.ATTACK_ACTIVE) {
+    // Defense scoring
+    const opponentAttacking = opponent.state === FighterState.ATTACK_STARTUP ||
+                               opponent.state === FighterState.ATTACK_ACTIVE;
+    if (opponentAttacking) {
       scores.block = 0.5 + noise();
       scores.parry = p.parryRate + noise();
-      scores.dodge = p.dodgeRate + noise();
+      scores.sidestep = 0.3 + noise();
+      scores.backstep = 0.2 + noise();
+    }
 
-      // Check if our guard zone matches their attack
-      if (opponent.currentAttackType) {
-        const attackZone = opponent.stanceSystem.getAttackTargetZone(opponent.currentAttackType);
-        const guardZone = fighter.stanceSystem.getGuardZone();
-        if (attackZone !== guardZone) {
-          // Wrong guard! Dodge is better
-          scores.dodge += 0.3;
-          scores.stanceChange = 0.3 + noise();
-        }
-      }
+    // Sidestep baseline
+    scores.sidestep = (scores.sidestep || 0) + 0.05 + noise();
+
+    // Backstep when too close and opponent is aggressive
+    if (closeRange && opponentAttacking) {
+      scores.backstep = (scores.backstep || 0) + 0.2 + noise();
     }
 
     // Movement
@@ -77,13 +70,7 @@ export class AIController {
       scores.moveBack = 0.2 + noise();
     }
 
-    // Stance change
-    scores.stanceChange = (scores.stanceChange || 0) + p.stanceChangeRate + noise();
-
-    // Sidestep occasionally
-    scores.sidestep = 0.05 + noise();
-
-    // Idle (do nothing)
+    // Idle
     scores.idle = 0.1 + noise();
 
     // Pick highest scoring action
@@ -101,13 +88,11 @@ export class AIController {
   }
 
   _executePersistent(fighter, dt) {
-    // Continue movement actions between decisions
     if (!this.currentAction || !fighter.fsm.isActionable) return;
 
     switch (this.currentAction) {
-      case 'moveForward': fighter.moveForward(dt, this._opponent); break;
-      case 'moveBack': fighter.moveBack(dt, this._opponent); break;
-      case 'sidestep': fighter.sidestep(dt, this.sideDir, this._opponent); break;
+      case 'moveForward': fighter.moveForward(dt); break;
+      case 'moveBack': fighter.moveBack(dt); break;
       case 'block':
         if (fighter.fsm.isActionable) fighter.block();
         break;
@@ -131,14 +116,6 @@ export class AIController {
         fighter.attack(AttackType.QUICK);
         this.currentAction = null;
         break;
-      case 'heavyAttack':
-        fighter.attack(AttackType.HEAVY);
-        this.currentAction = null;
-        break;
-      case 'thrust':
-        fighter.attack(AttackType.THRUST);
-        this.currentAction = null;
-        break;
       case 'block':
         fighter.block();
         break;
@@ -146,23 +123,20 @@ export class AIController {
         fighter.parry();
         this.currentAction = null;
         break;
-      case 'dodge':
-        fighter.dodge(this._opponent);
+      case 'sidestep':
+        this.sideDir = Math.random() > 0.5 ? 1 : -1;
+        fighter.sidestep(this.sideDir);
         this.currentAction = null;
         break;
-      case 'stanceChange':
-        fighter.changeStance();
+      case 'backstep':
+        fighter.backstep();
         this.currentAction = null;
         break;
       case 'moveForward':
-        fighter.moveForward(dt, this._opponent);
+        fighter.moveForward(dt);
         break;
       case 'moveBack':
-        fighter.moveBack(dt, this._opponent);
-        break;
-      case 'sidestep':
-        this.sideDir = Math.random() > 0.5 ? 1 : -1;
-        fighter.sidestep(dt, this.sideDir, this._opponent);
+        fighter.moveBack(dt);
         break;
       case 'idle':
       default:

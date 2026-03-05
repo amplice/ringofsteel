@@ -3,7 +3,6 @@ import { FighterBuilder } from './FighterBuilder.js';
 import { ModelLoader } from './ModelLoader.js';
 import { Weapon } from './Weapon.js';
 import { FighterStateMachine } from '../combat/FighterStateMachine.js';
-import { StanceSystem } from '../combat/StanceSystem.js';
 import { DamageSystem } from '../combat/DamageSystem.js';
 import { ProceduralAnimator } from '../animation/ProceduralAnimator.js';
 import { TrailEffect } from '../animation/TrailEffect.js';
@@ -13,19 +12,13 @@ import {
 } from '../animation/AnimationLibrary.js';
 import {
   FighterState, AttackType, WeaponType,
-  WALK_SPEED, SIDESTEP_SPEED, DODGE_INVULN_FRAMES, DODGE_TOTAL_FRAMES,
-  FIGHT_START_DISTANCE,
+  WALK_SPEED, FIGHT_START_DISTANCE,
+  SIDESTEP_DASH_FRAMES, SIDESTEP_DASH_DISTANCE,
+  BACKSTEP_FRAMES, BACKSTEP_DISTANCE,
 } from '../core/Constants.js';
 import { distance2D } from '../utils/MathUtils.js';
 
 export class Fighter {
-  /**
-   * @param {number} playerIndex - 0 or 1
-   * @param {number} color - hex color for procedural fallback / tint
-   * @param {string} weaponType - WeaponType enum value
-   * @param {object|null} modelData - { model, texture } from ModelLoader, or null for procedural
-   * @param {object|null} fightAnimData - { model, clips } from ModelLoader.loadFightAnimations()
-   */
   constructor(playerIndex, color, weaponType = WeaponType.JIAN, modelData = null, fightAnimData = null) {
     this.playerIndex = playerIndex;
     this.isP2 = playerIndex === 1;
@@ -33,19 +26,16 @@ export class Fighter {
     this.useFBX = false;
     this.useClips = false;
 
-    // Animation mixer (for FBX model with GLB animations)
     this.mixer = null;
     this.animActions = {};
     this.currentAnimAction = null;
 
-    // Clip-based animation state
     this.clipActions = {};
     this.activeClipName = null;
 
     let root, joints;
 
     if (fightAnimData) {
-      // GLB clip-based animation path
       const tint = this.isP2 ? 0xaabbff : 0xffcccc;
       const result = ModelLoader.createFighterFromGLB(
         fightAnimData.model, fightAnimData.clips, tint, fightAnimData.texture
@@ -74,25 +64,18 @@ export class Fighter {
     this.root = root;
     this.joints = joints;
 
-    // Container group for world position
     this.group = new THREE.Group();
     this.group.add(this.root);
 
-    // Weapon — created here but attached by Game.js (same approach as animation player)
     this.weapon = new Weapon(weaponType);
 
-    // Trail effect
     const trailColor = this.isP2 ? 0x4488ff : 0xff4444;
     this.trail = new TrailEffect(trailColor);
 
     // Systems
-    this.stanceSystem = new StanceSystem();
     this.damageSystem = new DamageSystem();
     this.fsm = new FighterStateMachine(this);
     this.animator = new ProceduralAnimator(joints, this.useFBX || this.useClips);
-
-    // State shortcuts (proxied from FSM)
-    this.dodgeInvulnFrames = DODGE_INVULN_FRAMES;
 
     // Position
     this.position = this.group.position;
@@ -101,7 +84,6 @@ export class Fighter {
     // Walk cycle timer
     this.walkPhase = 0;
     this._sidestepDir = 0;
-
   }
 
   get state() { return this.fsm.state; }
@@ -120,20 +102,30 @@ export class Fighter {
       this.group.rotation.y = Math.atan2(dx, dz);
     }
 
-    // Update stance
-    this.stanceSystem.update();
-
     // Update FSM
     this.fsm.update();
 
     // Update animation based on state
     this._updateAnimation();
 
-    // Attack lunge — move in facing direction during active frames
-    if (this.state === FighterState.ATTACK_ACTIVE) {
-      const lungeSpeed = 4.0;
+    // Attack lunge — use attackData.lunge during active frames
+    if (this.state === FighterState.ATTACK_ACTIVE && this.currentAttackData) {
+      const lungeSpeed = this.currentAttackData.lunge / this.currentAttackData.active * 60;
       const dir = this.facingRight ? 1 : -1;
       this.position.x += dir * lungeSpeed * dt;
+    }
+
+    // Sidestep movement — dash phase only
+    if (this.state === FighterState.SIDESTEP && this.fsm.sidestepPhase === 'dash') {
+      const speed = SIDESTEP_DASH_DISTANCE / SIDESTEP_DASH_FRAMES * 60;
+      this.position.z += this.fsm.sidestepDirection * speed * dt;
+    }
+
+    // Backstep movement
+    if (this.state === FighterState.DODGE) {
+      const speed = BACKSTEP_DISTANCE / BACKSTEP_FRAMES * 60;
+      const dir = this.facingRight ? -1 : 1; // away from opponent
+      this.position.x += dir * speed * dt;
     }
 
     // Update mixer for clip-based animations
@@ -151,7 +143,6 @@ export class Fighter {
   }
 
   _mirrorPose(pose) {
-    // Swap L and R joints for P2 so weapon arm animations work correctly
     if (!this.isP2) return pose;
     const mirrored = {};
     for (const [joint, rot] of Object.entries(pose)) {
@@ -185,8 +176,7 @@ export class Fighter {
       case FighterState.IDLE:
       case FighterState.WALK_FORWARD:
       case FighterState.WALK_BACK:
-      case FighterState.SIDESTEP:
-        pose = getStancePose(this.stanceSystem.stance);
+        pose = getStancePose();
         if (state === FighterState.WALK_FORWARD || state === FighterState.WALK_BACK) {
           const walkOffset = getWalkPose(state === FighterState.WALK_FORWARD);
           const phase = Math.sin(this.walkPhase);
@@ -205,23 +195,23 @@ export class Fighter {
         speed = 0.12;
         break;
 
-      case FighterState.STANCE_CHANGE:
-        pose = getStancePose(this.stanceSystem.targetStance || this.stanceSystem.stance);
+      case FighterState.SIDESTEP:
+        pose = getDodgePose();
         speed = 0.2;
         break;
 
       case FighterState.ATTACK_STARTUP:
-        pose = getAttackPose(this.stanceSystem.stance, this.fsm.currentAttackType, 'startup');
+        pose = getAttackPose(this.fsm.currentAttackType, 'startup');
         speed = 0.25;
         break;
 
       case FighterState.ATTACK_ACTIVE:
-        pose = getAttackPose(this.stanceSystem.stance, this.fsm.currentAttackType, 'active');
+        pose = getAttackPose(this.fsm.currentAttackType, 'active');
         speed = 0.35;
         break;
 
       case FighterState.ATTACK_RECOVERY:
-        pose = getStancePose(this.stanceSystem.stance);
+        pose = getStancePose();
         speed = 0.1;
         break;
 
@@ -260,32 +250,26 @@ export class Fighter {
         break;
 
       default:
-        pose = getStancePose(this.stanceSystem.stance);
+        pose = getStancePose();
     }
 
     this.animator.setTargetPose(this._mirrorPose(pose), speed);
     this.animator.update();
   }
 
-  /**
-   * FBX whole-body animation via root tilts, bobs, and lunges.
-   * No bone manipulation — just transforms on this.root.
-   */
   _updateFBXAnimation() {
     const state = this.state;
     const DEG = Math.PI / 180;
     const dir = this.facingRight ? 1 : -1;
 
-    // Target values for root transform
-    let tiltX = 0;  // forward/back lean
-    let tiltZ = 0;  // side lean
-    let bobY = 0;   // vertical offset
-    let lungeX = 0; // horizontal lunge toward opponent
-    let squash = 1; // scaleY squash/stretch
+    let tiltX = 0;
+    let tiltZ = 0;
+    let bobY = 0;
+    let lungeX = 0;
+    let squash = 1;
 
     switch (state) {
       case FighterState.IDLE:
-        // Subtle breathing bob
         bobY = Math.sin(performance.now() * 0.003) * 0.02;
         break;
 
@@ -304,20 +288,13 @@ export class Fighter {
         bobY = -0.05;
         break;
 
-      case FighterState.STANCE_CHANGE:
-        bobY = -0.06;
-        squash = 0.95;
-        break;
-
       case FighterState.ATTACK_STARTUP:
-        // Wind up — lean back
         tiltX = -12 * DEG;
         bobY = -0.04;
         lungeX = -0.15 * dir;
         break;
 
       case FighterState.ATTACK_ACTIVE:
-        // Lunge forward
         tiltX = 15 * DEG;
         lungeX = 0.4 * dir;
         bobY = -0.03;
@@ -381,11 +358,9 @@ export class Fighter {
         break;
     }
 
-    // Smoothly blend root transforms
     const t = 0.15;
     const r = this.root;
 
-    // Cache the base scale on first run
     if (this._fbxBaseScale == null) {
       this._fbxBaseScale = r.scale.x;
     }
@@ -394,21 +369,15 @@ export class Fighter {
     r.rotation.x += (tiltX - r.rotation.x) * t;
     r.rotation.z += (tiltZ - r.rotation.z) * t;
 
-    // Bob is Y offset on root's local position (already inside the group)
     if (this._fbxBobY == null) this._fbxBobY = 0;
     this._fbxBobY += (bobY - this._fbxBobY) * t;
-    // Store initial root Y on first call
     if (this._fbxBaseY == null) this._fbxBaseY = r.position.y;
     r.position.y = this._fbxBaseY + this._fbxBobY;
 
-    // Squash/stretch on Y axis only
     const sy = bs * (1 + (squash - 1));
     r.scale.y += (sy - r.scale.y) * t;
   }
 
-  /**
-   * Clip-based animation: map FSM state to animation clip with crossfading.
-   */
   _updateClipAnimation() {
     const state = this.state;
     let clipName = 'idle';
@@ -422,7 +391,6 @@ export class Fighter {
       case FighterState.PARRY_SUCCESS:
       case FighterState.PARRIED_STUN:
       case FighterState.HIT_STUN:
-      case FighterState.STANCE_CHANGE:
       case FighterState.DODGE:
       case FighterState.CLASH:
         clipName = 'idle';
@@ -437,7 +405,7 @@ export class Fighter {
         break;
 
       case FighterState.SIDESTEP:
-        clipName = this._sidestepDir > 0 ? 'walk_right' : 'walk_left';
+        clipName = this.fsm.sidestepDirection > 0 ? 'walk_right' : 'walk_left';
         break;
 
       case FighterState.ATTACK_STARTUP:
@@ -456,11 +424,9 @@ export class Fighter {
     const action = this.clipActions[clipName];
     if (!action) return;
 
-    // Switch clip if different from current
     if (clipName !== this.activeClipName) {
       const prevAction = this.clipActions[this.activeClipName];
 
-      // Configure new action
       if (loopOnce) {
         action.setLoop(THREE.LoopOnce);
         action.clampWhenFinished = true;
@@ -469,7 +435,6 @@ export class Fighter {
         action.clampWhenFinished = false;
       }
 
-      // Crossfade
       action.reset();
       action.setEffectiveWeight(1);
       if (prevAction) {
@@ -504,46 +469,40 @@ export class Fighter {
     }
   }
 
-  // Movement methods — fixed world axes (no rotation)
+  // Movement methods — fixed world axes
   moveForward(dt) {
     if (!this.fsm.isActionable) return;
-    // D key = move +X (toward opponent for P1)
     this.position.x += WALK_SPEED * dt;
-    if (this.fsm.state === FighterState.IDLE) {
+    if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_FORWARD);
     }
   }
 
   moveBack(dt) {
     if (!this.fsm.isActionable) return;
-    // A key = move -X (away from opponent for P1)
     this.position.x -= WALK_SPEED * dt;
-    if (this.fsm.state === FighterState.IDLE) {
+    if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_BACK);
     }
   }
 
-  sidestep(dt, direction) {
-    if (!this.fsm.isActionable) return;
-    this._sidestepDir = direction;
-    // W/S = move along Z axis
-    this.position.z += direction * SIDESTEP_SPEED * dt;
-    if (this.fsm.state === FighterState.IDLE) {
-      this.fsm.transition(FighterState.SIDESTEP);
-    }
+  sidestep(direction) {
+    return this.fsm.startSidestep(direction);
+  }
+
+  backstep() {
+    return this.fsm.startBackstep();
   }
 
   stopMoving() {
     if (this.state === FighterState.WALK_FORWARD ||
-        this.state === FighterState.WALK_BACK ||
-        this.state === FighterState.SIDESTEP) {
+        this.state === FighterState.WALK_BACK) {
       this.fsm.transition(FighterState.IDLE);
     }
   }
 
   attack(type) {
     const result = this.fsm.startAttack(type);
-    // Speed up attack animation and match FSM timing
     if (result && this.useClips && this.clipActions.attack) {
       const action = this.clipActions.attack;
       const clipDuration = action.getClip().duration;
@@ -566,25 +525,6 @@ export class Fighter {
     return this.fsm.startParry();
   }
 
-  dodge() {
-    if (this.fsm.startDodge()) {
-      // Dodge backward (away from facing direction)
-      const dir = this.facingRight ? -1 : 1;
-      this.position.x += dir * 1.5;
-      return true;
-    }
-    return false;
-  }
-
-  changeStance() {
-    if (!this.fsm.isActionable) return false;
-    if (this.stanceSystem.cycleStance()) {
-      this.fsm.transition(FighterState.STANCE_CHANGE);
-      return true;
-    }
-    return false;
-  }
-
   distanceTo(other) {
     return distance2D(
       this.position.x, this.position.z,
@@ -596,18 +536,15 @@ export class Fighter {
     this.position.set(xPos, 0, 0);
     this.group.rotation.y = xPos < 0 ? Math.PI / 2 : -Math.PI / 2;
     this.fsm.reset();
-    this.stanceSystem.reset();
     this.damageSystem.reset();
     this.animator.reset();
     this.trail.stop();
     this.walkPhase = 0;
     this._sidestepDir = 0;
 
-    // Reset clip-based animation
     if (this.useClips && this.mixer) {
       this.mixer.stopAllAction();
       this.activeClipName = null;
-      // Start idle clip (looping)
       const idleAction = this.clipActions['idle'];
       if (idleAction) {
         idleAction.reset();
@@ -619,16 +556,15 @@ export class Fighter {
       }
     }
 
-    // Reset FBX root transforms
     if (this.useFBX) {
       this.root.rotation.x = 0;
       this.root.rotation.z = 0;
       this._fbxBobY = 0;
-      this._fbxBaseY = null; // will re-cache on next update
+      this._fbxBaseY = null;
       if (this._fbxBaseScale != null) {
         this.root.scale.setScalar(this._fbxBaseScale);
       }
-      this._fbxBaseScale = null; // will re-cache on next update
+      this._fbxBaseScale = null;
     }
   }
 

@@ -10,30 +10,16 @@ export class HUD {
 
   show() {
     this.el.style.display = 'block';
+    // Hide removed elements if they still exist in DOM
+    const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
+    hide('p1-stance');
+    hide('p2-stance');
+    hide('p1-body');
+    hide('p2-body');
   }
 
   hide() {
     this.el.style.display = 'none';
-  }
-
-  updateStance(playerIndex, stance) {
-    const el = document.getElementById(playerIndex === 0 ? 'p1-stance' : 'p2-stance');
-    if (el) el.textContent = stance.toUpperCase();
-  }
-
-  updateDamage(playerIndex, zones) {
-    const containerId = playerIndex === 0 ? 'p1-body' : 'p2-body';
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    container.querySelectorAll('.body-zone').forEach(el => {
-      const zone = el.dataset.zone;
-      if (zones[zone] > 0) {
-        el.classList.add('damaged');
-      } else {
-        el.classList.remove('damaged');
-      }
-    });
   }
 
   updateRoundPips(p1Wins, p2Wins) {
@@ -68,7 +54,5 @@ export class HUD {
 
   reset() {
     this.hideRoundAnnounce();
-    // Reset damage displays
-    document.querySelectorAll('.body-zone').forEach(el => el.classList.remove('damaged'));
   }
 }

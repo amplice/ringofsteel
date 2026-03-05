@@ -1,9 +1,11 @@
 import {
   FighterState, AttackType,
   BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES,
-  DODGE_INVULN_FRAMES, DODGE_TOTAL_FRAMES, CLASH_PUSHBACK_FRAMES,
+  CLASH_PUSHBACK_FRAMES,
+  SIDESTEP_DASH_FRAMES, SIDESTEP_RECOVERY_FRAMES,
+  BACKSTEP_FRAMES, BACKSTEP_INVULN_FRAMES,
 } from '../core/Constants.js';
-import { getAttackData, getTotalFrames } from './AttackData.js';
+import { getAttackData } from './AttackData.js';
 
 export class FighterStateMachine {
   constructor(fighter) {
@@ -14,13 +16,17 @@ export class FighterStateMachine {
     this.currentAttackData = null;
     this.currentAttackType = null;
     this.hitApplied = false;
+
+    // Sidestep state
+    this.sidestepDirection = 0;    // +1 or -1 (Z axis)
+    this.sidestepPhase = null;     // 'dash' | 'recovery'
   }
 
   get isActionable() {
     return this.state === FighterState.IDLE ||
            this.state === FighterState.WALK_FORWARD ||
            this.state === FighterState.WALK_BACK ||
-           this.state === FighterState.SIDESTEP;
+           this.state === FighterState.PARRY_SUCCESS;
   }
 
   get isAttacking() {
@@ -38,11 +44,7 @@ export class FighterStateMachine {
   startAttack(attackType) {
     if (!this.isActionable) return false;
 
-    const data = getAttackData(
-      this.fighter.stanceSystem.stance,
-      attackType,
-      this.fighter.weaponType
-    );
+    const data = getAttackData(attackType, this.fighter.weaponType);
 
     this.currentAttackData = data;
     this.currentAttackType = attackType;
@@ -63,9 +65,17 @@ export class FighterStateMachine {
     return true;
   }
 
-  startDodge() {
+  startSidestep(direction) {
     if (!this.isActionable) return false;
-    this.transition(FighterState.DODGE, DODGE_TOTAL_FRAMES);
+    this.sidestepDirection = direction;
+    this.sidestepPhase = 'dash';
+    this.transition(FighterState.SIDESTEP, SIDESTEP_DASH_FRAMES + SIDESTEP_RECOVERY_FRAMES);
+    return true;
+  }
+
+  startBackstep() {
+    if (!this.isActionable) return false;
+    this.transition(FighterState.DODGE, BACKSTEP_FRAMES);
     return true;
   }
 
@@ -79,6 +89,10 @@ export class FighterStateMachine {
 
   applyParriedStun() {
     this.transition(FighterState.PARRIED_STUN, PARRIED_STUN_FRAMES);
+  }
+
+  applyParrySuccess() {
+    this.transition(FighterState.PARRY_SUCCESS, PARRIED_STUN_FRAMES);
   }
 
   applyClash() {
@@ -118,8 +132,15 @@ export class FighterStateMachine {
         break;
 
       case FighterState.PARRY:
-        // Short window, then transition to block or idle
+        // Parry window expires after 10 frames, then auto-transition to BLOCK (safe fallback)
         if (this.stateFrames >= 10) {
+          this.transition(FighterState.BLOCK);
+        }
+        break;
+
+      case FighterState.PARRY_SUCCESS:
+        // Actionable state — defender can counter-attack during this window
+        if (this.stateFrames >= this.stateDuration) {
           this.transition(FighterState.IDLE);
         }
         break;
@@ -133,8 +154,21 @@ export class FighterStateMachine {
         }
         break;
 
+      case FighterState.SIDESTEP:
+        if (this.sidestepPhase === 'dash' && this.stateFrames >= SIDESTEP_DASH_FRAMES) {
+          this.sidestepPhase = 'recovery';
+          // Don't reset stateFrames — keep counting for total duration
+        }
+        if (this.stateFrames >= SIDESTEP_DASH_FRAMES + SIDESTEP_RECOVERY_FRAMES) {
+          this.sidestepPhase = null;
+          this.sidestepDirection = 0;
+          this.transition(FighterState.IDLE);
+        }
+        break;
+
       case FighterState.DODGE:
-        if (this.stateFrames >= DODGE_TOTAL_FRAMES) {
+        // Backstep
+        if (this.stateFrames >= BACKSTEP_FRAMES) {
           this.transition(FighterState.IDLE);
         }
         break;
@@ -142,13 +176,6 @@ export class FighterStateMachine {
       case FighterState.DYING:
         if (this.stateFrames >= this.stateDuration) {
           this.transition(FighterState.DEAD);
-        }
-        break;
-
-      case FighterState.STANCE_CHANGE:
-        // Handled by StanceSystem
-        if (!this.fighter.stanceSystem.isChanging) {
-          this.transition(FighterState.IDLE);
         }
         break;
     }
@@ -161,5 +188,7 @@ export class FighterStateMachine {
     this.currentAttackData = null;
     this.currentAttackType = null;
     this.hitApplied = false;
+    this.sidestepDirection = 0;
+    this.sidestepPhase = null;
   }
 }

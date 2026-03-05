@@ -4,27 +4,21 @@ import { INPUT_BUFFER_SIZE, INPUT_BUFFER_WINDOW } from './Constants.js';
 const P1_KEYS = {
   right: 'KeyD',
   left: 'KeyA',
-  sideUp: 'KeyW',
-  sideDown: 'KeyS',
+  sidestepUp: 'KeyW',
+  sidestepDown: 'KeyS',
   quick: 'KeyJ',
-  heavy: 'KeyK',
-  thrust: 'KeyL',
-  stance: 'KeyI',
   block: 'KeyU',
-  dodge: 'Space',
+  backstep: 'Space',
 };
 
 const P2_KEYS = {
   right: 'ArrowRight',
   left: 'ArrowLeft',
-  sideUp: 'ArrowUp',
-  sideDown: 'ArrowDown',
+  sidestepUp: 'ArrowUp',
+  sidestepDown: 'ArrowDown',
   quick: 'Numpad1',
-  heavy: 'Numpad2',
-  thrust: 'Numpad3',
-  stance: 'Numpad0',
   block: 'NumpadEnter',
-  dodge: 'ShiftRight',
+  backstep: 'ShiftRight',
 };
 
 export class InputManager {
@@ -58,7 +52,6 @@ export class InputManager {
   }
 
   update(frameCount) {
-    // Buffer new presses for each player
     for (const code of this.keysPressed) {
       const action1 = this._codeToAction(code, P1_KEYS);
       if (action1) {
@@ -83,14 +76,12 @@ export class InputManager {
     return null;
   }
 
-  // Check if action is held down right now
   isHeld(playerIndex, action) {
     const keyMap = playerIndex === 0 ? P1_KEYS : P2_KEYS;
     const code = keyMap[action];
     return code ? this.keysDown.has(code) : false;
   }
 
-  // Consume a buffered action if available within window
   consumeBuffer(playerIndex, action, currentFrame) {
     const buffer = this.buffers[playerIndex];
     for (let i = buffer.length - 1; i >= 0; i--) {
@@ -102,7 +93,6 @@ export class InputManager {
     return false;
   }
 
-  // Check if action was just pressed (in buffer, most recent)
   wasPressed(playerIndex, action, currentFrame) {
     const buffer = this.buffers[playerIndex];
     for (let i = buffer.length - 1; i >= 0; i--) {
@@ -113,7 +103,6 @@ export class InputManager {
     return false;
   }
 
-  // Get any pressed key (for menus)
   anyKeyPressed() {
     return this.keysDown.size > 0;
   }
@@ -123,7 +112,6 @@ export class InputManager {
   }
 
   isKeyPressed(code) {
-    // Check buffer for recently pressed
     return this.keysDown.has(code);
   }
 

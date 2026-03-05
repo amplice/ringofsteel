@@ -17,7 +17,7 @@ import {
   GameState, FighterState, AttackType, HitResult, WeaponType,
   FIGHT_START_DISTANCE, ROUNDS_TO_WIN, ROUND_INTRO_DURATION,
   ROUND_END_DELAY, KILL_SLOWMO_SCALE, KILL_SLOWMO_DURATION,
-  FRAME_DURATION, ARENA_RADIUS,
+  FRAME_DURATION, ARENA_RADIUS, BLOCK_PUSHBACK_SPEED,
 } from './core/Constants.js';
 
 export class Game {
@@ -38,8 +38,8 @@ export class Game {
     this.fighter1 = null;
     this.fighter2 = null;
     this.aiController = null;
-    this.modelData = null; // Loaded FBX model + texture
-    this.fightAnimData = null; // Loaded GLB fight animations
+    this.modelData = null;
+    this.fightAnimData = null;
 
     this.gameState = GameState.TITLE;
     this.stateTimer = 0;
@@ -53,9 +53,9 @@ export class Game {
     this.killSlowMoTimer = 0;
 
     // Animation player state
-    this.animPlayerModel = null;  // THREE.Group for the preview model
-    this.animPlayerMixer = null;  // AnimationMixer for the preview
-    this.animPlayerArrow = null;  // Direction arrow
+    this.animPlayerModel = null;
+    this.animPlayerMixer = null;
+    this.animPlayerArrow = null;
 
     // Animation editor state
     this.animEditorTestMode = false;
@@ -70,18 +70,12 @@ export class Game {
   async init() {
     await this.renderer.init();
 
-    // Scene
     this.scene = new THREE.Scene();
-
-    // Camera
     this.cameraController = new CameraController();
     this.camera = this.cameraController.camera;
 
-    // Arena & Environment
     this.arena = new Arena(this.scene);
     this.environment = new Environment(this.scene);
-
-    // Particles
     this.particles = new ParticleSystem(this.scene);
 
     // Preload fight animation GLBs
@@ -93,7 +87,6 @@ export class Game {
       this.fightAnimData = null;
     }
 
-    // Preload FBX model + texture (fallback if GLB fails)
     if (!this.fightAnimData) {
       try {
         this.modelData = await ModelLoader.load();
@@ -107,27 +100,23 @@ export class Game {
     // UI
     this.ui.showTitle();
 
-    // Title screen callback
     this.ui.title.onStart = () => {
       this.gameState = GameState.SELECT;
       this.ui.showSelect();
     };
 
-    // Select screen callback
     this.ui.select.onConfirm = (config) => {
       this.mode = config.mode;
       this.difficulty = config.difficulty;
       this._startMatch(config.p1Weapon, config.p2Weapon);
     };
 
-    // Victory screen callback
     this.ui.victory.onContinue = () => {
       this.gameState = GameState.TITLE;
       this._cleanupFighters();
       this.ui.showTitle();
     };
 
-    // Animation player callbacks
     this.ui.title.onAnimPlayer = () => {
       this._startAnimPlayer();
     };
@@ -138,7 +127,6 @@ export class Game {
       this.ui.showTitle();
     };
 
-    // Animation editor callbacks
     this.ui.animPlayer.onTransformUpdate = (transform) => {
       this._applyAnimPlayerTransform(transform);
     };
@@ -146,7 +134,6 @@ export class Game {
       this._setAnimPlayerTestMode(enabled);
     };
 
-    // Start loop
     this.clock.start();
     this._loop();
   }
@@ -156,7 +143,6 @@ export class Game {
     this.p2Score = 0;
     this.currentRound = 1;
 
-    // Create fighters
     this._cleanupFighters();
 
     this.fighter1 = new Fighter(0, 0x991111, p1Weapon, this.modelData, this.fightAnimData);
@@ -164,7 +150,6 @@ export class Game {
     this.fighter1.addToScene(this.scene);
     this.fighter2.addToScene(this.scene);
 
-    // Attach swords — same approach as animation player (_startAnimPlayer)
     this._attachWeapon(this.fighter1);
     this._attachWeapon(this.fighter2);
 
@@ -191,7 +176,6 @@ export class Game {
   }
 
   _attachWeapon(fighter) {
-    // Attach sword to hand bone — mirrors the animation player approach exactly
     let handBone = null;
     fighter.root.traverse((child) => {
       if (child.isBone && (child.name === 'hand.R' || child.name === 'handR')) {
@@ -202,10 +186,7 @@ export class Game {
       const s = 1 / fighter.root.scale.x;
       fighter.weapon.mesh.scale.setScalar(s);
       handBone.add(fighter.weapon.mesh);
-      console.log(`Weapon attached to bone: ${handBone.name}, scale: ${s}`);
     } else {
-      // Fallback: attach to root at approximate hand position
-      console.warn('No hand bone found, attaching weapon to root');
       fighter.weapon.mesh.position.set(0.3, 1.2, 0);
       fighter.root.add(fighter.weapon.mesh);
     }
@@ -217,7 +198,6 @@ export class Game {
     this.clock.setTimeScale(1.0);
     this.killSlowMoTimer = 0;
 
-    // Reset fighter positions
     this.fighter1.resetForRound(-FIGHT_START_DISTANCE / 2);
     this.fighter2.resetForRound(FIGHT_START_DISTANCE / 2);
 
@@ -258,19 +238,14 @@ export class Game {
 
     const { steps, dt, rawDelta } = this.clock.update();
 
-    // Fixed timestep game logic
     for (let i = 0; i < steps; i++) {
-      // Check hitstop
       const frozen = this.screenEffects.update();
       if (frozen) continue;
 
       this._fixedUpdate(dt);
     }
 
-    // Variable rate visual updates
     this._renderUpdate(rawDelta);
-
-    // Render
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -294,18 +269,15 @@ export class Game {
   }
 
   _renderUpdate(dt) {
-    // Animation player mode
     if (this.gameState === GameState.ANIM_PLAYER) {
       this._updateAnimPlayer(dt);
       return;
     }
 
-    // Camera
     if (this.fighter1 && this.fighter2) {
       this.cameraController.update(dt, this.fighter1, this.fighter2);
     }
 
-    // Kill cam real-time timer (tracks wall-clock independent of timeScale)
     if (this.gameState === GameState.KILL_CAM) {
       this.killSlowMoTimer += dt;
       if (this.killSlowMoTimer >= KILL_SLOWMO_DURATION) {
@@ -324,10 +296,7 @@ export class Game {
       }
     }
 
-    // Environment particles
     this.environment.update(dt);
-
-    // VFX particles
     this.particles.update(dt);
   }
 
@@ -359,6 +328,10 @@ export class Game {
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
 
+    // Block pushback: push defender back while attacker is in ATTACK_ACTIVE and defender is blocking
+    this._applyBlockPushback(this.fighter1, this.fighter2, dt);
+    this._applyBlockPushback(this.fighter2, this.fighter1, dt);
+
     // Check combat hits
     this._checkHits();
 
@@ -376,10 +349,24 @@ export class Game {
     this._updateHUD();
   }
 
+  _applyBlockPushback(attacker, defender, dt) {
+    if (attacker.state !== FighterState.ATTACK_ACTIVE) return;
+    if (defender.state !== FighterState.BLOCK && defender.state !== FighterState.BLOCK_STUN) return;
+
+    // Push defender away from attacker
+    const dx = defender.position.x - attacker.position.x;
+    const dz = defender.position.z - attacker.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz) || 0.01;
+    const nx = dx / dist;
+    const nz = dz / dist;
+
+    defender.position.x += nx * BLOCK_PUSHBACK_SPEED * dt;
+    defender.position.z += nz * BLOCK_PUSHBACK_SPEED * dt;
+  }
+
   _processPlayerInput(fighter, playerIndex, dt) {
     if (fighter.state === FighterState.DEAD || fighter.state === FighterState.DYING) return;
 
-    const opponent = playerIndex === 0 ? this.fighter2 : this.fighter1;
     const frame = this.clock.frameCount;
     let isMoving = false;
 
@@ -392,31 +379,25 @@ export class Game {
       isMoving = true;
     }
 
-    // W/S = move along Z axis
-    if (this.input.isHeld(playerIndex, 'sideUp')) {
-      fighter.sidestep(dt, -1);
-      isMoving = true;
-    } else if (this.input.isHeld(playerIndex, 'sideDown')) {
-      fighter.sidestep(dt, 1);
-      isMoving = true;
-    }
-
     if (!isMoving && fighter.fsm.isActionable) {
       fighter.stopMoving();
     }
 
-    // Attacks (buffered)
-    if (this.input.consumeBuffer(playerIndex, 'quick', frame)) {
-      fighter.attack(AttackType.QUICK);
-    } else if (this.input.consumeBuffer(playerIndex, 'heavy', frame)) {
-      fighter.attack(AttackType.HEAVY);
-    } else if (this.input.consumeBuffer(playerIndex, 'thrust', frame)) {
-      fighter.attack(AttackType.THRUST);
+    // W/S = sidestep (committed dash, consumed from buffer)
+    if (this.input.consumeBuffer(playerIndex, 'sidestepUp', frame)) {
+      fighter.sidestep(-1);
+    } else if (this.input.consumeBuffer(playerIndex, 'sidestepDown', frame)) {
+      fighter.sidestep(1);
     }
 
-    // Stance change
-    if (this.input.consumeBuffer(playerIndex, 'stance', frame)) {
-      fighter.changeStance();
+    // Space = backstep (committed, consumed from buffer)
+    if (this.input.consumeBuffer(playerIndex, 'backstep', frame)) {
+      fighter.backstep();
+    }
+
+    // Attack (single type for now)
+    if (this.input.consumeBuffer(playerIndex, 'quick', frame)) {
+      fighter.attack(AttackType.QUICK);
     }
 
     // Block (hold) / Parry (tap)
@@ -429,21 +410,14 @@ export class Game {
     } else if (fighter.state === FighterState.BLOCK) {
       fighter.fsm.transition(FighterState.IDLE);
     }
-
-    // Dodge
-    if (this.input.consumeBuffer(playerIndex, 'dodge', frame)) {
-      fighter.dodge();
-    }
   }
 
   _checkHits() {
-    // Check sword collision during any attack phase (startup/active/recovery)
     const isAttacking = (f) =>
       f.state === FighterState.ATTACK_STARTUP ||
       f.state === FighterState.ATTACK_ACTIVE ||
       f.state === FighterState.ATTACK_RECOVERY;
 
-    // Check if fighter1's sword hits fighter2
     if (isAttacking(this.fighter1) && !this.fighter1.hitApplied) {
       if (this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)) {
         this._resolveHit(this.fighter1, this.fighter2);
@@ -451,7 +425,6 @@ export class Game {
       }
     }
 
-    // Check if fighter2's sword hits fighter1
     if (isAttacking(this.fighter2) && !this.fighter2.hitApplied) {
       if (this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)) {
         this._resolveHit(this.fighter2, this.fighter1);
@@ -472,7 +445,6 @@ export class Game {
       case HitResult.CLASH:
         attacker.fsm.applyClash();
         defender.fsm.applyClash();
-        // Push both back
         this._pushApart(attacker, defender, 1.0);
         this.particles.emitSparks(contactPoint, 15);
         this.cameraController.shake(0.2);
@@ -481,28 +453,31 @@ export class Game {
         break;
 
       case HitResult.WHIFF:
-        // Nothing happens, attack missed
         break;
 
       case HitResult.PARRIED:
         attacker.fsm.applyParriedStun();
+        defender.fsm.applyParrySuccess();
         this.particles.emitSparks(contactPoint, 10);
         this.cameraController.shake(0.15);
         this.screenEffects.flashWhite();
         this.screenEffects.startHitstop(8);
         break;
 
-      case HitResult.BLOCKED:
+      case HitResult.BLOCKED: {
         attacker.fsm.applyBlockStun();
         defender.fsm.applyBlockStun();
-        this._pushApart(attacker, defender, 0.5);
+        // Push defender back based on attack's blockPush
+        const blockPush = attacker.currentAttackData ? attacker.currentAttackData.blockPush : 0.5;
+        this._pushDefender(attacker, defender, blockPush);
         this.particles.emitSparks(contactPoint, 6);
         this.cameraController.shake(0.1);
         this.screenEffects.startHitstop(3);
         break;
+      }
 
       case HitResult.CLEAN_HIT: {
-        const isKill = defender.damageSystem.applyDamage(result.zone);
+        const isKill = defender.damageSystem.applyDamage();
         defender.fsm.applyHitStun();
         this._pushApart(attacker, defender, 0.3);
         this.particles.emitSparks(contactPoint, 8);
@@ -521,16 +496,13 @@ export class Game {
   _onKill(killer, victim) {
     victim.fsm.startDying();
 
-    // Ink splash VFX
     const pos = victim.position.clone();
     pos.y += 1.0;
     this.particles.emitInkSplash(pos, 40);
 
-    // Slow-mo
     this.clock.setTimeScale(KILL_SLOWMO_SCALE);
     this.killSlowMoTimer = 0;
 
-    // Kill cam
     this.cameraController.startKillCam(victim.position);
     this.cameraController.shake(0.5);
     this.screenEffects.flashRed();
@@ -539,8 +511,6 @@ export class Game {
   }
 
   _updateKillCam(dt) {
-    // Just update fighters for animation during slow-mo
-    // Timer is handled in _renderUpdate for wall-clock accuracy
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
   }
@@ -549,7 +519,6 @@ export class Game {
     this.stateTimer += dt;
 
     if (this.stateTimer >= ROUND_END_DELAY) {
-      // Check for match winner
       if (this.p1Score >= ROUNDS_TO_WIN) {
         this._showVictory('PLAYER 1');
       } else if (this.p2Score >= ROUNDS_TO_WIN) {
@@ -568,27 +537,24 @@ export class Game {
   }
 
   _checkRingOut() {
-    const checkFighter = (fighter, otherFighter, fighterIsP1) => {
+    const checkFighter = (fighter, otherFighter) => {
       const dist = Math.sqrt(
         fighter.position.x * fighter.position.x +
         fighter.position.z * fighter.position.z
       );
       if (dist > ARENA_RADIUS + 0.5 && fighter.state !== FighterState.DYING && fighter.state !== FighterState.DEAD) {
-        // Ring out = instant kill
-        fighter.damageSystem.applyDamage('mid');
-        fighter.damageSystem.applyDamage('mid');
+        fighter.damageSystem.applyDamage();
         this._onKill(otherFighter, fighter);
       }
     };
 
-    checkFighter(this.fighter1, this.fighter2, true);
-    checkFighter(this.fighter2, this.fighter1, false);
+    checkFighter(this.fighter1, this.fighter2);
+    checkFighter(this.fighter2, this.fighter1);
   }
 
   _updateDebugArrows() {
     if (!this._debugArrow1 || !this.fighter1 || !this.fighter2) return;
 
-    // P1 arrow: green, points toward P2
     const d1 = new THREE.Vector3().subVectors(this.fighter2.position, this.fighter1.position);
     d1.y = 0;
     if (d1.lengthSq() > 0.001) d1.normalize();
@@ -597,7 +563,6 @@ export class Game {
     this._debugArrow1.position.copy(this.fighter1.position);
     this._debugArrow1.position.y = 0.05;
 
-    // P2 arrow: blue, points toward P1
     const d2 = new THREE.Vector3().subVectors(this.fighter1.position, this.fighter2.position);
     d2.y = 0;
     if (d2.lengthSq() > 0.001) d2.normalize();
@@ -620,13 +585,19 @@ export class Game {
     b.position.z += nz * force * 0.5;
   }
 
+  _pushDefender(attacker, defender, force) {
+    const dx = defender.position.x - attacker.position.x;
+    const dz = defender.position.z - attacker.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz) || 0.01;
+    const nx = dx / dist;
+    const nz = dz / dist;
+
+    defender.position.x += nx * force;
+    defender.position.z += nz * force;
+  }
+
   _updateHUD() {
     if (!this.fighter1 || !this.fighter2) return;
-
-    this.ui.hud.updateStance(0, this.fighter1.stanceSystem.stance);
-    this.ui.hud.updateStance(1, this.fighter2.stanceSystem.stance);
-    this.ui.hud.updateDamage(0, this.fighter1.damageSystem.zones);
-    this.ui.hud.updateDamage(1, this.fighter2.damageSystem.zones);
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
   }
 
@@ -636,7 +607,6 @@ export class Game {
     this._cleanupFighters();
     this.gameState = GameState.ANIM_PLAYER;
 
-    // Load all animation files — each gets its own model + mixer
     this.animPlayerEntries = await ModelLoader.loadAnimPlayerEntries([
       { url: '/dao_attack1_cartwheel.glb', trimStartFrames: 1 },
       { url: '/video.glb', splits: [
@@ -644,10 +614,7 @@ export class Game {
         { name: 'walk_left', startFrame: 161, endFrame: 327, inPlace: true },
       ]},
     ]);
-    console.log('[AnimPlayer] Entries:', this.animPlayerEntries.length,
-      'Actions:', this.animPlayerEntries.map(e => Object.keys(e.actions)));
 
-    // Attach a sword to the right hand of each model
     for (const entry of this.animPlayerEntries) {
       let handBone = null;
       entry.root.traverse((child) => {
@@ -664,21 +631,17 @@ export class Game {
     this.animPlayerModel = null;
     this.animPlayerMixer = null;
 
-    // Build a combined actions map that the UI can use
-    // Each action knows which entry it belongs to
     const allActions = {};
     for (const entry of this.animPlayerEntries) {
       for (const [name, action] of Object.entries(entry.actions)) {
         allActions[name] = action;
-        action._animEntry = entry; // tag so we can switch models
+        action._animEntry = entry;
       }
     }
 
-    // Show UI FIRST (hideAll clears currentAction), then set up actions
     this.ui.showAnimPlayer();
     this.cameraController.stopKillCam();
 
-    // Set callback BEFORE setMixerAndActions (which auto-selects the first clip)
     this.ui.animPlayer.onClipSwitch = (action) => {
       this._switchAnimPlayerModel(action._animEntry);
     };
@@ -686,37 +649,30 @@ export class Game {
   }
 
   _switchAnimPlayerModel(entry) {
-    // Remove old model
     if (this.animPlayerModel) {
       this.scene.remove(this.animPlayerModel);
     }
 
-    // Remove old arrow
     if (this.animPlayerArrow) {
       this.scene.remove(this.animPlayerArrow);
       this.animPlayerArrow = null;
     }
 
-    // Add new model (keep prepareRoot positioning intact)
     this.animPlayerModel = entry.root;
     this.animPlayerMixer = entry.mixer;
 
-    // Cache base transform from prepareRoot before anything else modifies it
     this._animPlayerBaseScale = this.animPlayerModel.scale.x;
     this._animPlayerBasePos = this.animPlayerModel.position.clone();
 
     this.scene.add(this.animPlayerModel);
 
-    // Create direction arrow (green, pointing in model's forward direction)
     const arrowDir = new THREE.Vector3(0, 0, 1);
     const arrowOrigin = new THREE.Vector3(0, 0.05, 0);
     this.animPlayerArrow = new THREE.ArrowHelper(arrowDir, arrowOrigin, 1.5, 0x44cc44, 0.3, 0.15);
     this.scene.add(this.animPlayerArrow);
-
   }
 
   _stopAnimPlayer() {
-    // Clean up test mode if active
     if (this.animEditorTestMode) {
       this._setAnimPlayerTestMode(false);
     }
@@ -729,7 +685,6 @@ export class Game {
       this.scene.remove(this.animPlayerArrow);
       this.animPlayerArrow = null;
     }
-    // Stop all mixers
     if (this.animPlayerEntries) {
       for (const entry of this.animPlayerEntries) {
         entry.mixer.stopAllAction();
@@ -741,26 +696,19 @@ export class Game {
   }
 
   _updateAnimPlayer(dt) {
-    // Update active mixer
     if (this.animPlayerMixer) {
       this.animPlayerMixer.update(dt);
     }
 
-    // Test mode: WASD movement + attack triggers
     if (this.animEditorTestMode) {
       this._updateAnimPlayerTestMode(dt);
     }
 
-    // Update UI display (time, progress bar, transforms)
     this.ui.animPlayer.updateDisplay();
 
-    // Update direction arrow — shows the "game facing" direction (toward enemy),
-    // NOT the model's visual rotation. The user adjusts rotY until the character
-    // visually faces the same way as this arrow.
     if (this.animPlayerArrow && this.animPlayerModel) {
       let dir;
       if (this.animEditorTestMode && this.animEditorDummy) {
-        // Point from character toward the enemy dummy
         dir = new THREE.Vector3().subVectors(
           this.animEditorDummy.position,
           this.animPlayerModel.position
@@ -769,7 +717,6 @@ export class Game {
         if (dir.lengthSq() > 0.001) dir.normalize();
         else dir.set(1, 0, 0);
       } else {
-        // Fixed reference direction: +X (the "toward enemy" direction in the game)
         dir = new THREE.Vector3(1, 0, 0);
       }
       this.animPlayerArrow.setDirection(dir);
@@ -777,9 +724,7 @@ export class Game {
       this.animPlayerArrow.position.y = 0.05;
     }
 
-    // Camera
     if (this.animEditorTestMode) {
-      // Follow camera behind model
       const followDist = 5;
       const tx = this.animEditorModelPos.x;
       const tz = this.animEditorModelPos.z;
@@ -790,24 +735,19 @@ export class Game {
       );
       this.camera.lookAt(tx, 0.9, tz);
     } else {
-      // Static front-angled camera
       this.camera.position.set(3, 2.5, 4);
       this.camera.lookAt(0, 0.9, 0);
     }
 
-    // Environment particles
     this.environment.update(dt);
   }
 
   _applyAnimPlayerTransform(transform) {
     if (!this.animPlayerModel) return;
 
-    // Store the keyframed rotY offset so test mode can layer it on top of game facing
     this._animPlayerKeyframedRotY = (transform.rotY * Math.PI) / 180;
 
     if (this.animEditorTestMode) {
-      // In test mode, game facing is controlled by WASD — just layer the rotY offset
-      // Position/scale are handled by _updateAnimPlayerTestMode
       return;
     }
 
@@ -827,12 +767,10 @@ export class Game {
     this.animEditorTestMode = enabled;
 
     if (enabled) {
-      // Add grid floor
       this.animEditorGrid = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
       this.animEditorGrid.position.y = 0.01;
       this.scene.add(this.animEditorGrid);
 
-      // Add dummy target cube
       const geo = new THREE.BoxGeometry(0.6, 1.8, 0.6);
       const mat = new THREE.MeshStandardMaterial({ color: 0xcc4444, roughness: 0.8 });
       this.animEditorDummy = new THREE.Mesh(geo, mat);
@@ -840,7 +778,6 @@ export class Game {
       this.animEditorDummy.castShadow = true;
       this.scene.add(this.animEditorDummy);
 
-      // Reset model position
       this.animEditorModelPos.set(0, 0, 0);
       this.animEditorModelRotY = 0;
       if (this.animPlayerModel) {
@@ -871,11 +808,9 @@ export class Game {
     const rotSpeed = 2.0;
     const keys = this.input.keysDown;
 
-    // A/D = rotate left/right
     if (keys.has('KeyA')) this.animEditorModelRotY += rotSpeed * dt;
     if (keys.has('KeyD')) this.animEditorModelRotY -= rotSpeed * dt;
 
-    // W/S = move forward/back relative to facing
     if (keys.has('KeyW')) {
       this.animEditorModelPos.x += Math.sin(this.animEditorModelRotY) * moveSpeed * dt;
       this.animEditorModelPos.z += Math.cos(this.animEditorModelRotY) * moveSpeed * dt;
@@ -886,11 +821,9 @@ export class Game {
     }
 
     this.animPlayerModel.position.copy(this.animEditorModelPos);
-    // Game facing + keyframed rotation offset (same as how real combat would work)
     const keyframedOffset = this._animPlayerKeyframedRotY || 0;
     this.animPlayerModel.rotation.y = this.animEditorModelRotY + keyframedOffset;
 
-    // J/K/L = trigger attack (restart current clip) — edge-detect to avoid repeat
     for (const key of ['KeyJ', 'KeyK', 'KeyL']) {
       if (keys.has(key) && !this._testModeKeys[key]) {
         this._testModeKeys[key] = true;

@@ -1,9 +1,5 @@
-import { Stance, AttackType, FighterState } from '../core/Constants.js';
+import { AttackType, FighterState } from '../core/Constants.js';
 
-/**
- * Named pose keyframes. Each pose is a map of joint name → { rx, ry, rz } in radians.
- * Only specifies joints that differ from the default T-pose.
- */
 const DEG = Math.PI / 180;
 
 // Default idle pose
@@ -20,165 +16,32 @@ const BASE_IDLE = {
   lowerLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
 };
 
-const STANCES = {
-  [Stance.HIGH]: {
-    torso: { rx: -5 * DEG, ry: 0, rz: 0 },
-    head: { rx: 5 * DEG, ry: 0, rz: 0 },
-    // Weapon arm raised high
-    upperArmR: { rx: -160 * DEG, ry: 0, rz: -20 * DEG },
-    lowerArmR: { rx: -30 * DEG, ry: 0, rz: 0 },
-    upperArmL: { rx: -30 * DEG, ry: 0, rz: 30 * DEG },
-    lowerArmL: { rx: -40 * DEG, ry: 0, rz: 0 },
-    upperLegR: { rx: -10 * DEG, ry: 0, rz: 0 },
-    lowerLegR: { rx: 15 * DEG, ry: 0, rz: 0 },
-    upperLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
-    lowerLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
-  },
-  [Stance.MID]: {
-    torso: { rx: 0, ry: -15 * DEG, rz: 0 },
-    head: { rx: 0, ry: 10 * DEG, rz: 0 },
-    // Weapon arm forward at mid level
-    upperArmR: { rx: -70 * DEG, ry: 0, rz: -30 * DEG },
-    lowerArmR: { rx: -30 * DEG, ry: 0, rz: 0 },
-    upperArmL: { rx: -20 * DEG, ry: 0, rz: 25 * DEG },
-    lowerArmL: { rx: -30 * DEG, ry: 0, rz: 0 },
-    upperLegR: { rx: -10 * DEG, ry: 0, rz: 0 },
-    lowerLegR: { rx: 15 * DEG, ry: 0, rz: 0 },
-    upperLegL: { rx: 8 * DEG, ry: 0, rz: 0 },
-    lowerLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
-  },
-  [Stance.LOW]: {
-    torso: { rx: 15 * DEG, ry: -10 * DEG, rz: 0 },
-    head: { rx: -10 * DEG, ry: 5 * DEG, rz: 0 },
-    // Weapon arm lowered
-    upperArmR: { rx: -20 * DEG, ry: 0, rz: -40 * DEG },
-    lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-    upperArmL: { rx: -10 * DEG, ry: 0, rz: 20 * DEG },
-    lowerArmL: { rx: -15 * DEG, ry: 0, rz: 0 },
-    upperLegR: { rx: -20 * DEG, ry: 0, rz: 0 },
-    lowerLegR: { rx: 30 * DEG, ry: 0, rz: 0 },
-    upperLegL: { rx: 10 * DEG, ry: 0, rz: 0 },
-    lowerLegL: { rx: 10 * DEG, ry: 0, rz: 0 },
-  },
+// Single idle pose (uses the old MID stance)
+const IDLE_POSE = {
+  torso: { rx: 0, ry: -15 * DEG, rz: 0 },
+  head: { rx: 0, ry: 10 * DEG, rz: 0 },
+  upperArmR: { rx: -70 * DEG, ry: 0, rz: -30 * DEG },
+  lowerArmR: { rx: -30 * DEG, ry: 0, rz: 0 },
+  upperArmL: { rx: -20 * DEG, ry: 0, rz: 25 * DEG },
+  lowerArmL: { rx: -30 * DEG, ry: 0, rz: 0 },
+  upperLegR: { rx: -10 * DEG, ry: 0, rz: 0 },
+  lowerLegR: { rx: 15 * DEG, ry: 0, rz: 0 },
+  upperLegL: { rx: 8 * DEG, ry: 0, rz: 0 },
+  lowerLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
 };
 
-// Attack poses (startup → active → recovery)
+// Single attack set (uses old MID QUICK)
 const ATTACKS = {
-  [Stance.HIGH]: {
-    [AttackType.QUICK]: {
-      startup: {
-        upperArmR: { rx: -170 * DEG, ry: 10 * DEG, rz: -10 * DEG },
-        lowerArmR: { rx: -20 * DEG, ry: 0, rz: 0 },
-        torso: { rx: -5 * DEG, ry: -20 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -80 * DEG, ry: -10 * DEG, rz: -30 * DEG },
-        lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 5 * DEG, ry: 15 * DEG, rz: 0 },
-      },
+  [AttackType.QUICK]: {
+    startup: {
+      upperArmR: { rx: -80 * DEG, ry: -10 * DEG, rz: -25 * DEG },
+      lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
+      torso: { rx: 0, ry: -25 * DEG, rz: 0 },
     },
-    [AttackType.HEAVY]: {
-      startup: {
-        upperArmR: { rx: -180 * DEG, ry: 20 * DEG, rz: 0 },
-        lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-        torso: { rx: -10 * DEG, ry: -30 * DEG, rz: -5 * DEG },
-      },
-      active: {
-        upperArmR: { rx: -30 * DEG, ry: -20 * DEG, rz: -50 * DEG },
-        lowerArmR: { rx: -5 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 15 * DEG, ry: 30 * DEG, rz: 5 * DEG },
-      },
-    },
-    [AttackType.THRUST]: {
-      startup: {
-        upperArmR: { rx: -120 * DEG, ry: 10 * DEG, rz: -15 * DEG },
-        lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
-        torso: { rx: -5 * DEG, ry: -15 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -90 * DEG, ry: 0, rz: -10 * DEG },
-        lowerArmR: { rx: 0, ry: 0, rz: 0 },
-        torso: { rx: 5 * DEG, ry: 0, rz: 0 },
-      },
-    },
-  },
-  [Stance.MID]: {
-    [AttackType.QUICK]: {
-      startup: {
-        upperArmR: { rx: -80 * DEG, ry: -10 * DEG, rz: -25 * DEG },
-        lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 0, ry: -25 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -60 * DEG, ry: 20 * DEG, rz: -35 * DEG },
-        lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 5 * DEG, ry: 20 * DEG, rz: 0 },
-      },
-    },
-    [AttackType.HEAVY]: {
-      startup: {
-        upperArmR: { rx: -150 * DEG, ry: 15 * DEG, rz: -10 * DEG },
-        lowerArmR: { rx: -20 * DEG, ry: 0, rz: 0 },
-        torso: { rx: -5 * DEG, ry: -30 * DEG, rz: -5 * DEG },
-      },
-      active: {
-        upperArmR: { rx: -30 * DEG, ry: 30 * DEG, rz: -50 * DEG },
-        lowerArmR: { rx: -5 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 10 * DEG, ry: 30 * DEG, rz: 5 * DEG },
-      },
-    },
-    [AttackType.THRUST]: {
-      startup: {
-        upperArmR: { rx: -80 * DEG, ry: 0, rz: -20 * DEG },
-        lowerArmR: { rx: -50 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 0, ry: -20 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -80 * DEG, ry: 10 * DEG, rz: -10 * DEG },
-        lowerArmR: { rx: 0, ry: 0, rz: 0 },
-        torso: { rx: 10 * DEG, ry: 5 * DEG, rz: 0 },
-      },
-    },
-  },
-  [Stance.LOW]: {
-    [AttackType.QUICK]: {
-      startup: {
-        upperArmR: { rx: -10 * DEG, ry: -15 * DEG, rz: -40 * DEG },
-        lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 20 * DEG, ry: -20 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -40 * DEG, ry: 20 * DEG, rz: -45 * DEG },
-        lowerArmR: { rx: -5 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 15 * DEG, ry: 15 * DEG, rz: 0 },
-      },
-    },
-    [AttackType.HEAVY]: {
-      startup: {
-        upperArmR: { rx: -140 * DEG, ry: 15 * DEG, rz: -10 * DEG },
-        lowerArmR: { rx: -15 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 10 * DEG, ry: -25 * DEG, rz: -5 * DEG },
-      },
-      active: {
-        upperArmR: { rx: 10 * DEG, ry: 20 * DEG, rz: -50 * DEG },
-        lowerArmR: { rx: -5 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 25 * DEG, ry: 25 * DEG, rz: 5 * DEG },
-        upperLegR: { rx: -30 * DEG, ry: 0, rz: 0 },
-        lowerLegR: { rx: 40 * DEG, ry: 0, rz: 0 },
-      },
-    },
-    [AttackType.THRUST]: {
-      startup: {
-        upperArmR: { rx: -30 * DEG, ry: 0, rz: -30 * DEG },
-        lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
-        torso: { rx: 15 * DEG, ry: -15 * DEG, rz: 0 },
-      },
-      active: {
-        upperArmR: { rx: -50 * DEG, ry: 10 * DEG, rz: -20 * DEG },
-        lowerArmR: { rx: 0, ry: 0, rz: 0 },
-        torso: { rx: 20 * DEG, ry: 5 * DEG, rz: 0 },
-        upperLegL: { rx: 15 * DEG, ry: 0, rz: 0 },
-      },
+    active: {
+      upperArmR: { rx: -60 * DEG, ry: 20 * DEG, rz: -35 * DEG },
+      lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
+      torso: { rx: 5 * DEG, ry: 20 * DEG, rz: 0 },
     },
   },
 };
@@ -236,14 +99,14 @@ const WALK_BACK_OFFSET = {
   lowerLegL: { rx: 10 * DEG },
 };
 
-export function getStancePose(stance) {
-  return STANCES[stance] || STANCES[Stance.MID];
+export function getStancePose() {
+  return IDLE_POSE;
 }
 
-export function getAttackPose(stance, attackType, phase) {
-  const attackData = ATTACKS[stance]?.[attackType];
-  if (!attackData) return getStancePose(stance);
-  return attackData[phase] || getStancePose(stance);
+export function getAttackPose(attackType, phase) {
+  const attackData = ATTACKS[attackType];
+  if (!attackData) return IDLE_POSE;
+  return attackData[phase] || IDLE_POSE;
 }
 
 export function getBlockPose() {

@@ -340,10 +340,11 @@ export class Game {
 
     // Arena bounds — don't clamp fighters being pushed back (block/block stun)
     // so block pushback can cause ring out
-    if (this.fighter1.state !== FighterState.BLOCK && this.fighter1.state !== FighterState.BLOCK_STUN) {
+    const noClamp = (s) => s === FighterState.BLOCK || s === FighterState.BLOCK_STUN || s === FighterState.CLASH;
+    if (!noClamp(this.fighter1.state)) {
       this.arena.clampToArena(this.fighter1.position);
     }
-    if (this.fighter2.state !== FighterState.BLOCK && this.fighter2.state !== FighterState.BLOCK_STUN) {
+    if (!noClamp(this.fighter2.state)) {
       this.arena.clampToArena(this.fighter2.position);
     }
 

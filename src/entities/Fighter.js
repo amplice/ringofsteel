@@ -150,21 +150,24 @@ export class Fighter {
       this.position.z += Math.cos(angle) * lungeSpeed * dt;
     }
 
-    // Sidestep movement — perpendicular to facing direction
+    // Sidestep movement — fixed Z axis
     if (this.state === FighterState.SIDESTEP && this.fsm.sidestepPhase === 'dash') {
       const speed = SIDESTEP_DASH_DISTANCE / SIDESTEP_DASH_FRAMES * 60;
-      const angle = this.group.rotation.y;
-      // Perpendicular: rotate facing 90 degrees
-      this.position.x -= Math.cos(angle) * this.fsm.sidestepDirection * speed * dt;
-      this.position.z += Math.sin(angle) * this.fsm.sidestepDirection * speed * dt;
+      this.position.z += this.fsm.sidestepDirection * speed * dt;
     }
 
-    // Backstep movement — away from opponent
+    // Backstep movement — away from opponent on X axis
     if (this.state === FighterState.DODGE) {
       const speed = BACKSTEP_DISTANCE / BACKSTEP_FRAMES * 60;
-      const angle = this.group.rotation.y;
-      this.position.x -= Math.sin(angle) * speed * dt;
-      this.position.z -= Math.cos(angle) * speed * dt;
+      const dir = this.facingRight ? -1 : 1;
+      this.position.x += dir * speed * dt;
+    }
+
+    // Z-axis drift: gradually return to center line (Z=0) when not sidestepping
+    if (this.state !== FighterState.SIDESTEP && Math.abs(this.position.z) > 0.05) {
+      const driftSpeed = 1.5; // units per second
+      const driftAmount = Math.min(driftSpeed * dt, Math.abs(this.position.z));
+      this.position.z -= Math.sign(this.position.z) * driftAmount;
     }
 
     // Update mixer for clip-based animations
@@ -541,12 +544,10 @@ export class Fighter {
     ind.group.rotation.y = -this.group.rotation.y;
   }
 
-  // Movement methods — all relative to facing angle (toward/away from opponent)
+  // Movement methods — fixed screen axes (D=right, A=left on X axis)
   moveForward(dt) {
     if (!this.fsm.isActionable) return;
-    const angle = this.group.rotation.y;
-    this.position.x += Math.sin(angle) * WALK_SPEED * dt;
-    this.position.z += Math.cos(angle) * WALK_SPEED * dt;
+    this.position.x += WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_FORWARD);
     }
@@ -554,9 +555,7 @@ export class Fighter {
 
   moveBack(dt) {
     if (!this.fsm.isActionable) return;
-    const angle = this.group.rotation.y;
-    this.position.x -= Math.sin(angle) * WALK_SPEED * dt;
-    this.position.z -= Math.cos(angle) * WALK_SPEED * dt;
+    this.position.x -= WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_BACK);
     }

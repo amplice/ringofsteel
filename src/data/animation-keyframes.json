@@ -1,0 +1,112 @@
+{
+  "dao_attack1_cartwheel": [
+    {
+      "frame": 0,
+      "rotY": 29,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 19,
+      "rotY": 29,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 24,
+      "rotY": 29,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 50,
+      "rotY": 29,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 76,
+      "rotY": 24,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 95,
+      "rotY": 24,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    }
+  ],
+  "walk_right": [
+    {
+      "frame": 3,
+      "rotY": 0,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 4,
+      "rotY": 117,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 75,
+      "rotY": 101,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    },
+    {
+      "frame": 161,
+      "rotY": 117,
+      "posX": 0,
+      "posY": 0,
+      "posZ": 0,
+      "scale": 1
+    }
+  ],
+  "walk_left": [
+    {
+      "frame": 0,
+      "rotY": 88,
+      "posX": -0.14,
+      "posY": 0,
+      "posZ": -0.62,
+      "scale": 1
+    },
+    {
+      "frame": 89,
+      "rotY": 88,
+      "posX": -0.14,
+      "posY": 0,
+      "posZ": -0.62,
+      "scale": 1
+    },
+    {
+      "frame": 166,
+      "rotY": 89,
+      "posX": -0.14,
+      "posY": 0,
+      "posZ": -0.62,
+      "scale": 1
+    }
+  ]
+}

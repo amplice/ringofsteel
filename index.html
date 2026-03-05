@@ -249,11 +249,12 @@
       margin-bottom: 20px;
       max-height: 200px;
       overflow-y: auto;
+      flex-shrink: 0;
     }
     .anim-clip-btn {
-      background: none;
-      border: 1px solid #444;
-      color: #999;
+      background: rgba(40, 40, 40, 0.9);
+      border: 2px solid #555;
+      color: #ccc;
       font-family: 'Georgia', serif;
       font-size: 13px;
       padding: 8px 12px;
@@ -261,12 +262,13 @@
       text-align: left;
       transition: all 0.15s;
       word-break: break-all;
+      flex-shrink: 0;
     }
-    .anim-clip-btn:hover { border-color: #888; color: #ccc; }
+    .anim-clip-btn:hover { border-color: #888; color: #fff; }
     .anim-clip-btn.active {
       border-color: #c8a84e;
       color: #c8a84e;
-      background: rgba(200, 168, 78, 0.1);
+      background: rgba(200, 168, 78, 0.15);
     }
 
     .anim-now-playing {
@@ -347,6 +349,61 @@
     }
     .anim-back-btn:hover {
       background: rgba(200, 168, 78, 0.2);
+    }
+
+    /* Transform controls */
+    .anim-transform-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .anim-transform-row label {
+      color: #888;
+      font-size: 11px;
+      min-width: 32px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .anim-transform-slider {
+      flex: 1;
+      accent-color: #c8a84e;
+      cursor: pointer;
+    }
+    .anim-transform-num {
+      width: 55px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #c8a84e;
+      font-family: 'Georgia', serif;
+      font-size: 12px;
+      padding: 2px 4px;
+      text-align: right;
+    }
+    .anim-transform-row span {
+      color: #666;
+      font-size: 10px;
+    }
+    .anim-keyframe-bar {
+      width: 100%;
+      height: 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      position: relative;
+      margin-bottom: 8px;
+      border-radius: 2px;
+    }
+    .anim-keyframe-marker {
+      position: absolute;
+      top: 1px;
+      width: 4px;
+      height: 10px;
+      background: #c8a84e;
+      border-radius: 1px;
+      cursor: pointer;
+    }
+    .anim-keyframe-marker:hover {
+      background: #e8d86e;
     }
 
     /* Screen flash overlay */
@@ -460,6 +517,7 @@
         <div class="anim-time" id="anim-time">0.00s / 0.00s</div>
         <div class="anim-time" id="anim-frame" style="color:#c8a84e;font-size:16px;">Frame 0 / 0</div>
         <input type="range" class="anim-progress" id="anim-progress" min="0" max="100" value="0" step="0.1">
+        <div id="anim-keyframe-bar" class="anim-keyframe-bar"></div>
 
         <div class="anim-controls">
           <button class="anim-ctrl-btn" id="anim-btn-play">PLAY</button>
@@ -474,7 +532,49 @@
           <button class="anim-ctrl-btn" id="anim-btn-speed-up">+</button>
         </div>
 
-        <button class="anim-ctrl-btn" id="anim-btn-orbit" style="margin-bottom:15px;">STOP ORBIT</button>
+        <div style="border-top:1px solid #333; margin:10px 0;"></div>
+        <h3 style="font-size:13px; margin-bottom:10px;">ROOT TRANSFORM</h3>
+
+        <div class="anim-transform-row">
+          <label>Rot Y</label>
+          <input type="range" id="anim-rotY" min="-180" max="180" value="0" step="1" class="anim-transform-slider">
+          <input type="number" id="anim-rotY-num" value="0" step="1" class="anim-transform-num">
+          <span>deg</span>
+        </div>
+        <div class="anim-transform-row">
+          <label>Pos X</label>
+          <input type="range" id="anim-posX" min="-5" max="5" value="0" step="0.01" class="anim-transform-slider">
+          <input type="number" id="anim-posX-num" value="0" step="0.01" class="anim-transform-num">
+        </div>
+        <div class="anim-transform-row">
+          <label>Pos Y</label>
+          <input type="range" id="anim-posY" min="-2" max="5" value="0" step="0.01" class="anim-transform-slider">
+          <input type="number" id="anim-posY-num" value="0" step="0.01" class="anim-transform-num">
+        </div>
+        <div class="anim-transform-row">
+          <label>Pos Z</label>
+          <input type="range" id="anim-posZ" min="-5" max="5" value="0" step="0.01" class="anim-transform-slider">
+          <input type="number" id="anim-posZ-num" value="0" step="0.01" class="anim-transform-num">
+        </div>
+        <div class="anim-transform-row">
+          <label>Scale</label>
+          <input type="range" id="anim-scale" min="0.1" max="3.0" value="1.0" step="0.01" class="anim-transform-slider">
+          <input type="number" id="anim-scale-num" value="1.0" step="0.01" class="anim-transform-num">
+        </div>
+
+        <div class="anim-controls" style="margin-top:8px;">
+          <button class="anim-ctrl-btn" id="anim-btn-set-key">SET KEY</button>
+          <button class="anim-ctrl-btn" id="anim-btn-del-key">DEL KEY</button>
+          <button class="anim-ctrl-btn" id="anim-btn-clear-keys">CLEAR</button>
+        </div>
+        <div class="anim-controls" style="margin-top:4px;">
+          <button class="anim-ctrl-btn" id="anim-btn-export">EXPORT JSON</button>
+          <button class="anim-ctrl-btn" id="anim-btn-import">IMPORT JSON</button>
+        </div>
+
+        <div style="border-top:1px solid #333; margin:10px 0;"></div>
+        <button class="anim-ctrl-btn" id="anim-btn-test-mode" style="margin-bottom:15px; width:100%;">TEST MODE: OFF</button>
+
         <button class="anim-back-btn" id="anim-btn-back">BACK TO TITLE</button>
       </div>
     </div>

@@ -55,8 +55,16 @@ export class Game {
     // Animation player state
     this.animPlayerModel = null;  // THREE.Group for the preview model
     this.animPlayerMixer = null;  // AnimationMixer for the preview
-    this.animPlayerAngle = 0;     // Orbit angle
-    this.animPlayerOrbitPaused = false;
+    this.animPlayerArrow = null;  // Direction arrow
+
+    // Animation editor state
+    this.animEditorTestMode = false;
+    this.animEditorDummy = null;
+    this.animEditorGrid = null;
+    this.animEditorModelPos = new THREE.Vector3();
+    this.animEditorModelRotY = 0;
+    this._animPlayerBaseScale = null;
+    this._testModeKeys = {};
   }
 
   async init() {
@@ -130,10 +138,12 @@ export class Game {
       this.ui.showTitle();
     };
 
-    this.ui.animPlayer.onToggleOrbit = () => {
-      this.animPlayerOrbitPaused = !this.animPlayerOrbitPaused;
-      document.getElementById('anim-btn-orbit').textContent =
-        this.animPlayerOrbitPaused ? 'START ORBIT' : 'STOP ORBIT';
+    // Animation editor callbacks
+    this.ui.animPlayer.onTransformUpdate = (transform) => {
+      this._applyAnimPlayerTransform(transform);
+    };
+    this.ui.animPlayer.onTestModeToggle = (enabled) => {
+      this._setAnimPlayerTestMode(enabled);
     };
 
     // Start loop
@@ -157,6 +167,16 @@ export class Game {
     // Attach swords — same approach as animation player (_startAnimPlayer)
     this._attachWeapon(this.fighter1);
     this._attachWeapon(this.fighter2);
+
+    // Debug facing arrows
+    this._debugArrow1 = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1.5, 0x44cc44, 0.3, 0.15
+    );
+    this._debugArrow2 = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1.5, 0x4444cc, 0.3, 0.15
+    );
+    this.scene.add(this._debugArrow1);
+    this.scene.add(this._debugArrow2);
 
     // AI
     if (this.mode === 'ai') {
@@ -222,6 +242,14 @@ export class Game {
     if (this.fighter2) {
       this.fighter2.removeFromScene(this.scene);
       this.fighter2 = null;
+    }
+    if (this._debugArrow1) {
+      this.scene.remove(this._debugArrow1);
+      this._debugArrow1 = null;
+    }
+    if (this._debugArrow2) {
+      this.scene.remove(this._debugArrow2);
+      this._debugArrow2 = null;
     }
   }
 
@@ -341,6 +369,9 @@ export class Game {
     // Ring-out check
     this._checkRingOut();
 
+    // Update debug facing arrows
+    this._updateDebugArrows();
+
     // Update HUD
     this._updateHUD();
   }
@@ -352,21 +383,21 @@ export class Game {
     const frame = this.clock.frameCount;
     let isMoving = false;
 
-    // D = move toward opponent, A = move away from opponent
+    // D = move right (+X), A = move left (-X)
     if (this.input.isHeld(playerIndex, 'right')) {
-      fighter.moveForward(dt, opponent);
+      fighter.moveForward(dt);
       isMoving = true;
     } else if (this.input.isHeld(playerIndex, 'left')) {
-      fighter.moveBack(dt, opponent);
+      fighter.moveBack(dt);
       isMoving = true;
     }
 
-    // W/S = sidestep (orbit around opponent)
+    // W/S = move along Z axis
     if (this.input.isHeld(playerIndex, 'sideUp')) {
-      fighter.sidestep(dt, -1, opponent);
+      fighter.sidestep(dt, -1);
       isMoving = true;
     } else if (this.input.isHeld(playerIndex, 'sideDown')) {
-      fighter.sidestep(dt, 1, opponent);
+      fighter.sidestep(dt, 1);
       isMoving = true;
     }
 
@@ -401,7 +432,7 @@ export class Game {
 
     // Dodge
     if (this.input.consumeBuffer(playerIndex, 'dodge', frame)) {
-      fighter.dodge(opponent);
+      fighter.dodge();
     }
   }
 
@@ -554,6 +585,28 @@ export class Game {
     checkFighter(this.fighter2, this.fighter1, false);
   }
 
+  _updateDebugArrows() {
+    if (!this._debugArrow1 || !this.fighter1 || !this.fighter2) return;
+
+    // P1 arrow: green, points toward P2
+    const d1 = new THREE.Vector3().subVectors(this.fighter2.position, this.fighter1.position);
+    d1.y = 0;
+    if (d1.lengthSq() > 0.001) d1.normalize();
+    else d1.set(1, 0, 0);
+    this._debugArrow1.setDirection(d1);
+    this._debugArrow1.position.copy(this.fighter1.position);
+    this._debugArrow1.position.y = 0.05;
+
+    // P2 arrow: blue, points toward P1
+    const d2 = new THREE.Vector3().subVectors(this.fighter1.position, this.fighter2.position);
+    d2.y = 0;
+    if (d2.lengthSq() > 0.001) d2.normalize();
+    else d2.set(-1, 0, 0);
+    this._debugArrow2.setDirection(d2);
+    this._debugArrow2.position.copy(this.fighter2.position);
+    this._debugArrow2.position.y = 0.05;
+  }
+
   _pushApart(a, b, force) {
     const dx = b.position.x - a.position.x;
     const dz = b.position.z - a.position.z;
@@ -585,12 +638,14 @@ export class Game {
 
     // Load all animation files — each gets its own model + mixer
     this.animPlayerEntries = await ModelLoader.loadAnimPlayerEntries([
-      '/dao_attack1_cartwheel.glb',
+      { url: '/dao_attack1_cartwheel.glb', trimStartFrames: 1 },
       { url: '/video.glb', splits: [
-        { name: 'walk_right', startFrame: 0, endFrame: 161, inPlace: true },
+        { name: 'walk_right', startFrame: 2, endFrame: 161, inPlace: true },
         { name: 'walk_left', startFrame: 161, endFrame: 327, inPlace: true },
       ]},
     ]);
+    console.log('[AnimPlayer] Entries:', this.animPlayerEntries.length,
+      'Actions:', this.animPlayerEntries.map(e => Object.keys(e.actions)));
 
     // Attach a sword to the right hand of each model
     for (const entry of this.animPlayerEntries) {
@@ -608,7 +663,6 @@ export class Game {
 
     this.animPlayerModel = null;
     this.animPlayerMixer = null;
-    this.animPlayerAngle = 0;
 
     // Build a combined actions map that the UI can use
     // Each action knows which entry it belongs to
@@ -620,14 +674,15 @@ export class Game {
       }
     }
 
-    // Create a dummy mixer for the UI (it will be swapped per-clip)
-    this.ui.animPlayer.setMixerAndActions(null, allActions);
+    // Show UI FIRST (hideAll clears currentAction), then set up actions
+    this.ui.showAnimPlayer();
+    this.cameraController.stopKillCam();
+
+    // Set callback BEFORE setMixerAndActions (which auto-selects the first clip)
     this.ui.animPlayer.onClipSwitch = (action) => {
       this._switchAnimPlayerModel(action._animEntry);
     };
-    this.ui.showAnimPlayer();
-
-    this.cameraController.stopKillCam();
+    this.ui.animPlayer.setMixerAndActions(null, allActions);
   }
 
   _switchAnimPlayerModel(entry) {
@@ -636,17 +691,43 @@ export class Game {
       this.scene.remove(this.animPlayerModel);
     }
 
-    // Add new model
+    // Remove old arrow
+    if (this.animPlayerArrow) {
+      this.scene.remove(this.animPlayerArrow);
+      this.animPlayerArrow = null;
+    }
+
+    // Add new model (keep prepareRoot positioning intact)
     this.animPlayerModel = entry.root;
     this.animPlayerMixer = entry.mixer;
-    this.animPlayerModel.position.set(0, 0, 0);
+
+    // Cache base transform from prepareRoot before anything else modifies it
+    this._animPlayerBaseScale = this.animPlayerModel.scale.x;
+    this._animPlayerBasePos = this.animPlayerModel.position.clone();
+
     this.scene.add(this.animPlayerModel);
+
+    // Create direction arrow (green, pointing in model's forward direction)
+    const arrowDir = new THREE.Vector3(0, 0, 1);
+    const arrowOrigin = new THREE.Vector3(0, 0.05, 0);
+    this.animPlayerArrow = new THREE.ArrowHelper(arrowDir, arrowOrigin, 1.5, 0x44cc44, 0.3, 0.15);
+    this.scene.add(this.animPlayerArrow);
+
   }
 
   _stopAnimPlayer() {
+    // Clean up test mode if active
+    if (this.animEditorTestMode) {
+      this._setAnimPlayerTestMode(false);
+    }
+
     if (this.animPlayerModel) {
       this.scene.remove(this.animPlayerModel);
       this.animPlayerModel = null;
+    }
+    if (this.animPlayerArrow) {
+      this.scene.remove(this.animPlayerArrow);
+      this.animPlayerArrow = null;
     }
     // Stop all mixers
     if (this.animPlayerEntries) {
@@ -656,6 +737,7 @@ export class Game {
       this.animPlayerEntries = null;
     }
     this.animPlayerMixer = null;
+    this._animPlayerBaseScale = null;
   }
 
   _updateAnimPlayer(dt) {
@@ -664,21 +746,162 @@ export class Game {
       this.animPlayerMixer.update(dt);
     }
 
-    // Update UI display (time, progress bar)
+    // Test mode: WASD movement + attack triggers
+    if (this.animEditorTestMode) {
+      this._updateAnimPlayerTestMode(dt);
+    }
+
+    // Update UI display (time, progress bar, transforms)
     this.ui.animPlayer.updateDisplay();
 
-    // Orbit camera around model
-    if (!this.animPlayerOrbitPaused) this.animPlayerAngle += dt * 0.3;
-    const radius = 5;
-    const camY = 2.5;
-    this.camera.position.set(
-      Math.cos(this.animPlayerAngle) * radius,
-      camY,
-      Math.sin(this.animPlayerAngle) * radius
-    );
-    this.camera.lookAt(0, 0.9, 0);
+    // Update direction arrow — shows the "game facing" direction (toward enemy),
+    // NOT the model's visual rotation. The user adjusts rotY until the character
+    // visually faces the same way as this arrow.
+    if (this.animPlayerArrow && this.animPlayerModel) {
+      let dir;
+      if (this.animEditorTestMode && this.animEditorDummy) {
+        // Point from character toward the enemy dummy
+        dir = new THREE.Vector3().subVectors(
+          this.animEditorDummy.position,
+          this.animPlayerModel.position
+        );
+        dir.y = 0;
+        if (dir.lengthSq() > 0.001) dir.normalize();
+        else dir.set(1, 0, 0);
+      } else {
+        // Fixed reference direction: +X (the "toward enemy" direction in the game)
+        dir = new THREE.Vector3(1, 0, 0);
+      }
+      this.animPlayerArrow.setDirection(dir);
+      this.animPlayerArrow.position.copy(this.animPlayerModel.position);
+      this.animPlayerArrow.position.y = 0.05;
+    }
+
+    // Camera
+    if (this.animEditorTestMode) {
+      // Follow camera behind model
+      const followDist = 5;
+      const tx = this.animEditorModelPos.x;
+      const tz = this.animEditorModelPos.z;
+      this.camera.position.set(
+        tx - Math.sin(this.animEditorModelRotY) * followDist,
+        2.5,
+        tz - Math.cos(this.animEditorModelRotY) * followDist
+      );
+      this.camera.lookAt(tx, 0.9, tz);
+    } else {
+      // Static front-angled camera
+      this.camera.position.set(3, 2.5, 4);
+      this.camera.lookAt(0, 0.9, 0);
+    }
 
     // Environment particles
     this.environment.update(dt);
+  }
+
+  _applyAnimPlayerTransform(transform) {
+    if (!this.animPlayerModel) return;
+
+    // Store the keyframed rotY offset so test mode can layer it on top of game facing
+    this._animPlayerKeyframedRotY = (transform.rotY * Math.PI) / 180;
+
+    if (this.animEditorTestMode) {
+      // In test mode, game facing is controlled by WASD — just layer the rotY offset
+      // Position/scale are handled by _updateAnimPlayerTestMode
+      return;
+    }
+
+    if (!this._animPlayerBasePos || this._animPlayerBaseScale == null) return;
+
+    const model = this.animPlayerModel;
+    model.rotation.y = this._animPlayerKeyframedRotY;
+    model.position.set(
+      this._animPlayerBasePos.x + transform.posX,
+      this._animPlayerBasePos.y + transform.posY,
+      this._animPlayerBasePos.z + transform.posZ
+    );
+    model.scale.setScalar(this._animPlayerBaseScale * transform.scale);
+  }
+
+  _setAnimPlayerTestMode(enabled) {
+    this.animEditorTestMode = enabled;
+
+    if (enabled) {
+      // Add grid floor
+      this.animEditorGrid = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
+      this.animEditorGrid.position.y = 0.01;
+      this.scene.add(this.animEditorGrid);
+
+      // Add dummy target cube
+      const geo = new THREE.BoxGeometry(0.6, 1.8, 0.6);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xcc4444, roughness: 0.8 });
+      this.animEditorDummy = new THREE.Mesh(geo, mat);
+      this.animEditorDummy.position.set(3, 0.9, 0);
+      this.animEditorDummy.castShadow = true;
+      this.scene.add(this.animEditorDummy);
+
+      // Reset model position
+      this.animEditorModelPos.set(0, 0, 0);
+      this.animEditorModelRotY = 0;
+      if (this.animPlayerModel) {
+        this.animPlayerModel.position.set(0, 0, 0);
+        this.animPlayerModel.rotation.y = 0;
+      }
+      this._testModeKeys = {};
+    } else {
+      if (this.animEditorGrid) {
+        this.scene.remove(this.animEditorGrid);
+        this.animEditorGrid = null;
+      }
+      if (this.animEditorDummy) {
+        this.scene.remove(this.animEditorDummy);
+        this.animEditorDummy = null;
+      }
+      if (this.animPlayerModel) {
+        this.animPlayerModel.position.set(0, 0, 0);
+        this.animPlayerModel.rotation.y = 0;
+      }
+    }
+  }
+
+  _updateAnimPlayerTestMode(dt) {
+    if (!this.animPlayerModel) return;
+
+    const moveSpeed = 3.0;
+    const rotSpeed = 2.0;
+    const keys = this.input.keysDown;
+
+    // A/D = rotate left/right
+    if (keys.has('KeyA')) this.animEditorModelRotY += rotSpeed * dt;
+    if (keys.has('KeyD')) this.animEditorModelRotY -= rotSpeed * dt;
+
+    // W/S = move forward/back relative to facing
+    if (keys.has('KeyW')) {
+      this.animEditorModelPos.x += Math.sin(this.animEditorModelRotY) * moveSpeed * dt;
+      this.animEditorModelPos.z += Math.cos(this.animEditorModelRotY) * moveSpeed * dt;
+    }
+    if (keys.has('KeyS')) {
+      this.animEditorModelPos.x -= Math.sin(this.animEditorModelRotY) * moveSpeed * dt;
+      this.animEditorModelPos.z -= Math.cos(this.animEditorModelRotY) * moveSpeed * dt;
+    }
+
+    this.animPlayerModel.position.copy(this.animEditorModelPos);
+    // Game facing + keyframed rotation offset (same as how real combat would work)
+    const keyframedOffset = this._animPlayerKeyframedRotY || 0;
+    this.animPlayerModel.rotation.y = this.animEditorModelRotY + keyframedOffset;
+
+    // J/K/L = trigger attack (restart current clip) — edge-detect to avoid repeat
+    for (const key of ['KeyJ', 'KeyK', 'KeyL']) {
+      if (keys.has(key) && !this._testModeKeys[key]) {
+        this._testModeKeys[key] = true;
+        const animScreen = this.ui.animPlayer;
+        if (animScreen.currentAction) {
+          animScreen.currentAction.reset();
+          animScreen.currentAction.play();
+        }
+      } else if (!keys.has(key)) {
+        this._testModeKeys[key] = false;
+      }
+    }
   }
 }

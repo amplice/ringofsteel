@@ -79,9 +79,11 @@ export class ModelLoader {
     const allEntries = [];
 
     await Promise.all(items.map(async (item) => {
+      try {
       // Item can be a string URL or { url, splits } object
       const url = typeof item === 'string' ? item : item.url;
       const splits = typeof item === 'object' && item.splits ? item.splits : null;
+      const trimStartFrames = typeof item === 'object' && item.trimStartFrames ? item.trimStartFrames : 0;
       const lower = url.toLowerCase();
       const fileName = url.split('/').pop().replace(/\.(fbx|glb|gltf)$/i, '');
 
@@ -116,11 +118,14 @@ export class ModelLoader {
         const srcClip = clips[0];
         srcClip.trim();
         const fps = 60;
+        console.log(`[AnimPlayer] Splitting '${url}': srcClip duration=${srcClip.duration.toFixed(2)}s, tracks=${srcClip.tracks.length}, splits=${splits.length}`);
 
         for (const split of splits) {
+          try {
           const startTime = split.startFrame / fps;
           const endTime = split.endFrame / fps;
           const duration = endTime - startTime;
+          console.log(`[AnimPlayer] Split '${split.name}': frames ${split.startFrame}-${split.endFrame}, time ${startTime.toFixed(2)}-${endTime.toFixed(2)}s`);
 
           // Create sub-clip by slicing each track
           const subTracks = [];
@@ -135,8 +140,11 @@ export class ModelLoader {
               if (times[i] <= endTime) iEnd = i + 1;
             }
 
-            const newTimes = new Float32Array(iEnd - iStart);
-            const newValues = new Float32Array((iEnd - iStart) * valuesPerKey);
+            const count = iEnd - iStart;
+            if (count <= 0) continue; // skip empty tracks
+
+            const newTimes = new Float32Array(count);
+            const newValues = new Float32Array(count * valuesPerKey);
             for (let i = iStart; i < iEnd; i++) {
               newTimes[i - iStart] = times[i] - startTime;
               for (let v = 0; v < valuesPerKey; v++) {
@@ -147,46 +155,81 @@ export class ModelLoader {
             const SubTrackType = track.constructor;
             subTracks.push(new SubTrackType(track.name, newTimes, newValues));
           }
+          console.log(`[AnimPlayer] Split '${split.name}': created ${subTracks.length} sub-tracks`);
 
-          // Walk-in-place: lock root bone X/Z to first frame, keep Y for natural bob
+          const subClip = new THREE.AnimationClip(split.name, duration, subTracks);
+
+          // Clone the model for this split
+          console.log(`[AnimPlayer] Split '${split.name}': cloning model...`);
+          const clonedRoot = SkeletonUtils.clone(root);
+          prepareRoot(clonedRoot);
+
+          // Walk-in-place: lock root bone X/Z position
           if (split.inPlace) {
-            for (const track of subTracks) {
-              // Root bone position track (spine is the root)
-              if (track.name.match(/^spine\.position$/)) {
-                const vpk = track.values.length / track.times.length; // 3 for vec3
-                if (vpk === 3) {
-                  // Use the very first split's first-frame position as the anchor
-                  // so all splits share the same center point
-                  const srcTrack = srcClip.tracks.find(t => t.name === track.name);
-                  const anchorFrame = splits[0].startFrame;
-                  const x0 = srcTrack.values[anchorFrame * 3];
-                  const z0 = srcTrack.values[anchorFrame * 3 + 2];
+            // Find the root bone position track and lock X/Z
+            clonedRoot.traverse((child) => {
+              if (child.isBone && child.name === 'spine') {
+                // Will be handled by the mixer — we lock it in the clip tracks instead
+              }
+            });
+            for (const track of subClip.tracks) {
+              if (track.name.match(/\.position$/) && track.name.startsWith('spine')) {
+                const vpk = track.values.length / track.times.length;
+                if (vpk === 3 && track.times.length > 0) {
+                  const x0 = track.values[0];
+                  const z0 = track.values[2];
                   for (let i = 0; i < track.times.length; i++) {
-                    track.values[i * 3] = x0;     // lock X
-                    track.values[i * 3 + 2] = z0;  // lock Z
+                    track.values[i * 3] = x0;
+                    track.values[i * 3 + 2] = z0;
                   }
                 }
               }
             }
           }
 
-          const subClip = new THREE.AnimationClip(split.name, duration, subTracks);
-
-          // Clone the model for this split
-          const clonedRoot = SkeletonUtils.clone(root);
-          prepareRoot(clonedRoot);
-
           const mixer = new THREE.AnimationMixer(clonedRoot);
           const actions = {};
           actions[split.name] = mixer.clipAction(subClip);
 
+          console.log(`[AnimPlayer] Split '${split.name}': OK, duration=${duration.toFixed(2)}s`);
           allEntries.push({ fileName: split.name, root: clonedRoot, mixer, actions });
+          } catch (splitErr) {
+            console.error(`[AnimPlayer] Split '${split.name}' FAILED:`, splitErr);
+          }
         }
       } else {
         // No splits — single entry
         for (const clip of clips) {
           clip.name = fileName;
           clip.trim();
+
+          // Trim leading frames (e.g. skip T-pose at frame 0)
+          if (trimStartFrames > 0) {
+            const skipTime = trimStartFrames / 60;
+            for (const track of clip.tracks) {
+              const vpk = track.values.length / track.times.length;
+              // Find first keyframe at or after skipTime
+              let startIdx = 0;
+              for (let i = 0; i < track.times.length; i++) {
+                if (track.times[i] < skipTime) startIdx = i + 1;
+                else break;
+              }
+              if (startIdx > 0 && startIdx < track.times.length) {
+                const newLen = track.times.length - startIdx;
+                const newTimes = new Float32Array(newLen);
+                const newValues = new Float32Array(newLen * vpk);
+                for (let i = 0; i < newLen; i++) {
+                  newTimes[i] = track.times[i + startIdx] - skipTime;
+                  for (let v = 0; v < vpk; v++) {
+                    newValues[i * vpk + v] = track.values[(i + startIdx) * vpk + v];
+                  }
+                }
+                track.times = newTimes;
+                track.values = newValues;
+              }
+            }
+            clip.duration = Math.max(0, clip.duration - skipTime);
+          }
         }
         prepareRoot(root);
         const mixer = new THREE.AnimationMixer(root);
@@ -194,7 +237,12 @@ export class ModelLoader {
         for (const clip of clips) {
           actions[clip.name] = mixer.clipAction(clip);
         }
+        console.log(`[AnimPlayer] Loaded '${fileName}': ${clips.length} clips, actions=[${Object.keys(actions)}]`);
         allEntries.push({ fileName, root, mixer, actions });
+      }
+      } catch (err) {
+        console.error(`[AnimPlayer] FAILED to load '${typeof item === 'string' ? item : item.url}':`, err);
+        alert(`Animation load error: ${err.message}`);
       }
     }));
 
@@ -327,32 +375,35 @@ export class ModelLoader {
    * Returns { model, clips: { idle, walk_right, walk_left, attack } }
    */
   static async loadFightAnimations() {
-    const [videoGltf, attackGltf, texture] = await Promise.all([
-      ModelLoader._loadGLB('/video.glb'),
-      ModelLoader._loadGLB('/dao_attack1_cartwheel.glb'),
+    const [gltf, texture] = await Promise.all([
+      ModelLoader._loadGLB('/character_all.glb'),
       ModelLoader._loadTexture('/Color_B_Gradient.jpg'),
     ]);
 
-    const model = videoGltf.scene;
-    const srcClip = videoGltf.animations[0];
-    srcClip.trim();
+    const model = gltf.scene;
+    const clips = {};
+    const ATTACK_SPEED = 3.5;
+    for (const clip of gltf.animations) {
+      // Speed up attack by compressing keyframe times
+      if (clip.name === 'attack') {
+        const origDuration = clip.duration;
+        for (const track of clip.tracks) {
+          const newTimes = new Float32Array(track.times.length);
+          for (let i = 0; i < track.times.length; i++) {
+            newTimes[i] = track.times[i] / ATTACK_SPEED;
+          }
+          track.times = newTimes;
+        }
+        clip.duration = origDuration / ATTACK_SPEED;
+        clip.resetDuration();
+        console.log(`Attack clip sped up ${ATTACK_SPEED}x: ${origDuration.toFixed(3)}s → ${clip.duration.toFixed(3)}s`);
+      }
+      clips[clip.name] = clip;
+    }
 
-    // Split walk_right (frames 0-160) and walk_left (frames 161-326)
-    const walkRight = ModelLoader._sliceClip(srcClip, 'walk_right', 0, 161, true);
-    const walkLeft = ModelLoader._sliceClip(srcClip, 'walk_left', 161, 327, true);
+    console.log('Fight animations loaded:', Object.keys(clips).map(k => `${k} (${clips[k].duration.toFixed(2)}s)`));
 
-    // Create idle clip: single-frame extract at frame 32 of walk_right
-    const idle = ModelLoader._sliceClip(srcClip, 'idle', 32, 33, true);
-
-    // Attack clip — strip root bone Y-rotation so the animation doesn't spin the character
-    const attackClip = attackGltf.animations[0];
-    attackClip.name = 'attack';
-    attackClip.trim();
-    ModelLoader._lockRootRotation(attackClip);
-
-    console.log('Fight animations loaded:', { idle: idle.duration, walkRight: walkRight.duration, walkLeft: walkLeft.duration, attack: attackClip.duration });
-
-    return { model, texture, clips: { idle, walk_right: walkRight, walk_left: walkLeft, attack: attackClip } };
+    return { model, texture, clips };
   }
 
   /**
@@ -415,40 +466,67 @@ export class ModelLoader {
   }
 
   /**
-   * Lock root bone (spine) Y-rotation to first-frame value so the animation
-   * doesn't spin the character. Keeps X/Z rotation for natural body tilt.
+   * Trim N frames from the start of a clip (e.g. to skip T-pose at frame 0).
+   */
+  static _trimStartFrames(clip, numFrames) {
+    const skipTime = numFrames / 60;
+    for (const track of clip.tracks) {
+      const vpk = track.values.length / track.times.length;
+      let startIdx = 0;
+      for (let i = 0; i < track.times.length; i++) {
+        if (track.times[i] < skipTime) startIdx = i + 1;
+        else break;
+      }
+      if (startIdx > 0 && startIdx < track.times.length) {
+        const newLen = track.times.length - startIdx;
+        const newTimes = new Float32Array(newLen);
+        const newValues = new Float32Array(newLen * vpk);
+        for (let i = 0; i < newLen; i++) {
+          newTimes[i] = track.times[i + startIdx] - skipTime;
+          for (let v = 0; v < vpk; v++) {
+            newValues[i * vpk + v] = track.values[(i + startIdx) * vpk + v];
+          }
+        }
+        track.times = newTimes;
+        track.values = newValues;
+      }
+    }
+    clip.duration = Math.max(0, clip.duration - skipTime);
+  }
+
+  /**
+   * Lock Y-rotation on all spine/torso bones to first-frame values so the
+   * attack animation doesn't rotate the character. Keeps X/Z rotation for
+   * natural body tilt during the swing.
    */
   static _lockRootRotation(clip) {
+    const q = new THREE.Quaternion();
+    const euler = new THREE.Euler();
+
     for (const track of clip.tracks) {
-      if (track.name === 'spine.quaternion') {
-        const vpk = track.values.length / track.times.length; // 4 for quaternion
-        if (vpk !== 4) continue;
+      // Lock Y-rotation on all spine bones (spine, spine.001, spine.002, etc.)
+      if (!track.name.match(/^spine(\.\d+)?\.quaternion$/)) continue;
+      const vpk = track.values.length / track.times.length;
+      if (vpk !== 4) continue;
 
-        // Extract Y-rotation from first frame, lock all frames to it
-        // We decompose each quaternion, lock the Y-axis rotation to frame 0's value
-        const q = new THREE.Quaternion();
-        const euler = new THREE.Euler();
+      // Get first frame Y rotation
+      q.set(track.values[0], track.values[1], track.values[2], track.values[3]);
+      euler.setFromQuaternion(q, 'YXZ');
+      const lockedY = euler.y;
 
-        // Get first frame Y rotation
-        q.set(track.values[0], track.values[1], track.values[2], track.values[3]);
+      // Apply locked Y to all frames
+      for (let i = 0; i < track.times.length; i++) {
+        const off = i * 4;
+        q.set(track.values[off], track.values[off+1], track.values[off+2], track.values[off+3]);
         euler.setFromQuaternion(q, 'YXZ');
-        const lockedY = euler.y;
-
-        // Apply locked Y to all frames
-        for (let i = 0; i < track.times.length; i++) {
-          const off = i * 4;
-          q.set(track.values[off], track.values[off+1], track.values[off+2], track.values[off+3]);
-          euler.setFromQuaternion(q, 'YXZ');
-          euler.y = lockedY;
-          q.setFromEuler(euler);
-          track.values[off] = q.x;
-          track.values[off+1] = q.y;
-          track.values[off+2] = q.z;
-          track.values[off+3] = q.w;
-        }
-        console.log(`Locked root Y-rotation to ${(lockedY * 180/Math.PI).toFixed(1)}° for attack clip`);
-        break;
+        euler.y = lockedY;
+        q.setFromEuler(euler);
+        track.values[off] = q.x;
+        track.values[off+1] = q.y;
+        track.values[off+2] = q.z;
+        track.values[off+3] = q.w;
       }
+      console.log(`Locked Y-rotation on ${track.name.replace('.quaternion','')} to ${(lockedY * 180/Math.PI).toFixed(1)}° for attack clip`);
     }
   }
 

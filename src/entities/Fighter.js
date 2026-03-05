@@ -101,6 +101,7 @@ export class Fighter {
     // Walk cycle timer
     this.walkPhase = 0;
     this._sidestepDir = 0;
+
   }
 
   get state() { return this.fsm.state; }
@@ -111,25 +112,12 @@ export class Fighter {
   set hitApplied(v) { this.fsm.hitApplied = v; }
 
   update(dt, opponent) {
-    // Update facing — face toward opponent using full 2D angle
+    // Always face toward opponent
     if (opponent) {
       const dx = opponent.position.x - this.position.x;
       const dz = opponent.position.z - this.position.z;
       this.facingRight = dx >= 0;
-
-      // Don't update rotation during attacks — lock facing to attack direction
-      const isAttacking =
-        this.state === FighterState.ATTACK_STARTUP ||
-        this.state === FighterState.ATTACK_ACTIVE ||
-        this.state === FighterState.ATTACK_RECOVERY;
-
-      if (!isAttacking) {
-        const targetY = Math.atan2(dz, dx) + Math.PI / 2;
-        let diff = targetY - this.group.rotation.y;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        this.group.rotation.y += diff * 0.15;
-      }
+      this.group.rotation.y = Math.atan2(dx, dz);
     }
 
     // Update stance
@@ -141,14 +129,11 @@ export class Fighter {
     // Update animation based on state
     this._updateAnimation();
 
-    // Attack lunge — move toward opponent during active frames
-    if (opponent && this.state === FighterState.ATTACK_ACTIVE) {
-      const dx = opponent.position.x - this.position.x;
-      const dz = opponent.position.z - this.position.z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
+    // Attack lunge — move in facing direction during active frames
+    if (this.state === FighterState.ATTACK_ACTIVE) {
       const lungeSpeed = 4.0;
-      this.position.x += (dx / len) * lungeSpeed * dt;
-      this.position.z += (dz / len) * lungeSpeed * dt;
+      const dir = this.facingRight ? 1 : -1;
+      this.position.x += dir * lungeSpeed * dt;
     }
 
     // Update mixer for clip-based animations
@@ -427,7 +412,6 @@ export class Fighter {
   _updateClipAnimation() {
     const state = this.state;
     let clipName = 'idle';
-    let frozen = false;
     let loopOnce = false;
 
     switch (state) {
@@ -442,7 +426,6 @@ export class Fighter {
       case FighterState.DODGE:
       case FighterState.CLASH:
         clipName = 'idle';
-        frozen = true;
         break;
 
       case FighterState.WALK_FORWARD:
@@ -467,7 +450,6 @@ export class Fighter {
       case FighterState.DYING:
       case FighterState.DEAD:
         clipName = 'idle';
-        frozen = true;
         break;
     }
 
@@ -487,13 +469,6 @@ export class Fighter {
         action.clampWhenFinished = false;
       }
 
-      if (frozen) {
-        action.timeScale = 0;
-        action.time = 0;
-      } else {
-        action.timeScale = 1;
-      }
-
       // Crossfade
       action.reset();
       action.setEffectiveWeight(1);
@@ -503,10 +478,6 @@ export class Fighter {
       action.play();
 
       this.activeClipName = clipName;
-    } else if (frozen && action.timeScale !== 0) {
-      // Ensure frozen stays frozen
-      action.timeScale = 0;
-      action.time = 0;
     }
   }
 
@@ -533,57 +504,30 @@ export class Fighter {
     }
   }
 
-  // Movement methods — all relative to opponent position
-  moveForward(dt, opponent) {
+  // Movement methods — fixed world axes (no rotation)
+  moveForward(dt) {
     if (!this.fsm.isActionable) return;
-    if (opponent) {
-      const dx = opponent.position.x - this.position.x;
-      const dz = opponent.position.z - this.position.z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      this.position.x += (dx / len) * WALK_SPEED * dt;
-      this.position.z += (dz / len) * WALK_SPEED * dt;
-    } else {
-      const dir = this.facingRight ? 1 : -1;
-      this.position.x += dir * WALK_SPEED * dt;
-    }
+    // D key = move +X (toward opponent for P1)
+    this.position.x += WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE) {
       this.fsm.transition(FighterState.WALK_FORWARD);
     }
   }
 
-  moveBack(dt, opponent) {
+  moveBack(dt) {
     if (!this.fsm.isActionable) return;
-    if (opponent) {
-      const dx = opponent.position.x - this.position.x;
-      const dz = opponent.position.z - this.position.z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      this.position.x -= (dx / len) * WALK_SPEED * dt;
-      this.position.z -= (dz / len) * WALK_SPEED * dt;
-    } else {
-      const dir = this.facingRight ? -1 : 1;
-      this.position.x += dir * WALK_SPEED * dt;
-    }
+    // A key = move -X (away from opponent for P1)
+    this.position.x -= WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE) {
       this.fsm.transition(FighterState.WALK_BACK);
     }
   }
 
-  sidestep(dt, direction, opponent) {
+  sidestep(dt, direction) {
     if (!this.fsm.isActionable) return;
     this._sidestepDir = direction;
-    if (opponent) {
-      // Orbit around opponent — move perpendicular to fighter-opponent line
-      const dx = opponent.position.x - this.position.x;
-      const dz = opponent.position.z - this.position.z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      // Perpendicular: rotate 90 degrees
-      const perpX = -dz / len;
-      const perpZ = dx / len;
-      this.position.x += perpX * direction * SIDESTEP_SPEED * dt;
-      this.position.z += perpZ * direction * SIDESTEP_SPEED * dt;
-    } else {
-      this.position.z += direction * SIDESTEP_SPEED * dt;
-    }
+    // W/S = move along Z axis
+    this.position.z += direction * SIDESTEP_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE) {
       this.fsm.transition(FighterState.SIDESTEP);
     }
@@ -599,14 +543,15 @@ export class Fighter {
 
   attack(type) {
     const result = this.fsm.startAttack(type);
-    // Override FSM timing to match full animation clip duration
+    // Speed up attack animation and match FSM timing
     if (result && this.useClips && this.clipActions.attack) {
-      const clipDuration = this.clipActions.attack.getClip().duration;
-      const totalFrames = Math.round(clipDuration * 60);
+      const action = this.clipActions.attack;
+      const clipDuration = action.getClip().duration;
+      const fsmFrames = Math.ceil(clipDuration * 60);
       this.fsm.currentAttackData = {
         ...this.fsm.currentAttackData,
         startup: 1,
-        active: totalFrames,
+        active: fsmFrames,
         recovery: 1,
       };
     }
@@ -621,19 +566,11 @@ export class Fighter {
     return this.fsm.startParry();
   }
 
-  dodge(opponent) {
+  dodge() {
     if (this.fsm.startDodge()) {
-      // Dodge away from opponent
-      if (opponent) {
-        const dx = this.position.x - opponent.position.x;
-        const dz = this.position.z - opponent.position.z;
-        const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        this.position.x += (dx / len) * 1.5;
-        this.position.z += (dz / len) * 1.5;
-      } else {
-        const dir = this.facingRight ? -1 : 1;
-        this.position.x += dir * 1.5;
-      }
+      // Dodge backward (away from facing direction)
+      const dir = this.facingRight ? -1 : 1;
+      this.position.x += dir * 1.5;
       return true;
     }
     return false;
@@ -670,12 +607,11 @@ export class Fighter {
     if (this.useClips && this.mixer) {
       this.mixer.stopAllAction();
       this.activeClipName = null;
-      // Start idle clip
+      // Start idle clip (looping)
       const idleAction = this.clipActions['idle'];
       if (idleAction) {
         idleAction.reset();
-        idleAction.timeScale = 0;
-        idleAction.time = 0;
+        idleAction.timeScale = 1;
         idleAction.setLoop(THREE.LoopRepeat);
         idleAction.setEffectiveWeight(1);
         idleAction.play();

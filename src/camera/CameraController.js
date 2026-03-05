@@ -45,18 +45,11 @@ export class CameraController {
     const dist = fighter1.distanceTo(fighter2);
     const zoomDist = clamp(5 + dist * 0.8, 5, 14);
 
-    // Side-view camera (perpendicular to the fighters' axis)
-    // Perpendicular direction: rotate fighter axis 90° CW → (-dz, dx)
-    const dx = fighter2.position.x - fighter1.position.x;
-    const dz = fighter2.position.z - fighter1.position.z;
-    const axisLen = Math.sqrt(dx * dx + dz * dz) || 1;
-    const perpX = -dz / axisLen;
-    const perpZ = dx / axisLen;
-
+    // Fixed side-view camera (always from +Z looking toward origin)
     this.targetPosition.set(
-      midX + perpX * zoomDist,
+      midX,
       midY + 2.5,
-      midZ + perpZ * zoomDist
+      midZ + zoomDist
     );
 
     this.targetLookAt.set(midX, midY, midZ);

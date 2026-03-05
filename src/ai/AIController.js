@@ -37,9 +37,10 @@ export class AIController {
     const inRange = dist < 2.5;
     const closeRange = dist < 1.8;
 
-    // Attack scoring — single type for now
+    // Attack scoring
     if (inRange) {
       scores.quickAttack = 0.4 + p.aggression * 0.3 + noise();
+      scores.heavyAttack = 0.15 + p.aggression * 0.2 + noise();
       if (closeRange) {
         scores.quickAttack += 0.2;
       }
@@ -114,6 +115,10 @@ export class AIController {
     switch (action) {
       case 'quickAttack':
         fighter.attack(AttackType.QUICK);
+        this.currentAction = null;
+        break;
+      case 'heavyAttack':
+        fighter.attack(AttackType.HEAVY);
         this.currentAction = null;
         break;
       case 'block':

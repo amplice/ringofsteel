@@ -30,20 +30,24 @@ const IDLE_POSE = {
   lowerLegL: { rx: 5 * DEG, ry: 0, rz: 0 },
 };
 
-// Single attack set (uses old MID QUICK)
-const ATTACKS = {
-  [AttackType.QUICK]: {
-    startup: {
-      upperArmR: { rx: -80 * DEG, ry: -10 * DEG, rz: -25 * DEG },
-      lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
-      torso: { rx: 0, ry: -25 * DEG, rz: 0 },
-    },
-    active: {
-      upperArmR: { rx: -60 * DEG, ry: 20 * DEG, rz: -35 * DEG },
-      lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
-      torso: { rx: 5 * DEG, ry: 20 * DEG, rz: 0 },
-    },
+// Attack poses
+const QUICK_ATTACK = {
+  startup: {
+    upperArmR: { rx: -80 * DEG, ry: -10 * DEG, rz: -25 * DEG },
+    lowerArmR: { rx: -40 * DEG, ry: 0, rz: 0 },
+    torso: { rx: 0, ry: -25 * DEG, rz: 0 },
   },
+  active: {
+    upperArmR: { rx: -60 * DEG, ry: 20 * DEG, rz: -35 * DEG },
+    lowerArmR: { rx: -10 * DEG, ry: 0, rz: 0 },
+    torso: { rx: 5 * DEG, ry: 20 * DEG, rz: 0 },
+  },
+};
+
+// Heavy reuses same poses — the slower timing comes from frame data
+const ATTACKS = {
+  [AttackType.QUICK]: QUICK_ATTACK,
+  [AttackType.HEAVY]: QUICK_ATTACK,
 };
 
 const BLOCK_POSE = {

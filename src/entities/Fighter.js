@@ -77,6 +77,10 @@ export class Fighter {
     this.fsm = new FighterStateMachine(this);
     this.animator = new ProceduralAnimator(joints, this.useFBX || this.useClips);
 
+    // State indicators (floating shapes above head)
+    this._stateIndicator = this._createStateIndicators();
+    this.group.add(this._stateIndicator.group);
+
     // Position
     this.position = this.group.position;
     this.facingRight = !this.isP2;
@@ -84,6 +88,34 @@ export class Fighter {
     // Walk cycle timer
     this.walkPhase = 0;
     this._sidestepDir = 0;
+  }
+
+  _createStateIndicators() {
+    const g = new THREE.Group();
+    g.position.y = 2.2; // float above head
+
+    // Block: blue cube
+    const blockGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const blockMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.8 });
+    const block = new THREE.Mesh(blockGeo, blockMat);
+    block.visible = false;
+    g.add(block);
+
+    // Parry: yellow tetrahedron (cone with 4 sides)
+    const parryGeo = new THREE.ConeGeometry(0.15, 0.25, 4);
+    const parryMat = new THREE.MeshBasicMaterial({ color: 0xffdd00, transparent: true, opacity: 0.9 });
+    const parry = new THREE.Mesh(parryGeo, parryMat);
+    parry.visible = false;
+    g.add(parry);
+
+    // Parry success: green diamond (rotated cube)
+    const successGeo = new THREE.OctahedronGeometry(0.15);
+    const successMat = new THREE.MeshBasicMaterial({ color: 0x44ff44, transparent: true, opacity: 0.9 });
+    const success = new THREE.Mesh(successGeo, successMat);
+    success.visible = false;
+    g.add(success);
+
+    return { group: g, block, parry, success };
   }
 
   get state() { return this.fsm.state; }
@@ -135,6 +167,9 @@ export class Fighter {
 
     // Update trail
     this._updateTrail();
+
+    // Update state indicators
+    this._updateStateIndicators();
 
     // Walk animation phase
     if (this.state === FighterState.WALK_FORWARD || this.state === FighterState.WALK_BACK) {
@@ -467,6 +502,27 @@ export class Fighter {
       }
       this.trail.update(tip, base);
     }
+  }
+
+  _updateStateIndicators() {
+    const ind = this._stateIndicator;
+    const s = this.state;
+
+    ind.block.visible = (s === FighterState.BLOCK || s === FighterState.BLOCK_STUN);
+    ind.parry.visible = (s === FighterState.PARRY);
+    ind.success.visible = (s === FighterState.PARRY_SUCCESS);
+
+    // Spin the active indicator
+    const time = performance.now() * 0.003;
+    if (ind.parry.visible) ind.parry.rotation.y = time * 3;
+    if (ind.success.visible) {
+      ind.success.rotation.y = time * 4;
+      ind.success.position.y = Math.sin(time * 5) * 0.05;
+    }
+    if (ind.block.visible) ind.block.rotation.y = time * 2;
+
+    // Counter-rotate so indicators always face camera (cancel parent group rotation)
+    ind.group.rotation.y = -this.group.rotation.y;
   }
 
   // Movement methods — fixed world axes

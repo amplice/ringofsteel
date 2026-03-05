@@ -2,6 +2,7 @@ import { AttackType, WeaponType } from '../core/Constants.js';
 
 const BASE_DATA = {
   [AttackType.QUICK]: { startup: 6, active: 3, recovery: 10, reach: 1.5, lunge: 1.0, blockPush: 0.5, name: 'Slash' },
+  [AttackType.HEAVY]: { startup: 12, active: 6, recovery: 20, reach: 1.8, lunge: 1.5, blockPush: 1.2, name: 'Heavy Slash' },
 };
 
 // Weapon modifiers

@@ -395,9 +395,11 @@ export class Game {
       fighter.backstep();
     }
 
-    // Attack (single type for now)
+    // Attacks
     if (this.input.consumeBuffer(playerIndex, 'quick', frame)) {
       fighter.attack(AttackType.QUICK);
+    } else if (this.input.consumeBuffer(playerIndex, 'heavy', frame)) {
+      fighter.attack(AttackType.HEAVY);
     }
 
     // Block (hold) / Parry (tap)

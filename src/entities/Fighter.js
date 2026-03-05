@@ -150,17 +150,21 @@ export class Fighter {
       this.position.z += Math.cos(angle) * lungeSpeed * dt;
     }
 
-    // Sidestep movement — dash phase only
+    // Sidestep movement — perpendicular to facing direction
     if (this.state === FighterState.SIDESTEP && this.fsm.sidestepPhase === 'dash') {
       const speed = SIDESTEP_DASH_DISTANCE / SIDESTEP_DASH_FRAMES * 60;
-      this.position.z += this.fsm.sidestepDirection * speed * dt;
+      const angle = this.group.rotation.y;
+      // Perpendicular: rotate facing 90 degrees
+      this.position.x += Math.cos(angle) * this.fsm.sidestepDirection * speed * dt;
+      this.position.z -= Math.sin(angle) * this.fsm.sidestepDirection * speed * dt;
     }
 
-    // Backstep movement
+    // Backstep movement — away from opponent
     if (this.state === FighterState.DODGE) {
       const speed = BACKSTEP_DISTANCE / BACKSTEP_FRAMES * 60;
-      const dir = this.facingRight ? -1 : 1; // away from opponent
-      this.position.x += dir * speed * dt;
+      const angle = this.group.rotation.y;
+      this.position.x -= Math.sin(angle) * speed * dt;
+      this.position.z -= Math.cos(angle) * speed * dt;
     }
 
     // Update mixer for clip-based animations
@@ -537,11 +541,12 @@ export class Fighter {
     ind.group.rotation.y = -this.group.rotation.y;
   }
 
-  // Movement methods — relative to facing direction
+  // Movement methods — all relative to facing angle (toward/away from opponent)
   moveForward(dt) {
     if (!this.fsm.isActionable) return;
-    const dir = this.facingRight ? 1 : -1;
-    this.position.x += dir * WALK_SPEED * dt;
+    const angle = this.group.rotation.y;
+    this.position.x += Math.sin(angle) * WALK_SPEED * dt;
+    this.position.z += Math.cos(angle) * WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_FORWARD);
     }
@@ -549,8 +554,9 @@ export class Fighter {
 
   moveBack(dt) {
     if (!this.fsm.isActionable) return;
-    const dir = this.facingRight ? 1 : -1;
-    this.position.x -= dir * WALK_SPEED * dt;
+    const angle = this.group.rotation.y;
+    this.position.x -= Math.sin(angle) * WALK_SPEED * dt;
+    this.position.z -= Math.cos(angle) * WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_BACK);
     }

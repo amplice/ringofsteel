@@ -537,10 +537,11 @@ export class Fighter {
     ind.group.rotation.y = -this.group.rotation.y;
   }
 
-  // Movement methods — fixed world axes
+  // Movement methods — relative to facing direction
   moveForward(dt) {
     if (!this.fsm.isActionable) return;
-    this.position.x += WALK_SPEED * dt;
+    const dir = this.facingRight ? 1 : -1;
+    this.position.x += dir * WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_FORWARD);
     }
@@ -548,7 +549,8 @@ export class Fighter {
 
   moveBack(dt) {
     if (!this.fsm.isActionable) return;
-    this.position.x -= WALK_SPEED * dt;
+    const dir = this.facingRight ? 1 : -1;
+    this.position.x -= dir * WALK_SPEED * dt;
     if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
       this.fsm.transition(FighterState.WALK_BACK);
     }

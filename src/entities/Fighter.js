@@ -155,8 +155,8 @@ export class Fighter {
       const speed = SIDESTEP_DASH_DISTANCE / SIDESTEP_DASH_FRAMES * 60;
       const angle = this.group.rotation.y;
       // Perpendicular: rotate facing 90 degrees
-      this.position.x += Math.cos(angle) * this.fsm.sidestepDirection * speed * dt;
-      this.position.z -= Math.sin(angle) * this.fsm.sidestepDirection * speed * dt;
+      this.position.x -= Math.cos(angle) * this.fsm.sidestepDirection * speed * dt;
+      this.position.z += Math.sin(angle) * this.fsm.sidestepDirection * speed * dt;
     }
 
     // Backstep movement — away from opponent

@@ -466,7 +466,7 @@ export class Game {
         attacker.fsm.applyClash();
         defender.fsm.applyClash();
         this._pushApart(attacker, defender, 1.0);
-        this.particles.emitSparks(contactPoint, 15);
+        this.particles.emitClashSparks(contactPoint);
         this.cameraController.shake(0.2);
         this.screenEffects.flashWhite();
         this.screenEffects.startHitstop(5);

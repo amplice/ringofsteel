@@ -122,6 +122,25 @@ export class ParticleSystem {
     });
   }
 
+  emitClashSparks(position) {
+    this.emit(position, 20, {
+      color: new THREE.Color(1, 1, 1),
+      speed: 8,
+      spread: 4,
+      life: 0.25,
+      size: 2.0,
+      gravity: -6,
+    });
+    this.emit(position, 12, {
+      color: new THREE.Color(1, 0.95, 0.7),
+      speed: 5,
+      spread: 3,
+      life: 0.4,
+      size: 1.5,
+      gravity: -10,
+    });
+  }
+
   emitInkSplash(position, count = 30) {
     this.emit(position, count, {
       color: new THREE.Color(0x110000),

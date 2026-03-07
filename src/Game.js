@@ -200,11 +200,14 @@ export class Game {
   }
 
   _attachWeapon(fighter) {
+    // Skip spear/staff — weapon will be baked into the Blender model
+    if (fighter.weaponType === WeaponType.SPEAR || fighter.weaponType === WeaponType.STAFF) return;
+
     let handBone = null;
     fighter.root.traverse((child) => {
       if (child.isBone) {
         const n = child.name.toLowerCase();
-        if (n === 'hand.r' || n === 'handr' || n === 'mixamorig:righthand') {
+        if (n === 'hand.r' || n === 'handr') {
           handBone = child;
         }
       }
@@ -365,6 +368,8 @@ export class Game {
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
 
+    // Update two-handed weapon positions
+
     // Block pushback: push defender back while attacker is in ATTACK_ACTIVE and defender is blocking
     this._applyBlockPushback(this.fighter1, this.fighter2, dt);
     this._applyBlockPushback(this.fighter2, this.fighter1, dt);
@@ -416,20 +421,25 @@ export class Game {
     const frame = this.clock.frameCount;
     let isMoving = false;
 
-    // D = toward enemy, A = away from enemy
+    // D = toward enemy, A = away from enemy (along facing direction)
     const opponent = (fighter === this.fighter1) ? this.fighter2 : this.fighter1;
-    // D/A = continuous walk toward/away from opponent
     const speed = WALK_SPEED * fighter.walkSpeedMult;
+    const dx = opponent.position.x - fighter.position.x;
+    const dz = opponent.position.z - fighter.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz) || 0.01;
+    const nx = dx / dist;
+    const nz = dz / dist;
+
     if (this.input.isHeld(playerIndex, 'right')) {
-      const dir = opponent.position.x >= fighter.position.x ? 1 : -1;
-      fighter.position.x += dir * speed * dt;
+      fighter.position.x += nx * speed * dt;
+      fighter.position.z += nz * speed * dt;
       if (fighter.fsm.isActionable && (fighter.state === FighterState.IDLE || fighter.state === FighterState.PARRY_SUCCESS)) {
         fighter.fsm.transition(FighterState.WALK_FORWARD);
       }
       isMoving = true;
     } else if (this.input.isHeld(playerIndex, 'left')) {
-      const dir = opponent.position.x >= fighter.position.x ? -1 : 1;
-      fighter.position.x += dir * speed * dt;
+      fighter.position.x -= nx * speed * dt;
+      fighter.position.z -= nz * speed * dt;
       if (fighter.fsm.isActionable && (fighter.state === FighterState.IDLE || fighter.state === FighterState.PARRY_SUCCESS)) {
         fighter.fsm.transition(FighterState.WALK_BACK);
       }

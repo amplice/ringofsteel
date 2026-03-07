@@ -16,9 +16,8 @@ export class Weapon {
     const s = this.stats;
 
     if (this.type === WeaponType.SPEAR) {
-      // Spear - thin long cylinder
+      // Spear - thin long cylinder, centered at origin (positioned between hands at runtime)
       const geo = new THREE.CylinderGeometry(0.01, 0.01, s.length, 6);
-      geo.translate(0, s.length / 2, 0);
       const mat = new THREE.MeshStandardMaterial({
         color: s.color,
         roughness: 0.7,

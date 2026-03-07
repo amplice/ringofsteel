@@ -90,7 +90,7 @@ export class Fighter {
     this.facingRight = !this.isP2;
 
     // Walk speed multiplier (per-character)
-    this.walkSpeedMult = (weaponType === WeaponType.SPEAR) ? 0.25 : 1.0;
+    this.walkSpeedMult = (weaponType === WeaponType.SPEAR) ? 0.5 : 1.0;
 
     // Walk cycle timer
     this.walkPhase = 0;
@@ -169,10 +169,15 @@ export class Fighter {
       this.position.z += Math.cos(angle) * lungeSpeed * dt;
     }
 
-    // Sidestep movement — Z axis dash during dash phase
+    // Sidestep movement — perpendicular to facing direction
     if (this.state === FighterState.SIDESTEP && this.fsm.sidestepPhase === 'dash') {
       const speed = SIDESTEP_DASH_DISTANCE / SIDESTEP_DASH_FRAMES * 60;
-      this.position.z += this.fsm.sidestepDirection * speed * dt;
+      const angle = this.group.rotation.y;
+      // Perpendicular to facing: rotate 90 degrees
+      const perpX = -Math.cos(angle) * this.fsm.sidestepDirection;
+      const perpZ = Math.sin(angle) * this.fsm.sidestepDirection;
+      this.position.x += perpX * speed * dt;
+      this.position.z += perpZ * speed * dt;
     }
 
     // Backstep movement — away from opponent

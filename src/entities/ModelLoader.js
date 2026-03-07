@@ -464,9 +464,9 @@ export class ModelLoader {
 
     console.log('Spearman animations loaded:', Object.keys(clips).map(k => `${k} (${clips[k].duration.toFixed(2)}s)`));
 
-    // Speed up walk/strafe animations 2x (same method as dao attack speedup)
+    // Speed up walk/strafe animations (same method as dao attack speedup)
     const WALK_SPEED_UP = 2;
-    for (const name of ['walk_forward', 'walk_backward', 'strafe_left', 'strafe_right']) {
+    for (const name of ['walk_forward', 'walk_backward']) {
       const clip = clips[name];
       if (!clip) continue;
       const origDuration = clip.duration;
@@ -478,6 +478,23 @@ export class ModelLoader {
         track.times = newTimes;
       }
       clip.duration = origDuration / WALK_SPEED_UP;
+      clip.resetDuration();
+    }
+
+    // Strafe animations sped up 3x to match sidestep duration (~0.53s)
+    const STRAFE_SPEED_UP = 3;
+    for (const name of ['strafe_left', 'strafe_right']) {
+      const clip = clips[name];
+      if (!clip) continue;
+      const origDuration = clip.duration;
+      for (const track of clip.tracks) {
+        const newTimes = new Float32Array(track.times.length);
+        for (let i = 0; i < track.times.length; i++) {
+          newTimes[i] = track.times[i] / STRAFE_SPEED_UP;
+        }
+        track.times = newTimes;
+      }
+      clip.duration = origDuration / STRAFE_SPEED_UP;
       clip.resetDuration();
     }
 

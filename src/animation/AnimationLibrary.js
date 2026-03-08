@@ -1,4 +1,4 @@
-import { AttackType, FighterState } from '../core/Constants.js';
+import { AttackType } from '../core/Constants.js';
 
 const DEG = Math.PI / 180;
 

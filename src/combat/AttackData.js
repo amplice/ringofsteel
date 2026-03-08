@@ -29,7 +29,3 @@ export function getAttackData(attackType, weaponType = WeaponType.JIAN) {
     attackType,
   };
 }
-
-export function getTotalFrames(attackData) {
-  return attackData.startup + attackData.active + attackData.recovery;
-}

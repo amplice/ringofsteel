@@ -84,7 +84,6 @@ export class Game {
     // Preload fight animation GLBs
     try {
       this.fightAnimData = await ModelLoader.loadFightAnimations();
-      console.log('Fight animations loaded successfully');
     } catch (err) {
       console.warn('Failed to load fight animations, falling back:', err);
       this.fightAnimData = null;
@@ -93,7 +92,6 @@ export class Game {
     // Preload spearman animations
     try {
       this.spearmanAnimData = await ModelLoader.loadSpearmanAnimations();
-      console.log('Spearman animations loaded successfully');
     } catch (err) {
       console.warn('Failed to load spearman animations:', err);
       this.spearmanAnimData = null;
@@ -102,7 +100,6 @@ export class Game {
     if (!this.fightAnimData) {
       try {
         this.modelData = await ModelLoader.load();
-        console.log('FBX model loaded successfully');
       } catch (err) {
         console.warn('Failed to load FBX model, using procedural fighters:', err);
         this.modelData = null;
@@ -178,16 +175,6 @@ export class Game {
     this._attachWeapon(this.fighter1);
     this._attachWeapon(this.fighter2);
 
-    // Debug facing arrows
-    this._debugArrow1 = new THREE.ArrowHelper(
-      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1.5, 0x44cc44, 0.3, 0.15
-    );
-    this._debugArrow2 = new THREE.ArrowHelper(
-      new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 1.5, 0x4444cc, 0.3, 0.15
-    );
-    this.scene.add(this._debugArrow1);
-    this.scene.add(this._debugArrow2);
-
     // AI
     if (this.mode === 'ai') {
       this.aiController = new AIController(this.difficulty);
@@ -253,14 +240,6 @@ export class Game {
     if (this.fighter2) {
       this.fighter2.removeFromScene(this.scene);
       this.fighter2 = null;
-    }
-    if (this._debugArrow1) {
-      this.scene.remove(this._debugArrow1);
-      this._debugArrow1 = null;
-    }
-    if (this._debugArrow2) {
-      this.scene.remove(this._debugArrow2);
-      this._debugArrow2 = null;
     }
   }
 
@@ -369,8 +348,6 @@ export class Game {
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
 
-    // Update two-handed weapon positions
-
     // Block pushback: push defender back while attacker is in ATTACK_ACTIVE and defender is blocking
     this._applyBlockPushback(this.fighter1, this.fighter2, dt);
     this._applyBlockPushback(this.fighter2, this.fighter1, dt);
@@ -393,9 +370,6 @@ export class Game {
     if (!noClamp(this.fighter2.state)) {
       this.arena.clampToArena(this.fighter2.position);
     }
-
-    // Update debug facing arrows
-    this._updateDebugArrows();
 
     // Update HUD
     this._updateHUD();
@@ -645,26 +619,6 @@ export class Game {
 
     checkFighter(this.fighter1, this.fighter2);
     checkFighter(this.fighter2, this.fighter1);
-  }
-
-  _updateDebugArrows() {
-    if (!this._debugArrow1 || !this.fighter1 || !this.fighter2) return;
-
-    const d1 = new THREE.Vector3().subVectors(this.fighter2.position, this.fighter1.position);
-    d1.y = 0;
-    if (d1.lengthSq() > 0.001) d1.normalize();
-    else d1.set(1, 0, 0);
-    this._debugArrow1.setDirection(d1);
-    this._debugArrow1.position.copy(this.fighter1.position);
-    this._debugArrow1.position.y = 0.05;
-
-    const d2 = new THREE.Vector3().subVectors(this.fighter1.position, this.fighter2.position);
-    d2.y = 0;
-    if (d2.lengthSq() > 0.001) d2.normalize();
-    else d2.set(-1, 0, 0);
-    this._debugArrow2.setDirection(d2);
-    this._debugArrow2.position.copy(this.fighter2.position);
-    this._debugArrow2.position.y = 0.05;
   }
 
   _enforceFighterSeparation(a, b) {

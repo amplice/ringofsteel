@@ -82,9 +82,4 @@ export class HitResolver {
     return point.distanceTo(_closest);
   }
 
-  checkRange(attacker, defender) {
-    const dist = attacker.distanceTo(defender);
-    const reach = attacker.currentAttackData ? attacker.currentAttackData.reach : 0;
-    return dist <= reach;
-  }
 }

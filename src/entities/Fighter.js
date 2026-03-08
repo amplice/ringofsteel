@@ -12,7 +12,7 @@ import {
 } from '../animation/AnimationLibrary.js';
 import {
   FighterState, AttackType, WeaponType,
-  WALK_SPEED, FIGHT_START_DISTANCE,
+  FIGHT_START_DISTANCE,
   SIDESTEP_DASH_FRAMES, SIDESTEP_DASH_DISTANCE,
   BACKSTEP_FRAMES, BACKSTEP_DISTANCE,
 } from '../core/Constants.js';
@@ -89,19 +89,14 @@ export class Fighter {
     this.position = this.group.position;
     this.facingRight = !this.isP2;
 
-    // Walk speed multiplier (per-character)
-    this.walkSpeedMult = (weaponType === WeaponType.SPEAR) ? 0.5 : 1.0;
-
     // Walk cycle timer
     this.walkPhase = 0;
-    this._sidestepDir = 0;
 
     // Discrete step state
     this._stepping = false;
     this._stepFrames = 0;
     this._stepDirection = 0; // +1 = toward, -1 = away
     this._stepCooldown = 0;
-
 
     // Ragdoll state
     this._ragdoll = null;
@@ -341,7 +336,6 @@ export class Fighter {
     let tiltX = 0;
     let tiltZ = 0;
     let bobY = 0;
-    let lungeX = 0;
     let squash = 1;
 
     switch (state) {
@@ -367,18 +361,18 @@ export class Fighter {
       case FighterState.ATTACK_STARTUP:
         tiltX = -12 * DEG;
         bobY = -0.04;
-        lungeX = -0.15 * dir;
+
         break;
 
       case FighterState.ATTACK_ACTIVE:
         tiltX = 15 * DEG;
-        lungeX = 0.4 * dir;
+
         bobY = -0.03;
         break;
 
       case FighterState.ATTACK_RECOVERY:
         tiltX = 3 * DEG;
-        lungeX = 0.1 * dir;
+
         break;
 
       case FighterState.BLOCK:
@@ -398,13 +392,13 @@ export class Fighter {
         tiltX = -18 * DEG;
         tiltZ = 8 * DEG;
         bobY = -0.05;
-        lungeX = -0.2 * dir;
+
         break;
 
       case FighterState.PARRIED_STUN:
         tiltX = -15 * DEG;
         tiltZ = -10 * DEG;
-        lungeX = -0.15 * dir;
+
         break;
 
       case FighterState.DODGE:
@@ -415,7 +409,7 @@ export class Fighter {
 
       case FighterState.CLASH:
         tiltX = -10 * DEG;
-        lungeX = -0.2 * dir;
+
         bobY = -0.03;
         break;
 
@@ -587,23 +581,6 @@ export class Fighter {
     ind.group.rotation.y = -this.group.rotation.y;
   }
 
-  // Movement methods — fixed screen axes (D=right, A=left on X axis)
-  moveForward(dt) {
-    if (!this.fsm.isActionable) return;
-    this.position.x += WALK_SPEED * dt;
-    if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
-      this.fsm.transition(FighterState.WALK_FORWARD);
-    }
-  }
-
-  moveBack(dt) {
-    if (!this.fsm.isActionable) return;
-    this.position.x -= WALK_SPEED * dt;
-    if (this.fsm.state === FighterState.IDLE || this.fsm.state === FighterState.PARRY_SUCCESS) {
-      this.fsm.transition(FighterState.WALK_BACK);
-    }
-  }
-
   sidestep(direction) {
     return this.fsm.startSidestep(direction);
   }
@@ -760,7 +737,6 @@ export class Fighter {
     this.animator.reset();
     this.trail.stop();
     this.walkPhase = 0;
-    this._sidestepDir = 0;
     this._ragdoll = null;
     this.root.rotation.x = 0;
     this.root.rotation.z = 0;
@@ -781,8 +757,6 @@ export class Fighter {
     }
 
     if (this.useFBX) {
-      this.root.rotation.x = 0;
-      this.root.rotation.z = 0;
       this._fbxBobY = 0;
       this._fbxBaseY = null;
       if (this._fbxBaseScale != null) {

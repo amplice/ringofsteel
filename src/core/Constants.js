@@ -56,15 +56,14 @@ export const WeaponType = {
 };
 
 // Timing constants (in frames at 60fps)
-export const FRAME_RATE = 60;
-export const FRAME_DURATION = 1 / FRAME_RATE;
+export const FRAME_DURATION = 1 / 60;
 
 export const PARRY_WINDOW_FRAMES = 5;
 export const BLOCK_STUN_FRAMES = 12;
 export const HIT_STUN_FRAMES = 25;
 export const PARRIED_STUN_FRAMES = 20;
 export const CLASH_PUSHBACK_FRAMES = 15;
-export const KILL_DAMAGE = 1;
+
 
 // Sidestep
 export const SIDESTEP_DASH_FRAMES = 24;
@@ -85,7 +84,6 @@ export const STEP_DISTANCE = 1.0;
 export const STEP_FRAMES = 34;
 export const STEP_COOLDOWN_FRAMES = 8;
 export const ARENA_RADIUS = 8.0;
-export const RING_OUT_RADIUS = 8.5;
 export const FIGHT_START_DISTANCE = 4.0;
 
 // Kill cam

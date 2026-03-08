@@ -95,25 +95,11 @@ export class InputManager {
     return false;
   }
 
-  wasPressed(playerIndex, action, currentFrame) {
-    const buffer = this.buffers[playerIndex];
-    for (let i = buffer.length - 1; i >= 0; i--) {
-      if (buffer[i].action === action && currentFrame - buffer[i].frame <= 1) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   anyKeyPressed() {
     return this.keysDown.size > 0;
   }
 
   isKeyDown(code) {
-    return this.keysDown.has(code);
-  }
-
-  isKeyPressed(code) {
     return this.keysDown.has(code);
   }
 

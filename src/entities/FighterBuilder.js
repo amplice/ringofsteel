@@ -58,7 +58,6 @@ export class FighterBuilder {
     joints.head = head;
 
     // Arms
-    const armSide = isP2 ? -1 : 1; // Weapon hand side
     for (const side of ['L', 'R']) {
       const sign = side === 'L' ? -1 : 1;
 

@@ -326,6 +326,15 @@ export class Fighter {
       this._stepCooldown--;
     }
 
+    if (
+      !this._stepping &&
+      this._stepCooldown > 0 &&
+      this.charDef.idleDuringStepCooldown &&
+      this.fsm.isActionable
+    ) {
+      this.stopMoving();
+    }
+
     if (!this._stepping && desiredDirection !== 0 && this._stepCooldown <= 0 && this.fsm.isActionable) {
       this._stepping = true;
       this._stepFrames = 0;

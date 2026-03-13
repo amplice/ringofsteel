@@ -7,6 +7,7 @@ export const CHARACTER_DEFS = {
     weaponType: WeaponType.SPEAR,
     modelYOffset: -0.02,
     modelRotationX: -0.02,
+    idleDuringStepCooldown: true,
     walkSpeedMult: 0.5,
     clipSpeedups: {
       walk: ['walk_forward', 'walk_backward'],
@@ -15,8 +16,12 @@ export const CHARACTER_DEFS = {
       backstep: ['backstep'],
       knockback: ['clash_knockback', 'block_knockback'],
     },
-    clipSpeedFactor: { walk: 2.6, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
-    hipsLeanDeg: 4.5,
+      clipSpeedFactor: { walk: 1, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
+      clipSpeedOverrides: {
+        walk_forward: 1.9,
+        walk_backward: 2.1,
+      },
+      hipsLeanDeg: 4.5,
     swapIdle: { from: 'idle_alt', to: 'idle' },
     bakeWeapon: true,
     aiRanges: { engage: 3.5, close: 2.5 },
@@ -28,6 +33,7 @@ export const CHARACTER_DEFS = {
     weaponType: WeaponType.KATANA,
     modelYOffset: -0.15,
     modelRotationX: -0.05,
+    idleDuringStepCooldown: true,
     walkSpeedMult: 0.5,
     clipSpeedups: {
       walk: ['walk_forward', 'walk_backward'],

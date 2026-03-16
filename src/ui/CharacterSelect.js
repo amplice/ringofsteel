@@ -12,6 +12,10 @@ export class CharacterSelect {
     this.p1Container = document.getElementById('p1-char-options');
     this.p2Container = document.getElementById('p2-char-options');
     this.p2Heading = document.getElementById('p2-char-heading');
+    this.controlsBtn = document.getElementById('controls-btn');
+    this.controlsModal = document.getElementById('controls-modal');
+    this.controlsCloseBtn = document.getElementById('controls-close-btn');
+    this._keyHandler = this._onKey.bind(this);
 
     this._setupButtons();
     this._buildCharButtons();
@@ -51,6 +55,18 @@ export class CharacterSelect {
         });
       }
     });
+
+    if (this.controlsBtn) {
+      this.controlsBtn.addEventListener('click', () => this._setControlsOpen(true));
+    }
+    if (this.controlsCloseBtn) {
+      this.controlsCloseBtn.addEventListener('click', () => this._setControlsOpen(false));
+    }
+    if (this.controlsModal) {
+      this.controlsModal.addEventListener('click', (e) => {
+        if (e.target === this.controlsModal) this._setControlsOpen(false);
+      });
+    }
   }
 
   _buildCharButtons() {
@@ -104,9 +120,24 @@ export class CharacterSelect {
 
   show() {
     this.el.style.display = 'flex';
+    this._setControlsOpen(false);
+    window.addEventListener('keydown', this._keyHandler);
   }
 
   hide() {
     this.el.style.display = 'none';
+    this._setControlsOpen(false);
+    window.removeEventListener('keydown', this._keyHandler);
+  }
+
+  _setControlsOpen(open) {
+    if (!this.controlsModal) return;
+    this.controlsModal.classList.toggle('open', open);
+  }
+
+  _onKey(e) {
+    if (e.code === 'Escape' && this.controlsModal?.classList.contains('open')) {
+      this._setControlsOpen(false);
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { Game } from './Game.js';
 
 const game = new Game();
-window.__wuxiaGame = game;
+window.__ringOfSteelGame = game;
 window.runSelfPlayTournament = async (options = {}) => {
   console.log('[selfplay] tournament requested', options);
   const { SelfPlayRunner } = await import('./sim/SelfPlayRunner.js');

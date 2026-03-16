@@ -9,7 +9,7 @@ const P1_KEYS = {
   quick: 'KeyJ',
   heavy: 'KeyK',
   thrust: 'KeyL',
-  block: 'KeyU',
+  block: 'KeyI',
   backstep: 'Space',
 };
 

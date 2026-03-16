@@ -107,5 +107,5 @@ export const DEBUG_OPTIONS = {
   overlayEnabled: false,
   persistToggle: true,
   toggleKey: 'F3',
-  storageKey: 'wuxia-warrior-debug-overlay',
+  storageKey: 'ring-of-steel-debug-overlay',
 };

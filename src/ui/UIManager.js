@@ -1,3 +1,4 @@
+import { LoadingScreen } from './LoadingScreen.js';
 import { TitleScreen } from './TitleScreen.js';
 import { CharacterSelect } from './CharacterSelect.js';
 import { HUD } from './HUD.js';
@@ -5,6 +6,7 @@ import { VictoryScreen } from './VictoryScreen.js';
 
 export class UIManager {
   constructor() {
+    this.loading = new LoadingScreen();
     this.title = new TitleScreen();
     this.select = new CharacterSelect();
     this.hud = new HUD();
@@ -27,6 +29,7 @@ export class UIManager {
   }
 
   hideAll() {
+    this.loading.hide();
     this.title.hide();
     this.select.hide();
     this.hud.hide();
@@ -34,6 +37,12 @@ export class UIManager {
     if (this.animPlayer) {
       this.animPlayer.hide();
     }
+  }
+
+  showLoading(progress = 0, label = 'Loading...') {
+    this.hideAll();
+    this.loading.show();
+    this.loading.setProgress(progress, label);
   }
 
   showTitle() {

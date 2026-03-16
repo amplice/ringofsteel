@@ -43,12 +43,83 @@
     }
     #ui-overlay > * { pointer-events: auto; }
 
+    /* Boot Loading */
+    #loading-screen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background:
+        linear-gradient(180deg, rgba(6, 8, 12, 0.96) 0%, rgba(24, 8, 14, 0.94) 52%, rgba(5, 7, 10, 0.98) 100%),
+        var(--ui-scanlines);
+    }
+    #loading-screen::before {
+      content: '';
+      position: absolute;
+      inset: 22px;
+      border: 1px solid rgba(255, 214, 166, 0.16);
+      box-shadow:
+        inset 0 0 0 1px rgba(95, 156, 255, 0.08),
+        0 0 0 1px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+    }
+    #loading-screen h1 {
+      position: relative;
+      z-index: 1;
+      font-size: clamp(40px, 7vw, 64px);
+      color: #f7dfb1;
+      font-family: 'Yu Mincho', 'MS PMincho', 'Times New Roman', serif;
+      letter-spacing: 8px;
+      text-shadow:
+        0 0 28px rgba(255, 206, 116, 0.18),
+        3px 3px 0 rgba(25, 6, 10, 0.85);
+      transform: skewX(-8deg);
+    }
+    .loading-status {
+      position: relative;
+      z-index: 1;
+      color: #bca07d;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .loading-bar {
+      position: relative;
+      z-index: 1;
+      width: min(420px, 76vw);
+      height: 14px;
+      background: linear-gradient(180deg, rgba(20, 24, 34, 0.94), rgba(8, 9, 14, 0.98));
+      border: 1px solid rgba(255, 225, 171, 0.2);
+      box-shadow: var(--ui-shadow);
+      overflow: hidden;
+    }
+    .loading-bar-fill {
+      width: 0%;
+      height: 100%;
+      background:
+        linear-gradient(90deg, rgba(108, 160, 255, 0.72), rgba(241, 212, 160, 0.88) 55%, rgba(180, 92, 73, 0.7));
+      box-shadow: 0 0 18px rgba(109, 165, 255, 0.22);
+      transition: width 0.2s ease-out;
+    }
+    .loading-percent {
+      position: relative;
+      z-index: 1;
+      color: #8ea1c9;
+      font-size: 12px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
     /* Title Screen */
     #title-screen {
       position: absolute;
       top: 0; left: 0;
       width: 100%; height: 100%;
-      display: flex;
+      display: none;
       flex-direction: column;
       align-items: center;
       justify-content: center;
@@ -736,6 +807,14 @@
 </head>
 <body>
   <div id="ui-overlay">
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+      <h1>RING OF STEEL</h1>
+      <div class="loading-status" id="loading-status">Loading...</div>
+      <div class="loading-bar"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
+      <div class="loading-percent" id="loading-percent">0%</div>
+    </div>
+
     <!-- Title Screen -->
     <div id="title-screen">
       <h1>RING OF STEEL</h1>

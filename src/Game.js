@@ -62,7 +62,9 @@ export class Game {
   }
 
   async init() {
+    this.ui.showLoading(0.05, 'Booting renderer...');
     await this.renderer.init();
+    this.ui.showLoading(0.15, 'Preparing arena...');
 
     this.scene = new THREE.Scene();
     this.cameraController = new CameraController();
@@ -73,15 +75,21 @@ export class Game {
     this.particles = new ParticleSystem(this.scene);
     this.debugOverlay = new DebugOverlay(this.scene);
 
-    // Preload all characters
-    for (const [id, def] of Object.entries(CHARACTER_DEFS)) {
+    // Preload all characters with explicit progress so startup doesn't look dead.
+    const charEntries = Object.entries(CHARACTER_DEFS);
+    for (let i = 0; i < charEntries.length; i++) {
+      const [id, def] = charEntries[i];
+      const progressBase = 0.2 + (i / Math.max(charEntries.length, 1)) * 0.7;
+      this.ui.showLoading(progressBase, `Loading ${def.displayName}...`);
       try {
         this._charCache[id] = await ModelLoader.loadCharacter(def);
       } catch (err) {
         console.warn(`Failed to load character '${id}':`, err);
       }
+      const progressDone = 0.2 + ((i + 1) / Math.max(charEntries.length, 1)) * 0.7;
+      this.ui.showLoading(progressDone, `Loaded ${def.displayName}`);
     }
-
+    this.ui.showLoading(0.95, 'Finalizing interface...');
 
     // UI
     this.ui.showTitle();

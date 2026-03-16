@@ -6,3 +6,6 @@ screenshots/
 *.blend
 *.blend1
 selfplay-debug.log
+
+.vercel
+.local/

@@ -3,6 +3,7 @@ import { ModelLoader } from './ModelLoader.js';
 import { Weapon } from './Weapon.js';
 import { FighterStateMachine } from '../combat/FighterStateMachine.js';
 import { DamageSystem } from '../combat/DamageSystem.js';
+import { getAttackData } from '../combat/AttackData.js';
 import {
   BODY_COLLISION,
   FACING_TUNING,
@@ -900,6 +901,62 @@ export class Fighter {
     this._wasAttacking = false;
     this._postAttackTurnTime = 0;
     this._updatePlayerMarker();
+    this._updateTipMotion();
+  }
+
+  applyAuthoritativeSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    this.position.set(
+      snapshot.position?.x ?? this.position.x,
+      snapshot.position?.y ?? this.position.y,
+      snapshot.position?.z ?? this.position.z,
+    );
+    this.group.rotation.y = snapshot.rotationY ?? this.group.rotation.y;
+    this.facingRight = snapshot.facingRight ?? this.facingRight;
+
+    this.fsm.state = snapshot.state ?? this.fsm.state;
+    this.fsm.stateFrames = snapshot.stateFrames ?? this.fsm.stateFrames;
+    this.fsm.stateDuration = snapshot.stateDuration ?? this.fsm.stateDuration;
+    this.fsm.currentAttackType = snapshot.currentAttackType ?? null;
+    this.fsm.currentAttackData = this.fsm.currentAttackType
+      ? getAttackData(this.fsm.currentAttackType, this.weaponType)
+      : null;
+    this.fsm.hitApplied = Boolean(snapshot.hitApplied);
+
+    if (snapshot.dead) {
+      this.damageSystem.alive = false;
+    } else {
+      this.damageSystem.alive = true;
+    }
+
+    this._updatePlayerMarker();
+    this.syncStatePresentation();
+    const action = this.activeClipName ? this.clipActions[this.activeClipName] : null;
+    if (action) {
+      const clipDuration = action.getClip().duration / Math.max(action.timeScale || 1, 1e-6);
+      const progress = Math.max(0, Math.min(1, (snapshot.stateDuration ?? 0) > 0
+        ? (snapshot.stateFrames ?? 0) / snapshot.stateDuration
+        : 0));
+      action.time = clipDuration * progress;
+      this.mixer?.update(0);
+    }
+    this._updateTipMotion();
+  }
+
+  updateRemoteView(dt) {
+    if (this._ragdoll) {
+      this._updateRagdoll(dt);
+      return;
+    }
+
+    if (this.mixer) {
+      this.mixer.update(dt);
+    }
+
+    this._updatePlayerMarker();
+    this._updateTrail();
+    this._updateStateIndicators();
     this._updateTipMotion();
   }
 

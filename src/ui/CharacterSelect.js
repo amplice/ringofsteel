@@ -9,9 +9,16 @@ export class CharacterSelect {
     this.difficulty = 'medium';
     this.p1Char = DEFAULT_CHAR;
     this.p2Char = DEFAULT_CHAR;
+    this.difficultySection = document.getElementById('difficulty-section');
+    this.onlineSection = document.getElementById('online-section');
+    this.onlineServerUrl = document.getElementById('online-server-url');
+    this.onlineLobbyCode = document.getElementById('online-lobby-code');
+    this.onlineStatusNote = this.onlineSection?.querySelector('.status-note') ?? null;
     this.p1Container = document.getElementById('p1-char-options');
     this.p2Container = document.getElementById('p2-char-options');
     this.p2Heading = document.getElementById('p2-char-heading');
+    this.p2Column = this.p2Heading?.closest('.char-select-column') ?? null;
+    this.startBtn = document.getElementById('start-fight-btn');
     this.controlsBtn = document.getElementById('controls-btn');
     this.controlsModal = document.getElementById('controls-modal');
     this.controlsCloseBtn = document.getElementById('controls-close-btn');
@@ -19,7 +26,7 @@ export class CharacterSelect {
 
     this._setupButtons();
     this._buildCharButtons();
-    this._updateOpponentLabel();
+    this._updateModeUI();
   }
 
   _setupButtons() {
@@ -29,9 +36,7 @@ export class CharacterSelect {
         document.querySelectorAll('#mode-options .select-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.mode = btn.dataset.mode;
-        document.getElementById('difficulty-section').style.display =
-          this.mode === 'ai' ? 'block' : 'none';
-        this._updateOpponentLabel();
+        this._updateModeUI();
       });
     });
 
@@ -52,6 +57,8 @@ export class CharacterSelect {
           difficulty: this.difficulty,
           p1Char: this.p1Char,
           p2Char: this.p2Char,
+          serverUrl: this.onlineServerUrl?.value?.trim() || '',
+          lobbyCode: this.onlineLobbyCode?.value?.trim().toUpperCase() || '',
         });
       }
     });
@@ -115,11 +122,44 @@ export class CharacterSelect {
 
   _updateOpponentLabel() {
     if (!this.p2Heading) return;
-    this.p2Heading.textContent = this.mode === 'ai' ? 'Computer Character' : 'Player 2 Character';
+    this.p2Heading.textContent = this.mode === 'ai'
+      ? 'Computer Character'
+      : this.mode === 'online'
+        ? 'Opponent Character'
+        : 'Player 2 Character';
+  }
+
+  _updateModeUI() {
+    if (this.difficultySection) {
+      this.difficultySection.style.display = this.mode === 'ai' ? 'block' : 'none';
+    }
+    if (this.onlineSection) {
+      this.onlineSection.style.display = this.mode === 'online' ? 'block' : 'none';
+    }
+    if (this.p2Column) {
+      this.p2Column.style.display = this.mode === 'online' ? 'none' : '';
+    }
+    if (this.startBtn) {
+      this.startBtn.textContent = this.mode === 'online' ? 'READY' : 'FIGHT';
+    }
+    this._updateOpponentLabel();
+  }
+
+  setOnlineLobbyCode(code = '') {
+    if (this.onlineLobbyCode) {
+      this.onlineLobbyCode.value = code;
+    }
+  }
+
+  setOnlineStatus(message) {
+    if (this.onlineStatusNote) {
+      this.onlineStatusNote.textContent = message;
+    }
   }
 
   show() {
     this.el.style.display = 'flex';
+    this._updateModeUI();
     this._setControlsOpen(false);
     window.addEventListener('keydown', this._keyHandler);
   }

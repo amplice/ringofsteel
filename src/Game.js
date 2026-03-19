@@ -8,23 +8,20 @@ import { CameraController } from './camera/CameraController.js';
 import { Fighter } from './entities/Fighter.js';
 import { ModelLoader } from './entities/ModelLoader.js';
 import { CHARACTER_DEFS, DEFAULT_CHAR } from './entities/CharacterDefs.js';
-import { HitResolver } from './combat/HitResolver.js';
-import { getBodyRadius, getImpactScale } from './combat/CombatTuning.js';
 import { ParticleSystem } from './vfx/ParticleSystem.js';
 import { ScreenEffects } from './vfx/ScreenEffects.js';
 import { AIController } from './ai/AIController.js';
 import { DebugOverlay } from './debug/DebugOverlay.js';
 import { UIManager } from './ui/UIManager.js';
+import { MatchSim } from './sim/MatchSim.js';
+import { captureInputFrame } from './sim/InputFrame.js';
+import { OnlineSession } from './net/OnlineSession.js';
 import {
-  GameState, FighterState, AttackType, HitResult,
+  GameState, HitResult,
   FIGHT_START_DISTANCE, ROUNDS_TO_WIN, ROUND_INTRO_DURATION,
-  ROUND_END_DELAY, ARENA_RADIUS, BLOCK_PUSHBACK_SPEED,
-  KNOCKBACK_SLIDE_SPEED, HEAVY_ADVANTAGE_MULT,
-  CLASH_PUSHBACK_FRAMES, BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES,
+  ROUND_END_DELAY,
 } from './core/Constants.js';
 
-const _pairBodyA = new THREE.Vector3();
-const _pairBodyB = new THREE.Vector3();
 
 export class Game {
   constructor() {
@@ -32,7 +29,6 @@ export class Game {
     this.clock = new Clock();
     this.input = new InputManager();
     this.ui = new UIManager();
-    this.hitResolver = new HitResolver();
     this.screenEffects = new ScreenEffects();
 
     this.scene = null;
@@ -44,6 +40,12 @@ export class Game {
     this.fighter1 = null;
     this.fighter2 = null;
     this.aiController = null;
+    this.matchSim = null;
+    this.onlineSession = null;
+    this.onlineLocalSlot = null;
+    this.onlineMatchPlayers = null;
+    this._suppressOnlineClose = false;
+    this.onlinePendingMatchResult = null;
     this._charCache = {};
 
     this.gameState = GameState.TITLE;
@@ -95,6 +97,7 @@ export class Game {
     this.ui.showTitle();
 
     this.ui.title.onStart = () => {
+      this._disconnectOnlineSession();
       this.gameState = GameState.SELECT;
       this.ui.showSelect();
     };
@@ -103,13 +106,18 @@ export class Game {
       await this._startAnimationSandbox();
     };
 
-    this.ui.select.onConfirm = (config) => {
+    this.ui.select.onConfirm = async (config) => {
       this.mode = config.mode;
       this.difficulty = config.difficulty;
+      if (config.mode === 'online') {
+        await this._startOnlineSession(config);
+        return;
+      }
       this._startMatch(config.p1Char, config.p2Char);
     };
 
     this.ui.victory.onContinue = () => {
+      this._disconnectOnlineSession();
       this.gameState = GameState.TITLE;
       this._cleanupFighters();
       this.ui.showTitle();
@@ -130,6 +138,7 @@ export class Game {
   }
 
   _startMatch(p1Char, p2Char) {
+    this._disconnectOnlineSession();
     this.p1Score = 0;
     this.p2Score = 0;
     this.currentRound = 1;
@@ -152,6 +161,10 @@ export class Game {
     } else {
       this.aiController = null;
     }
+    this.matchSim = new MatchSim({
+      fighter1: this.fighter1,
+      fighter2: this.fighter2,
+    });
 
     this.ui.showHUD();
     this.ui.hud.updateRoundPips(0, 0);
@@ -188,8 +201,7 @@ export class Game {
     this.killSlowMoTimer = 0;
     this._killRealStart = null;
 
-    this.fighter1.resetForRound(-FIGHT_START_DISTANCE / 2);
-    this.fighter2.resetForRound(FIGHT_START_DISTANCE / 2);
+    this.matchSim?.startRound(FIGHT_START_DISTANCE);
 
     this.cameraController.stopKillCam();
     this.cameraController.reset();
@@ -213,6 +225,223 @@ export class Game {
       this.fighter2.removeFromScene(this.scene);
       this.fighter2 = null;
     }
+    this.matchSim = null;
+  }
+
+  async _startOnlineSession(config) {
+    const requestedUrl = config.serverUrl || undefined;
+    const requestedCode = config.lobbyCode || '';
+
+    if (
+      this.onlineSession?.connected &&
+      this.onlineSession.url === requestedUrl &&
+      (!requestedCode || requestedCode === this.onlineSession.lobbyCode)
+    ) {
+      this.onlineSession.setCharacter(config.p1Char);
+      this.onlineSession.setReady(true);
+      this.ui.select.setOnlineStatus(
+        this.onlineSession.lobbyCode
+          ? `LOBBY ${this.onlineSession.lobbyCode}. READY SENT.`
+          : 'READY SENT.'
+      );
+      return;
+    }
+
+    this._disconnectOnlineSession();
+      this._cleanupFighters();
+      this.aiController = null;
+      this.matchSim = null;
+      this.p1Score = 0;
+      this.p2Score = 0;
+      this.currentRound = 1;
+      this.onlinePendingMatchResult = null;
+      this.clock.setTimeScale(1.0);
+      this.killSlowMoTimer = 0;
+      this._killRealStart = null;
+
+    const session = new OnlineSession({ url: requestedUrl });
+    this.onlineSession = session;
+    this.onlineLocalSlot = null;
+    this.onlineMatchPlayers = null;
+    this._bindOnlineSession(session);
+    this.ui.select.setOnlineStatus('CONNECTING TO SERVER...');
+
+    try {
+      await session.connect();
+      if (requestedCode) {
+        await session.joinLobby(requestedCode, config.p1Char);
+      } else {
+        await session.createLobby(config.p1Char);
+      }
+      session.setReady(true);
+      this.ui.select.setOnlineStatus(
+        requestedCode ? 'JOINED LOBBY. WAITING FOR HOST...' : 'LOBBY CREATED. WAITING FOR OPPONENT...'
+      );
+    } catch (err) {
+      console.error('Online session failed to start:', err);
+      this.ui.select.setOnlineStatus(`CONNECTION FAILED: ${err?.message || 'UNKNOWN ERROR'}`);
+      this._disconnectOnlineSession();
+    }
+  }
+
+  _bindOnlineSession(session) {
+    session.addEventListener('error', (event) => {
+      const detail = event.detail;
+      const message = detail?.message || detail?.error?.message || 'NETWORK ERROR';
+      console.error('Online session error:', detail);
+      this.ui.select.setOnlineStatus(`ERROR: ${String(message).toUpperCase()}`);
+    });
+
+    session.addEventListener('close', () => {
+      if (this._suppressOnlineClose) return;
+      this._handleOnlineDisconnect('DISCONNECTED FROM SERVER.');
+    });
+
+    session.addEventListener('lobby_state', (event) => {
+      this._handleOnlineLobbyState(event.detail);
+    });
+    session.addEventListener('match_start', (event) => {
+      this._handleOnlineMatchStart(event.detail);
+    });
+    session.addEventListener('state_snapshot', (event) => {
+      this._handleOnlineStateSnapshot(event.detail?.snapshot);
+    });
+    session.addEventListener('combat_event', (event) => {
+      const combatEvent = event.detail?.event;
+      if (combatEvent) {
+        this._handleSimEvent(combatEvent);
+      }
+    });
+    session.addEventListener('match_state', (event) => {
+      this._handleOnlineMatchState(event.detail);
+    });
+  }
+
+  _handleOnlineLobbyState(detail) {
+    if (!detail) return;
+    this.onlineMatchPlayers = detail.players ?? null;
+    const self = detail.players?.find((player) => player.self);
+    if (self) {
+      this.onlineLocalSlot = self.slot;
+    }
+
+    this.ui.select.setOnlineLobbyCode(detail.code || '');
+
+    const connectedPlayers = detail.players?.filter((player) => player.connected).length ?? 0;
+    const readyPlayers = detail.players?.filter((player) => player.connected && player.ready).length ?? 0;
+    if (detail.phase === 'match_running') {
+      this.ui.select.setOnlineStatus('MATCH STARTING...');
+    } else if (connectedPlayers < 2) {
+      this.ui.select.setOnlineStatus(`LOBBY ${detail.code}. WAITING FOR OPPONENT...`);
+    } else if (readyPlayers < 2) {
+      this.ui.select.setOnlineStatus(`LOBBY ${detail.code}. ${readyPlayers}/2 READY.`);
+    } else {
+      this.ui.select.setOnlineStatus(`LOBBY ${detail.code}. SYNCING MATCH...`);
+    }
+  }
+
+  _handleOnlineMatchStart(detail) {
+    if (!detail?.players) return;
+    this.onlineMatchPlayers = detail.players;
+    this.currentRound = detail.roundNumber ?? this.currentRound;
+    if (Array.isArray(detail.scores)) {
+      this.p1Score = detail.scores[0] ?? this.p1Score;
+      this.p2Score = detail.scores[1] ?? this.p2Score;
+    }
+    this.onlinePendingMatchResult = null;
+    const self = detail.players.find((player) => player.id === this.onlineSession?.clientId);
+    if (self) {
+      this.onlineLocalSlot = self.slot;
+    }
+    this._startOnlineMatch(detail.players, detail.snapshot);
+  }
+
+  _startOnlineMatch(players, snapshot = null) {
+    this._cleanupFighters();
+
+    const sortedPlayers = [...players].sort((a, b) => a.slot - b.slot);
+    const p1 = sortedPlayers[0];
+    const p2 = sortedPlayers[1];
+    if (!p1 || !p2) return;
+
+    const p1Char = this._getCharData(p1.characterId);
+    const p2Char = this._getCharData(p2.characterId);
+    this.fighter1 = new Fighter(0, 0x991111, p1Char.charDef, p1Char.animData);
+    this.fighter2 = new Fighter(1, 0x112266, p2Char.charDef, p2Char.animData);
+    this.fighter1.addToScene(this.scene);
+    this.fighter2.addToScene(this.scene);
+    this._attachWeapon(this.fighter1);
+    this._attachWeapon(this.fighter2);
+
+    this.gameState = GameState.FIGHTING;
+    this.stateTimer = 0;
+    this.ui.showHUD();
+    this.ui.hud.reset();
+    this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
+    this.input.clearBuffers();
+
+    if (snapshot) {
+      this._handleOnlineStateSnapshot(snapshot);
+    }
+  }
+
+  _handleOnlineStateSnapshot(snapshot) {
+    if (!snapshot || !this.fighter1 || !this.fighter2) return;
+    const [fighter1Snapshot, fighter2Snapshot] = snapshot.fighters ?? [];
+    if (fighter1Snapshot) this.fighter1.applyAuthoritativeSnapshot(fighter1Snapshot);
+    if (fighter2Snapshot) this.fighter2.applyAuthoritativeSnapshot(fighter2Snapshot);
+  }
+
+  _handleOnlineMatchState(detail) {
+    if (!detail) return;
+
+    if (Array.isArray(detail.scores)) {
+      this.p1Score = detail.scores[0] ?? this.p1Score;
+      this.p2Score = detail.scores[1] ?? this.p2Score;
+    }
+    this.currentRound = detail.roundNumber ?? this.currentRound;
+
+    if (detail.snapshot) {
+      this._handleOnlineStateSnapshot(detail.snapshot);
+    }
+
+    if (
+      (detail.phase === 'round_complete' || detail.phase === 'match_complete') &&
+      detail.winner &&
+      this.gameState === GameState.FIGHTING
+    ) {
+      this.onlinePendingMatchResult = detail;
+      const killer = detail.winner === 1 ? this.fighter1 : this.fighter2;
+      const victim = detail.winner === 1 ? this.fighter2 : this.fighter1;
+      this._startKillPresentation(killer, victim, detail.killReason);
+    }
+  }
+
+  _disconnectOnlineSession() {
+    if (!this.onlineSession) return;
+    this._suppressOnlineClose = true;
+    this.onlineSession.disconnect();
+    queueMicrotask(() => {
+      this._suppressOnlineClose = false;
+    });
+    this.onlineSession = null;
+    this.onlineLocalSlot = null;
+    this.onlineMatchPlayers = null;
+    this.onlinePendingMatchResult = null;
+  }
+
+  _handleOnlineDisconnect(message) {
+    if (this.mode !== 'online') return;
+    this._cleanupFighters();
+    this.matchSim = null;
+    this.aiController = null;
+    this.gameState = GameState.SELECT;
+    this.ui.showSelect();
+    this.ui.select.setOnlineStatus(message);
+    this.onlineSession = null;
+    this.onlineLocalSlot = null;
+    this.onlineMatchPlayers = null;
+    this.onlinePendingMatchResult = null;
   }
 
   async _startAnimationSandbox() {
@@ -290,6 +519,16 @@ export class Game {
       return;
     }
 
+    if (
+      this.mode === 'online' &&
+      !this.matchSim &&
+      this.fighter1 &&
+      this.fighter2 &&
+      this.gameState !== GameState.KILL_CAM
+    ) {
+      this.fighter1.updateRemoteView(dt);
+      this.fighter2.updateRemoteView(dt);
+    }
 
     if (this.fighter1 && this.fighter2) {
       this.cameraController.update(dt, this.fighter1, this.fighter2);
@@ -353,286 +592,120 @@ export class Game {
   }
 
   _updateFighting(dt) {
-    // Process P1 input
-    this._processPlayerInput(this.fighter1, 0, dt);
-
-    // Process P2 input (human or AI)
-    if (this.aiController) {
-      this.aiController.update(this.fighter2, this.fighter1, this.clock.frameCount, dt);
-    } else {
-      this._processPlayerInput(this.fighter2, 1, dt);
+    if (this.mode === 'online' && !this.matchSim) {
+      this._updateOnlineFighting(dt);
+      return;
     }
 
-    // Update fighters
-    this.fighter1.update(dt, this.fighter2);
-    this.fighter2.update(dt, this.fighter1);
-
-    // Block pushback: push defender back while attacker is performing an attack and defender is blocking
-    this._applyBlockPushback(this.fighter1, this.fighter2, dt);
-    this._applyBlockPushback(this.fighter2, this.fighter1, dt);
-
-    // Knockback slide: fighters slide apart during stun states
-    this._applyKnockbackSlide(this.fighter1, this.fighter2, dt);
-
-    // Fighter collision — push apart if too close
-    this._enforceFighterSeparation(this.fighter1, this.fighter2);
-
-    // Check combat hits
-    this._checkHits();
-
-    // State changes from pushback/hit resolution happen after Fighter.update(),
-    // so refresh state-driven visuals before render.
-    this.fighter1.syncStatePresentation();
-    this.fighter2.syncStatePresentation();
-
-    // Ring-out check
-    this._checkRingOut();
-
-    // Arena bounds — don't clamp fighters being pushed back (block/block stun)
-    // so block pushback can cause ring out
-    const noClamp = (s) => s === FighterState.BLOCK || s === FighterState.BLOCK_STUN || s === FighterState.CLASH || s === FighterState.HIT_STUN || s === FighterState.PARRIED_STUN;
-    if (!noClamp(this.fighter1.state)) {
-      this.arena.clampToArena(this.fighter1.position);
-    }
-    if (!noClamp(this.fighter2.state)) {
-      this.arena.clampToArena(this.fighter2.position);
-    }
+    const frame = this.clock.frameCount;
+    const input1 = captureInputFrame(this.input, 0, frame);
+    const input2 = this.aiController ? null : captureInputFrame(this.input, 1, frame);
+    const controller2 = this.aiController
+      ? ((fighter, opponent, sim, simDt) => {
+          this.aiController.update(fighter, opponent, sim.frameCount, simDt);
+        })
+      : null;
+    const step = this.matchSim.step(dt, {
+      input1,
+      input2,
+      controller2,
+    });
+    this._handleSimStep(step);
 
     // Update HUD
     this._updateHUD();
   }
 
-  _applyBlockPushback(attacker, defender, dt) {
-    if (!attacker.fsm.isAttacking) return;
-    if (defender.state !== FighterState.BLOCK && defender.state !== FighterState.BLOCK_STUN) return;
-
-    // Block pushback should use the actual weapon-vs-hurt-cylinder contact,
-    // not a coarse body-center range check.
-    if (!this.hitResolver.checkWeaponOverlap(attacker, defender)) return;
-
-    const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
-
-    // Transition blocker to BLOCK_STUN so block_knockback animation plays during pushback
-    if (defender.state === FighterState.BLOCK) {
-      const isHeavy = attacker.fsm.currentAttackType === AttackType.HEAVY;
-      const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-      const mult = this._getImpactScale(attacker, defender, heavyBonus);
-      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * mult));
-      defender.knockbackMult = mult;
+  _updateOnlineFighting(_dt) {
+    if (!this.onlineSession?.connected) return;
+    const baseFrame = this.onlineSession.lastSnapshot?.frameCount ?? 0;
+    const input = captureInputFrame(this.input, 0, baseFrame + 1);
+    try {
+      this.onlineSession.sendInputFrame(input.frame, input);
+    } catch (err) {
+      console.error('Failed to send online input frame:', err);
     }
-
-    // Push defender away from attacker
-    const nx = dx / (dist || 0.01);
-    const nz = dz / (dist || 0.01);
-
-    const pushbackScale = defender.knockbackMult || this._getImpactScale(attacker, defender);
-    defender.position.x += nx * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
-    defender.position.z += nz * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
+    this._updateHUD();
   }
 
-  _applyKnockbackSlide(a, b, dt) {
-    const stunStates = [FighterState.CLASH, FighterState.HIT_STUN, FighterState.PARRIED_STUN, FighterState.BLOCK_STUN];
-    const aStun = stunStates.includes(a.state);
-    const bStun = stunStates.includes(b.state);
-    if (!aStun && !bStun) return;
-
-    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
-    const nx = dx / dist;
-    const nz = dz / dist;
-
-    if (aStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (a.knockbackMult || 1) * dt;
-      a.position.x -= nx * slide;
-      a.position.z -= nz * slide;
+  _handleSimStep(step) {
+    for (const event of step.events) {
+      this._handleSimEvent(event);
     }
-    if (bStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (b.knockbackMult || 1) * dt;
-      b.position.x += nx * slide;
-      b.position.z += nz * slide;
+
+    if (step.roundOver && this.gameState === GameState.FIGHTING) {
+      const killer = step.winner === 1 ? this.fighter1 : this.fighter2;
+      const victim = step.winner === 1 ? this.fighter2 : this.fighter1;
+      this._startKillPresentation(killer, victim, step.killReason);
     }
   }
 
-  _processPlayerInput(fighter, playerIndex, dt) {
-    if (fighter.state === FighterState.DEAD || fighter.state === FighterState.DYING) return;
+  _handleSimEvent(event) {
+    if (event.type === 'ring_out') return;
+    if (event.type !== 'combat_result') return;
 
-    const frame = this.clock.frameCount;
-    const opponent = (fighter === this.fighter1) ? this.fighter2 : this.fighter1;
-    const moveDirection = this.input.isHeld(playerIndex, 'right')
-      ? 1
-      : (this.input.isHeld(playerIndex, 'left') ? -1 : 0);
-    fighter.applyMovementInput(moveDirection, opponent, dt);
-
-    // W/S = committed sidestep (tap to dash on Z axis)
-    if (this.input.consumeBuffer(playerIndex, 'sidestepUp', frame)) {
-      fighter.sidestep(-1);
-    } else if (this.input.consumeBuffer(playerIndex, 'sidestepDown', frame)) {
-      fighter.sidestep(1);
-    }
-
-    // Space = backstep (committed, consumed from buffer)
-    if (this.input.consumeBuffer(playerIndex, 'backstep', frame)) {
-      fighter.backstep();
-    }
-
-    // Attacks
-    if (this.input.consumeBuffer(playerIndex, 'quick', frame)) {
-      fighter.attack(AttackType.QUICK);
-    } else if (this.input.consumeBuffer(playerIndex, 'heavy', frame)) {
-      fighter.attack(AttackType.HEAVY);
-    } else if (this.input.consumeBuffer(playerIndex, 'thrust', frame)) {
-      fighter.attack(AttackType.THRUST);
-    }
-
-    // Block (hold) / Parry (tap)
-    if (this.input.consumeBuffer(playerIndex, 'block', frame)) {
-      fighter.parry();
-    } else if (this.input.isHeld(playerIndex, 'block')) {
-      if (fighter.fsm.isActionable) {
-        fighter.block();
-      }
-    } else if (fighter.state === FighterState.BLOCK) {
-      fighter.fsm.transition(FighterState.IDLE);
-    }
-  }
-
-  _checkHits() {
-    if (
-      this.fighter1.fsm.isAttacking &&
-      this.fighter2.fsm.isAttacking &&
-      !this.fighter1.hitApplied &&
-      !this.fighter2.hitApplied &&
-      this.hitResolver.checkWeaponClash(this.fighter1, this.fighter2)
-    ) {
-      this._applyResolvedHit(this.fighter1, this.fighter2, {
-        result: HitResult.CLASH,
-        attackerType: this.fighter1.fsm.currentAttackType,
-        defenderType: this.fighter2.fsm.currentAttackType,
-      });
-      this.fighter1.hitApplied = true;
-      this.fighter2.hitApplied = true;
-      return;
-    }
-
-    if (this.fighter1.fsm.isAttacking && !this.fighter1.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)) {
-        this._resolveHit(this.fighter1, this.fighter2);
-        this.fighter1.hitApplied = true;
-      }
-    }
-
-    if (this.fighter2.fsm.isAttacking && !this.fighter2.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)) {
-        this._resolveHit(this.fighter2, this.fighter1);
-        this.fighter2.hitApplied = true;
-      }
-    }
-  }
-
-  _resolveHit(attacker, defender) {
-    const result = this.hitResolver.resolve(attacker, defender);
-    this._applyResolvedHit(attacker, defender, result);
-  }
-
-  _applyResolvedHit(attacker, defender, result) {
-    const contactPoint = new THREE.Vector3().lerpVectors(
-      attacker.position, defender.position, 0.6
+    const contactPoint = new THREE.Vector3(
+      event.contactPoint.x,
+      event.contactPoint.y,
+      event.contactPoint.z,
     );
-    contactPoint.y += 1.2;
 
-    switch (result.result) {
-      case HitResult.CLASH: {
-        // Heavy beats light/thrust — loser gets 1.5x stun & knockback
-        const atkType = result.attackerType;
-        const defType = result.defenderType;
-        const atkHeavy = atkType === AttackType.HEAVY;
-        const defHeavy = defType === AttackType.HEAVY;
-        const atkHeavyBonus = (defHeavy && !atkHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const defHeavyBonus = (atkHeavy && !defHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const atkMult = this._getImpactScale(defender, attacker, atkHeavyBonus);
-        const defMult = this._getImpactScale(attacker, defender, defHeavyBonus);
-        attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkMult));
-        defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defMult));
-        attacker.knockbackMult = atkMult;
-        defender.knockbackMult = defMult;
+    switch (event.result) {
+      case HitResult.CLASH:
         this.particles.emitClashSparks(contactPoint);
         this.cameraController.shake(0.2);
-        this.screenEffects.startHitstop(5);
+        this.screenEffects.startHitstop(event.hitstopFrames);
         break;
-      }
-
-      case HitResult.WHIFF:
-        break;
-
-      case HitResult.PARRIED: {
-        const parryMult = this._getImpactScale(defender, attacker);
-        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryMult));
-        attacker.knockbackMult = parryMult;
-        defender.fsm.applyParrySuccess();
+      case HitResult.PARRIED:
         this.particles.emitSparks(contactPoint, 10);
         this.cameraController.shake(0.15);
-        this.screenEffects.startHitstop(8);
+        this.screenEffects.startHitstop(event.hitstopFrames);
         break;
-      }
-
-      case HitResult.BLOCKED: {
-        // Heavy attacks cause 1.5x block stun & knockback
-        const isHeavy = result.attackerType === AttackType.HEAVY;
-        const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-        const blockMult = this._getImpactScale(attacker, defender, heavyBonus);
-        attacker.fsm.applyBlockStun();
-        defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockMult));
-        defender.knockbackMult = blockMult;
+      case HitResult.BLOCKED:
         this.particles.emitSparks(contactPoint, 6);
         this.cameraController.shake(0.1);
-        this.screenEffects.startHitstop(3);
+        this.screenEffects.startHitstop(event.hitstopFrames);
         break;
-      }
-
-      case HitResult.CLEAN_HIT: {
-        const isKill = defender.damageSystem.applyDamage();
-        const hitMult = this._getImpactScale(attacker, defender);
-        defender.fsm.applyHitStun(Math.round(HIT_STUN_FRAMES * hitMult));
-        defender.knockbackMult = hitMult;
+      case HitResult.CLEAN_HIT:
         this.particles.emitSparks(contactPoint, 8);
         this.particles.emitBlood(contactPoint, 15);
         this.cameraController.shake(0.25);
         this.screenEffects.flashRed();
-        this.screenEffects.startHitstop(6);
-
-        if (isKill) {
-          this._onKill(attacker, defender);
-        }
+        this.screenEffects.startHitstop(event.hitstopFrames);
         break;
-      }
     }
   }
 
-  _onKill(killer, victim) {
-    victim.fsm.startDying();
+  _startKillPresentation(killer, victim, reason = 'clean_hit') {
+    if (!killer || !victim) return;
 
-    // Ragdoll the victim away from killer
     const dx = victim.position.x - killer.position.x;
     const dz = victim.position.z - killer.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz) || 0.01;
     victim.startRagdoll(dx / dist, dz / dist);
 
-    const pos = victim.position.clone();
-    pos.y += 1.0;
-    this.particles.emitBloodGush(pos, 50);
+    if (reason !== 'ring_out') {
+      const pos = victim.position.clone();
+      pos.y += 1.0;
+      this.particles.emitBloodGush(pos, 50);
+    }
 
-    // Phase 1: Impact freeze — complete time stop
     this.clock.setTimeScale(0.0);
     this.killSlowMoTimer = 0;
     this.killPhase = 'freeze';
-
     this.cameraController.startKillCam(victim, killer);
     this.cameraController.shake(0.6);
     this.screenEffects.startKillEffects();
-
     this.gameState = GameState.KILL_CAM;
   }
 
   _updateKillCam(dt) {
+    if (this.mode === 'online' && !this.matchSim) {
+      this.fighter1.updateRemoteView(dt);
+      this.fighter2.updateRemoteView(dt);
+      return;
+    }
+
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
   }
@@ -641,6 +714,17 @@ export class Game {
     this.stateTimer += dt;
 
     if (this.stateTimer >= ROUND_END_DELAY) {
+      if (this.mode === 'online' && !this.matchSim) {
+        if (this.onlinePendingMatchResult?.phase === 'match_complete') {
+          const winnerSlot = (this.onlinePendingMatchResult.matchWinner ?? this.onlinePendingMatchResult.winner ?? 1) - 1;
+          const winnerName = this.onlineLocalSlot === null
+            ? `PLAYER ${winnerSlot + 1}`
+            : winnerSlot === this.onlineLocalSlot ? 'YOU' : 'OPPONENT';
+          this._showVictory(winnerName);
+        }
+        return;
+      }
+
       if (this.p1Score >= ROUNDS_TO_WIN) {
         this._showVictory('PLAYER 1');
       } else if (this.p2Score >= ROUNDS_TO_WIN) {
@@ -701,89 +785,9 @@ export class Game {
     };
   }
 
-  _checkRingOut() {
-    const checkFighter = (fighter, otherFighter) => {
-      const dist = Math.sqrt(
-        fighter.position.x * fighter.position.x +
-        fighter.position.z * fighter.position.z
-      );
-      if (dist > ARENA_RADIUS + 0.5 && fighter.state !== FighterState.DYING && fighter.state !== FighterState.DEAD) {
-        fighter.damageSystem.applyDamage();
-        this._onKill(otherFighter, fighter);
-      }
-    };
-
-    checkFighter(this.fighter1, this.fighter2);
-    checkFighter(this.fighter2, this.fighter1);
-  }
-
-  _enforceFighterSeparation(a, b) {
-    const MIN_DIST = getBodyRadius(a.charDef) + getBodyRadius(b.charDef);
-    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
-    if (dist < MIN_DIST) {
-      const overlap = (MIN_DIST - dist) / 2;
-      const nx = dx / dist;
-      const nz = dz / dist;
-      a.position.x -= nx * overlap;
-      a.position.z -= nz * overlap;
-      b.position.x += nx * overlap;
-      b.position.z += nz * overlap;
-    }
-  }
-
-  _getImpactScale(attacker, defender, bonus = 1) {
-    return getImpactScale(attacker?.charDef, defender?.charDef, bonus);
-  }
-
-  _pushApart(a, b, force) {
-    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
-    const nx = dx / dist;
-    const nz = dz / dist;
-
-    a.position.x -= nx * force * 0.5;
-    a.position.z -= nz * force * 0.5;
-    b.position.x += nx * force * 0.5;
-    b.position.z += nz * force * 0.5;
-  }
-
-  _pushDefender(attacker, defender, force) {
-    const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
-    const nx = dx / dist;
-    const nz = dz / dist;
-
-    defender.position.x += nx * force;
-    defender.position.z += nz * force;
-  }
-
   _updateHUD() {
     if (!this.fighter1 || !this.fighter2) return;
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
   }
 
-  _getFighterPairDelta(a, b) {
-    a.getBodyCollisionPosition(_pairBodyA);
-    b.getBodyCollisionPosition(_pairBodyB);
-
-    let dx = _pairBodyB.x - _pairBodyA.x;
-    let dz = _pairBodyB.z - _pairBodyA.z;
-    let distSq = dx * dx + dz * dz;
-
-    if (distSq < 1e-6) {
-      dx = b.position.x - a.position.x;
-      dz = b.position.z - a.position.z;
-      distSq = dx * dx + dz * dz;
-    }
-
-    if (distSq < 1e-6) {
-      dx = a.playerIndex < b.playerIndex ? 1 : -1;
-      dz = 0;
-      distSq = 1;
-    }
-
-    return {
-      dx,
-      dz,
-      dist: Math.sqrt(distSq),
-    };
-  }
 }

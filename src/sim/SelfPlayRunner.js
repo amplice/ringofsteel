@@ -1,29 +1,17 @@
-import * as THREE from 'three';
 import { Fighter } from '../entities/Fighter.js';
 import { ModelLoader } from '../entities/ModelLoader.js';
 import { CHARACTER_DEFS } from '../entities/CharacterDefs.js';
 import { AIController } from '../ai/AIController.js';
 import { HitResolver } from '../combat/HitResolver.js';
-import { getBodyRadius, getImpactScale } from '../combat/CombatTuning.js';
+import { MatchSim } from './MatchSim.js';
 import {
   FRAME_DURATION,
   FighterState,
-  AttackType,
   HitResult,
   FIGHT_START_DISTANCE,
   ROUNDS_TO_WIN,
-  ARENA_RADIUS,
-  BLOCK_PUSHBACK_SPEED,
-  KNOCKBACK_SLIDE_SPEED,
-  HEAVY_ADVANTAGE_MULT,
-  CLASH_PUSHBACK_FRAMES,
-  BLOCK_STUN_FRAMES,
-  HIT_STUN_FRAMES,
-  PARRIED_STUN_FRAMES,
 } from '../core/Constants.js';
 
-const _pairBodyA = new THREE.Vector3();
-const _pairBodyB = new THREE.Vector3();
 
 function mulberry32(seed) {
   let t = seed >>> 0;
@@ -189,8 +177,8 @@ export class SelfPlayRunner {
   }
 
   _runRound({ fighter1, fighter2, ai1, ai2, roundIndex, maxRoundFrames, match, p1Profile, p2Profile, p1Char, p2Char }) {
-    fighter1.resetForRound(-FIGHT_START_DISTANCE / 2);
-    fighter2.resetForRound(FIGHT_START_DISTANCE / 2);
+    const sim = new MatchSim({ fighter1, fighter2, hitResolver: this.hitResolver });
+    sim.startRound(FIGHT_START_DISTANCE);
     ai1.reset();
     ai2.reset();
 
@@ -214,32 +202,29 @@ export class SelfPlayRunner {
     }
 
     for (let frame = 0; frame < maxRoundFrames && !state.roundOver; frame++) {
-      state.frameCount++;
-      match.metrics.totalFrames++;
-
       if (state.hitstopFrames > 0) {
         state.hitstopFrames--;
+        state.frameCount = sim.frameCount;
+        match.metrics.totalFrames++;
         this._recordStateTransitions(state, fighter1, fighter2);
         continue;
       }
 
-      ai1.update(fighter1, fighter2, state.frameCount, FRAME_DURATION);
-      ai2.update(fighter2, fighter1, state.frameCount, FRAME_DURATION);
+      const step = sim.step(FRAME_DURATION, {
+        controller1: (self, opponent, matchSim, dt) => ai1.update(self, opponent, matchSim.frameCount, dt),
+        controller2: (self, opponent, matchSim, dt) => ai2.update(self, opponent, matchSim.frameCount, dt),
+      });
 
-      fighter1.update(FRAME_DURATION, fighter2);
-      fighter2.update(FRAME_DURATION, fighter1);
-
-      this._applyBlockPushback(fighter1, fighter2, state, FRAME_DURATION);
-      this._applyBlockPushback(fighter2, fighter1, state, FRAME_DURATION);
-      this._applyKnockbackSlide(fighter1, fighter2, FRAME_DURATION);
-      this._enforceFighterSeparation(fighter1, fighter2);
-      this._checkHits(state, fighter1, fighter2);
-      fighter1.syncStatePresentation();
-      fighter2.syncStatePresentation();
-      this._checkRingOut(state, fighter1, fighter2);
-      this._clampToArenaIfNeeded(fighter1);
-      this._clampToArenaIfNeeded(fighter2);
+      state.frameCount = step.frameCount;
+      match.metrics.totalFrames++;
+      this._consumeSimEvents(state, step.events);
       this._recordStateTransitions(state, fighter1, fighter2);
+
+      if (step.roundOver) {
+        const killer = step.winner === 1 ? fighter1 : fighter2;
+        const victim = step.winner === 1 ? fighter2 : fighter1;
+        this._onKill(state, killer, victim, step.killReason);
+      }
     }
 
     if (!state.roundOver) {
@@ -324,6 +309,28 @@ export class SelfPlayRunner {
     }
   }
 
+  _consumeSimEvents(state, events) {
+    for (const event of events) {
+      if (event.hitstopFrames) {
+        state.hitstopFrames = Math.max(state.hitstopFrames, event.hitstopFrames);
+      }
+
+      if (event.type !== 'combat_result') continue;
+
+      state.metrics.resultCounts[event.result] = (state.metrics.resultCounts[event.result] || 0) + 1;
+      const attackerMetrics = event.attackerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
+      const defenderMetrics = event.defenderIndex === 0 ? state.metrics.p1 : state.metrics.p2;
+
+      if (event.result === HitResult.PARRIED) {
+        defenderMetrics.parrySuccesses++;
+      } else if (event.result === HitResult.BLOCKED) {
+        defenderMetrics.blockedHits++;
+      } else if (event.result === HitResult.CLEAN_HIT) {
+        attackerMetrics.cleanHits++;
+      }
+    }
+  }
+
   _recordStateTransitions(state, fighter1, fighter2) {
     this._recordFighterTransitions(state, fighter1, state.metrics.p1);
     this._recordFighterTransitions(state, fighter2, state.metrics.p2);
@@ -358,148 +365,10 @@ export class SelfPlayRunner {
     tracker.prevHitApplied = fighter.hitApplied;
   }
 
-  _applyBlockPushback(attacker, defender, state, dt) {
-    if (!attacker.fsm.isAttacking) return;
-    if (defender.state !== FighterState.BLOCK && defender.state !== FighterState.BLOCK_STUN) return;
-    if (!this.hitResolver.checkWeaponOverlap(attacker, defender)) return;
 
-    const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
 
-    if (defender.state === FighterState.BLOCK) {
-      const isHeavy = attacker.fsm.currentAttackType === AttackType.HEAVY;
-      const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-      const mult = this._getImpactScale(attacker, defender, heavyBonus);
-      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * mult));
-      defender.knockbackMult = mult;
-    }
 
-    const nx = dx / (dist || 0.01);
-    const nz = dz / (dist || 0.01);
-    const pushbackScale = defender.knockbackMult || this._getImpactScale(attacker, defender);
-    defender.position.x += nx * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
-    defender.position.z += nz * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
-  }
 
-  _applyKnockbackSlide(a, b, dt) {
-    const stunStates = [FighterState.CLASH, FighterState.HIT_STUN, FighterState.PARRIED_STUN, FighterState.BLOCK_STUN];
-    const aStun = stunStates.includes(a.state);
-    const bStun = stunStates.includes(b.state);
-    if (!aStun && !bStun) return;
-
-    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
-    const nx = dx / dist;
-    const nz = dz / dist;
-
-    if (aStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (a.knockbackMult || 1) * dt;
-      a.position.x -= nx * slide;
-      a.position.z -= nz * slide;
-    }
-    if (bStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (b.knockbackMult || 1) * dt;
-      b.position.x += nx * slide;
-      b.position.z += nz * slide;
-    }
-  }
-
-  _checkHits(state, fighter1, fighter2) {
-    if (
-      fighter1.fsm.isAttacking &&
-      fighter2.fsm.isAttacking &&
-      !fighter1.hitApplied &&
-      !fighter2.hitApplied &&
-      this.hitResolver.checkWeaponClash(fighter1, fighter2)
-    ) {
-      this._applyResolvedHit(state, fighter1, fighter2, {
-        result: HitResult.CLASH,
-        attackerType: fighter1.fsm.currentAttackType,
-        defenderType: fighter2.fsm.currentAttackType,
-      });
-      fighter1.hitApplied = true;
-      fighter2.hitApplied = true;
-      return;
-    }
-
-    if (fighter1.fsm.isAttacking && !fighter1.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(fighter1, fighter2)) {
-        this._resolveHit(state, fighter1, fighter2);
-        fighter1.hitApplied = true;
-      }
-    }
-
-    if (fighter2.fsm.isAttacking && !fighter2.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(fighter2, fighter1)) {
-        this._resolveHit(state, fighter2, fighter1);
-        fighter2.hitApplied = true;
-      }
-    }
-  }
-
-  _resolveHit(state, attacker, defender) {
-    const result = this.hitResolver.resolve(attacker, defender);
-    this._applyResolvedHit(state, attacker, defender, result);
-  }
-
-  _applyResolvedHit(state, attacker, defender, result) {
-    const attackerMetrics = attacker.playerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
-    const defenderMetrics = defender.playerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
-    state.metrics.resultCounts[result.result] = (state.metrics.resultCounts[result.result] || 0) + 1;
-
-    switch (result.result) {
-      case HitResult.CLASH: {
-        const atkType = result.attackerType;
-        const defType = result.defenderType;
-        const atkHeavy = atkType === AttackType.HEAVY;
-        const defHeavy = defType === AttackType.HEAVY;
-        const atkHeavyBonus = (defHeavy && !atkHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const defHeavyBonus = (atkHeavy && !defHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const atkMult = this._getImpactScale(defender, attacker, atkHeavyBonus);
-        const defMult = this._getImpactScale(attacker, defender, defHeavyBonus);
-        attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkMult));
-        defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defMult));
-        attacker.knockbackMult = atkMult;
-        defender.knockbackMult = defMult;
-        state.hitstopFrames = 5;
-        attackerMetrics.clashes++;
-        defenderMetrics.clashes++;
-        break;
-      }
-      case HitResult.WHIFF:
-        break;
-      case HitResult.PARRIED: {
-        const parryMult = this._getImpactScale(defender, attacker);
-        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryMult));
-        attacker.knockbackMult = parryMult;
-        defender.fsm.applyParrySuccess();
-        state.hitstopFrames = 8;
-        defenderMetrics.parrySuccesses++;
-        break;
-      }
-      case HitResult.BLOCKED: {
-        const isHeavy = result.attackerType === AttackType.HEAVY;
-        const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-        const blockMult = this._getImpactScale(attacker, defender, heavyBonus);
-        attacker.fsm.applyBlockStun();
-        defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockMult));
-        defender.knockbackMult = blockMult;
-        state.hitstopFrames = 3;
-        defenderMetrics.blockedHits++;
-        break;
-      }
-      case HitResult.CLEAN_HIT: {
-        const isKill = defender.damageSystem.applyDamage();
-        const hitMult = this._getImpactScale(attacker, defender);
-        defender.fsm.applyHitStun(Math.round(HIT_STUN_FRAMES * hitMult));
-        defender.knockbackMult = hitMult;
-        attackerMetrics.cleanHits++;
-        state.hitstopFrames = 6;
-        if (isKill) {
-          this._onKill(state, attacker, defender, 'clean_hit');
-        }
-        break;
-      }
-    }
-  }
 
   _onKill(state, killer, victim, reason) {
     if (state.roundOver) return;
@@ -524,77 +393,10 @@ export class SelfPlayRunner {
     }
   }
 
-  _checkRingOut(state, fighterA, fighterB) {
-    const checkFighter = (fighter, otherFighter) => {
-      const dist = Math.sqrt(fighter.position.x * fighter.position.x + fighter.position.z * fighter.position.z);
-      if (dist > ARENA_RADIUS + 0.5 && fighter.state !== FighterState.DYING && fighter.state !== FighterState.DEAD) {
-        fighter.damageSystem.applyDamage();
-        this._onKill(state, otherFighter, fighter, 'ring_out');
-      }
-    };
 
-    checkFighter(fighterA, fighterB);
-    checkFighter(fighterB, fighterA);
-  }
 
-  _clampToArenaIfNeeded(fighter) {
-    const noClamp = (s) =>
-      s === FighterState.BLOCK ||
-      s === FighterState.BLOCK_STUN ||
-      s === FighterState.CLASH ||
-      s === FighterState.HIT_STUN ||
-      s === FighterState.PARRIED_STUN;
 
-    if (noClamp(fighter.state)) return;
 
-    const dist = Math.sqrt(fighter.position.x * fighter.position.x + fighter.position.z * fighter.position.z);
-    if (dist > ARENA_RADIUS - 0.3) {
-      const scale = (ARENA_RADIUS - 0.3) / dist;
-      fighter.position.x *= scale;
-      fighter.position.z *= scale;
-    }
-  }
-
-  _enforceFighterSeparation(a, b) {
-    const minDist = getBodyRadius(a.charDef) + getBodyRadius(b.charDef);
-    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
-    if (dist < minDist) {
-      const overlap = (minDist - dist) / 2;
-      const nx = dx / dist;
-      const nz = dz / dist;
-      a.position.x -= nx * overlap;
-      a.position.z -= nz * overlap;
-      b.position.x += nx * overlap;
-      b.position.z += nz * overlap;
-    }
-  }
-
-  _getFighterPairDelta(a, b) {
-    a.getBodyCollisionPosition(_pairBodyA);
-    b.getBodyCollisionPosition(_pairBodyB);
-
-    let dx = _pairBodyB.x - _pairBodyA.x;
-    let dz = _pairBodyB.z - _pairBodyA.z;
-    let distSq = dx * dx + dz * dz;
-
-    if (distSq < 1e-6) {
-      dx = b.position.x - a.position.x;
-      dz = b.position.z - a.position.z;
-      distSq = dx * dx + dz * dz;
-    }
-
-    if (distSq < 1e-6) {
-      dx = a.playerIndex < b.playerIndex ? 1 : -1;
-      dz = 0;
-      distSq = 1;
-    }
-
-    return { dx, dz, dist: Math.sqrt(distSq) };
-  }
-
-  _getImpactScale(attacker, defender, bonus = 1) {
-    return getImpactScale(attacker?.charDef, defender?.charDef, bonus);
-  }
 
   _getFacingDot(attacker, defender) {
     const self = attacker.getBodyCollisionPosition();
@@ -711,3 +513,4 @@ export class SelfPlayRunner {
     return summary;
   }
 }
+

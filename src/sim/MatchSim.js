@@ -1,0 +1,431 @@
+import * as THREE from 'three';
+import { HitResolver } from '../combat/HitResolver.js';
+import { getBodyRadius, getImpactScale } from '../combat/CombatTuning.js';
+import {
+  FRAME_DURATION,
+  FighterState,
+  AttackType,
+  HitResult,
+  FIGHT_START_DISTANCE,
+  ARENA_RADIUS,
+  BLOCK_PUSHBACK_SPEED,
+  KNOCKBACK_SLIDE_SPEED,
+  HEAVY_ADVANTAGE_MULT,
+  CLASH_PUSHBACK_FRAMES,
+  BLOCK_STUN_FRAMES,
+  HIT_STUN_FRAMES,
+  PARRIED_STUN_FRAMES,
+} from '../core/Constants.js';
+
+const _pairBodyA = new THREE.Vector3();
+const _pairBodyB = new THREE.Vector3();
+
+export class MatchSim {
+  constructor({ fighter1, fighter2, hitResolver = new HitResolver() }) {
+    this.fighter1 = fighter1;
+    this.fighter2 = fighter2;
+    this.hitResolver = hitResolver;
+
+    this.frameCount = 0;
+    this.roundOver = false;
+    this.winner = null;
+    this.killReason = null;
+    this.events = [];
+  }
+
+  startRound(startDistance = FIGHT_START_DISTANCE) {
+    this.frameCount = 0;
+    this.roundOver = false;
+    this.winner = null;
+    this.killReason = null;
+    this.events.length = 0;
+
+    this.fighter1.resetForRound(-startDistance / 2);
+    this.fighter2.resetForRound(startDistance / 2);
+  }
+
+  step(dt = FRAME_DURATION, options = {}) {
+    if (this.roundOver) {
+      return this._flushStepResult();
+    }
+
+    this.frameCount++;
+
+    const {
+      input1 = null,
+      input2 = null,
+      controller1 = null,
+      controller2 = null,
+    } = options;
+
+    if (controller1) {
+      controller1(this.fighter1, this.fighter2, this, dt);
+    } else if (input1) {
+      this.applyInputFrame(this.fighter1, this.fighter2, input1, dt);
+    }
+
+    if (controller2) {
+      controller2(this.fighter2, this.fighter1, this, dt);
+    } else if (input2) {
+      this.applyInputFrame(this.fighter2, this.fighter1, input2, dt);
+    }
+
+    this.fighter1.update(dt, this.fighter2);
+    this.fighter2.update(dt, this.fighter1);
+
+    this._applyBlockPushback(this.fighter1, this.fighter2, dt);
+    this._applyBlockPushback(this.fighter2, this.fighter1, dt);
+    this._applyKnockbackSlide(this.fighter1, this.fighter2, dt);
+    this._enforceFighterSeparation(this.fighter1, this.fighter2);
+    this._checkHits();
+    this.fighter1.syncStatePresentation();
+    this.fighter2.syncStatePresentation();
+    this._checkRingOut();
+    this._clampToArenaIfNeeded(this.fighter1);
+    this._clampToArenaIfNeeded(this.fighter2);
+
+    return this._flushStepResult();
+  }
+
+  applyInputFrame(fighter, opponent, input, dt) {
+    if (!input || fighter.state === FighterState.DEAD || fighter.state === FighterState.DYING) return;
+
+    const moveDirection = input.held.right ? 1 : (input.held.left ? -1 : 0);
+    fighter.applyMovementInput(moveDirection, opponent, dt);
+
+    if (input.pressed.sidestepUp) {
+      fighter.sidestep(-1);
+    } else if (input.pressed.sidestepDown) {
+      fighter.sidestep(1);
+    }
+
+    if (input.pressed.backstep) {
+      fighter.backstep();
+    }
+
+    if (input.pressed.quick) {
+      fighter.attack(AttackType.QUICK);
+    } else if (input.pressed.heavy) {
+      fighter.attack(AttackType.HEAVY);
+    } else if (input.pressed.thrust) {
+      fighter.attack(AttackType.THRUST);
+    }
+
+    if (input.pressed.block) {
+      fighter.parry();
+    } else if (input.held.block) {
+      if (fighter.fsm.isActionable) {
+        fighter.block();
+      }
+    } else if (fighter.state === FighterState.BLOCK) {
+      fighter.fsm.transition(FighterState.IDLE);
+    }
+  }
+
+  getSnapshot() {
+    return {
+      frameCount: this.frameCount,
+      roundOver: this.roundOver,
+      winner: this.winner,
+      killReason: this.killReason,
+      fighters: [
+        this._serializeFighter(this.fighter1),
+        this._serializeFighter(this.fighter2),
+      ],
+    };
+  }
+
+  _serializeFighter(fighter) {
+    return {
+      playerIndex: fighter.playerIndex,
+      state: fighter.state,
+      stateFrames: fighter.stateFrames,
+      stateDuration: fighter.fsm.stateDuration,
+      currentAttackType: fighter.currentAttackType,
+      hitApplied: fighter.hitApplied,
+      position: {
+        x: fighter.position.x,
+        y: fighter.position.y,
+        z: fighter.position.z,
+      },
+      rotationY: fighter.group.rotation.y,
+      facingRight: fighter.facingRight,
+      dead: fighter.damageSystem.isDead(),
+    };
+  }
+
+  _flushStepResult() {
+    const events = this.events.slice();
+    this.events.length = 0;
+    return {
+      frameCount: this.frameCount,
+      roundOver: this.roundOver,
+      winner: this.winner,
+      killReason: this.killReason,
+      events,
+      snapshot: this.getSnapshot(),
+    };
+  }
+
+  _applyBlockPushback(attacker, defender, dt) {
+    if (!attacker.fsm.isAttacking) return;
+    if (defender.state !== FighterState.BLOCK && defender.state !== FighterState.BLOCK_STUN) return;
+    if (!this.hitResolver.checkWeaponOverlap(attacker, defender)) return;
+
+    const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
+
+    if (defender.state === FighterState.BLOCK) {
+      const isHeavy = attacker.fsm.currentAttackType === AttackType.HEAVY;
+      const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
+      const mult = this._getImpactScale(attacker, defender, heavyBonus);
+      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * mult));
+      defender.knockbackMult = mult;
+    }
+
+    const nx = dx / (dist || 0.01);
+    const nz = dz / (dist || 0.01);
+    const pushbackScale = defender.knockbackMult || this._getImpactScale(attacker, defender);
+    defender.position.x += nx * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
+    defender.position.z += nz * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
+  }
+
+  _applyKnockbackSlide(a, b, dt) {
+    const stunStates = [FighterState.CLASH, FighterState.HIT_STUN, FighterState.PARRIED_STUN, FighterState.BLOCK_STUN];
+    const aStun = stunStates.includes(a.state);
+    const bStun = stunStates.includes(b.state);
+    if (!aStun && !bStun) return;
+
+    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
+    const nx = dx / dist;
+    const nz = dz / dist;
+
+    if (aStun) {
+      const slide = KNOCKBACK_SLIDE_SPEED * (a.knockbackMult || 1) * dt;
+      a.position.x -= nx * slide;
+      a.position.z -= nz * slide;
+    }
+    if (bStun) {
+      const slide = KNOCKBACK_SLIDE_SPEED * (b.knockbackMult || 1) * dt;
+      b.position.x += nx * slide;
+      b.position.z += nz * slide;
+    }
+  }
+
+  _checkHits() {
+    if (
+      this.fighter1.fsm.isAttacking &&
+      this.fighter2.fsm.isAttacking &&
+      !this.fighter1.hitApplied &&
+      !this.fighter2.hitApplied &&
+      this.hitResolver.checkWeaponClash(this.fighter1, this.fighter2)
+    ) {
+      this._applyResolvedHit(this.fighter1, this.fighter2, {
+        result: HitResult.CLASH,
+        attackerType: this.fighter1.fsm.currentAttackType,
+        defenderType: this.fighter2.fsm.currentAttackType,
+      });
+      this.fighter1.hitApplied = true;
+      this.fighter2.hitApplied = true;
+      return;
+    }
+
+    if (this.fighter1.fsm.isAttacking && !this.fighter1.hitApplied) {
+      if (this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)) {
+        this._resolveHit(this.fighter1, this.fighter2);
+        this.fighter1.hitApplied = true;
+      }
+    }
+
+    if (this.fighter2.fsm.isAttacking && !this.fighter2.hitApplied) {
+      if (this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)) {
+        this._resolveHit(this.fighter2, this.fighter1);
+        this.fighter2.hitApplied = true;
+      }
+    }
+  }
+
+  _resolveHit(attacker, defender) {
+    const result = this.hitResolver.resolve(attacker, defender);
+    this._applyResolvedHit(attacker, defender, result);
+  }
+
+  _applyResolvedHit(attacker, defender, result) {
+    const contactPoint = {
+      x: attacker.position.x + (defender.position.x - attacker.position.x) * 0.6,
+      y: 1.2,
+      z: attacker.position.z + (defender.position.z - attacker.position.z) * 0.6,
+    };
+
+    switch (result.result) {
+      case HitResult.CLASH: {
+        const atkType = result.attackerType;
+        const defType = result.defenderType;
+        const atkHeavy = atkType === AttackType.HEAVY;
+        const defHeavy = defType === AttackType.HEAVY;
+        const atkHeavyBonus = (defHeavy && !atkHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
+        const defHeavyBonus = (atkHeavy && !defHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
+        const atkMult = this._getImpactScale(defender, attacker, atkHeavyBonus);
+        const defMult = this._getImpactScale(attacker, defender, defHeavyBonus);
+        attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkMult));
+        defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defMult));
+        attacker.knockbackMult = atkMult;
+        defender.knockbackMult = defMult;
+        this.events.push({
+          type: 'combat_result',
+          result: HitResult.CLASH,
+          attackerIndex: attacker.playerIndex,
+          defenderIndex: defender.playerIndex,
+          attackerType: result.attackerType,
+          defenderType: result.defenderType,
+          hitstopFrames: 5,
+          contactPoint,
+        });
+        break;
+      }
+
+      case HitResult.WHIFF:
+        break;
+
+      case HitResult.PARRIED: {
+        const parryMult = this._getImpactScale(defender, attacker);
+        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryMult));
+        attacker.knockbackMult = parryMult;
+        defender.fsm.applyParrySuccess();
+        this.events.push({
+          type: 'combat_result',
+          result: HitResult.PARRIED,
+          attackerIndex: attacker.playerIndex,
+          defenderIndex: defender.playerIndex,
+          attackerType: result.attackerType,
+          hitstopFrames: 8,
+          contactPoint,
+        });
+        break;
+      }
+
+      case HitResult.BLOCKED: {
+        const isHeavy = result.attackerType === AttackType.HEAVY;
+        const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
+        const blockMult = this._getImpactScale(attacker, defender, heavyBonus);
+        attacker.fsm.applyBlockStun();
+        defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockMult));
+        defender.knockbackMult = blockMult;
+        this.events.push({
+          type: 'combat_result',
+          result: HitResult.BLOCKED,
+          attackerIndex: attacker.playerIndex,
+          defenderIndex: defender.playerIndex,
+          attackerType: result.attackerType,
+          hitstopFrames: 3,
+          contactPoint,
+        });
+        break;
+      }
+
+      case HitResult.CLEAN_HIT: {
+        const isKill = defender.damageSystem.applyDamage();
+        const hitMult = this._getImpactScale(attacker, defender);
+        defender.fsm.applyHitStun(Math.round(HIT_STUN_FRAMES * hitMult));
+        defender.knockbackMult = hitMult;
+        this.events.push({
+          type: 'combat_result',
+          result: HitResult.CLEAN_HIT,
+          attackerIndex: attacker.playerIndex,
+          defenderIndex: defender.playerIndex,
+          attackerType: result.attackerType,
+          hitstopFrames: 6,
+          contactPoint,
+          kill: isKill,
+        });
+
+        if (isKill) {
+          defender.fsm.startDying();
+          this.roundOver = true;
+          this.winner = attacker.playerIndex + 1;
+          this.killReason = 'clean_hit';
+        }
+        break;
+      }
+    }
+  }
+
+  _checkRingOut() {
+    const checkFighter = (fighter, otherFighter) => {
+      const dist = Math.sqrt(fighter.position.x * fighter.position.x + fighter.position.z * fighter.position.z);
+      if (dist > ARENA_RADIUS + 0.5 && fighter.state !== FighterState.DYING && fighter.state !== FighterState.DEAD) {
+        fighter.damageSystem.applyDamage();
+        fighter.fsm.startDying();
+        this.roundOver = true;
+        this.winner = otherFighter.playerIndex + 1;
+        this.killReason = 'ring_out';
+        this.events.push({
+          type: 'ring_out',
+          winnerIndex: otherFighter.playerIndex,
+          loserIndex: fighter.playerIndex,
+        });
+      }
+    };
+
+    if (!this.roundOver) checkFighter(this.fighter1, this.fighter2);
+    if (!this.roundOver) checkFighter(this.fighter2, this.fighter1);
+  }
+
+  _clampToArenaIfNeeded(fighter) {
+    const noClamp = (s) =>
+      s === FighterState.BLOCK ||
+      s === FighterState.BLOCK_STUN ||
+      s === FighterState.CLASH ||
+      s === FighterState.HIT_STUN ||
+      s === FighterState.PARRIED_STUN;
+
+    if (noClamp(fighter.state)) return;
+
+    const dist = Math.sqrt(fighter.position.x * fighter.position.x + fighter.position.z * fighter.position.z);
+    if (dist > ARENA_RADIUS - 0.3) {
+      const scale = (ARENA_RADIUS - 0.3) / dist;
+      fighter.position.x *= scale;
+      fighter.position.z *= scale;
+    }
+  }
+
+  _enforceFighterSeparation(a, b) {
+    const minDist = getBodyRadius(a.charDef) + getBodyRadius(b.charDef);
+    const { dx, dz, dist } = this._getFighterPairDelta(a, b);
+    if (dist < minDist) {
+      const overlap = (minDist - dist) / 2;
+      const nx = dx / dist;
+      const nz = dz / dist;
+      a.position.x -= nx * overlap;
+      a.position.z -= nz * overlap;
+      b.position.x += nx * overlap;
+      b.position.z += nz * overlap;
+    }
+  }
+
+  _getImpactScale(attacker, defender, bonus = 1) {
+    return getImpactScale(attacker?.charDef, defender?.charDef, bonus);
+  }
+
+  _getFighterPairDelta(a, b) {
+    a.getBodyCollisionPosition(_pairBodyA);
+    b.getBodyCollisionPosition(_pairBodyB);
+
+    let dx = _pairBodyB.x - _pairBodyA.x;
+    let dz = _pairBodyB.z - _pairBodyA.z;
+    let distSq = dx * dx + dz * dz;
+
+    if (distSq < 1e-6) {
+      dx = b.position.x - a.position.x;
+      dz = b.position.z - a.position.z;
+      distSq = dx * dx + dz * dz;
+    }
+
+    if (distSq < 1e-6) {
+      dx = a.playerIndex < b.playerIndex ? 1 : -1;
+      dz = 0;
+      distSq = 1;
+    }
+
+    return { dx, dz, dist: Math.sqrt(distSq) };
+  }
+}

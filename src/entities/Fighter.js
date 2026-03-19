@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 import { ModelLoader } from './ModelLoader.js';
 import { Weapon } from './Weapon.js';
-import { FighterStateMachine } from '../combat/FighterStateMachine.js';
-import { DamageSystem } from '../combat/DamageSystem.js';
 import { getAttackData } from '../combat/AttackData.js';
+import { FighterCore } from '../combat/FighterCore.js';
 import {
   BODY_COLLISION,
-  FACING_TUNING,
   HURT_CYLINDER,
   WEAPON_FALLBACKS,
   getBodyRadius,
@@ -19,7 +17,7 @@ import {
   BACKSTEP_FRAMES, BACKSTEP_DISTANCE,
   STEP_DISTANCE, STEP_FRAMES, STEP_COOLDOWN_FRAMES,
 } from '../core/Constants.js';
-import { angleDelta, distance2D, moveAngleTowards } from '../utils/MathUtils.js';
+import { distance2D } from '../utils/MathUtils.js';
 
 const _relativeVelocity = new THREE.Vector3();
 const _toTarget = new THREE.Vector3();
@@ -31,23 +29,15 @@ const _selfBodyPosition = new THREE.Vector3();
 const _opponentBodyPosition = new THREE.Vector3();
 const _markerBodyPosition = new THREE.Vector3();
 
-export class Fighter {
+export class Fighter extends FighterCore {
   static _playerMarkerTexture = null;
 
   constructor(playerIndex, color, charDef, animData) {
+    super(playerIndex, charDef.glbPath ?? charDef.displayName ?? 'fighter', charDef);
     if (!animData?.model || !animData?.clips) {
       const charName = charDef?.displayName || 'unknown';
       throw new Error(`Missing animation data for fighter '${charName}'`);
     }
-
-    this.playerIndex = playerIndex;
-    this.isP2 = playerIndex === 1;
-    this.charDef = charDef;
-    this.weaponType = charDef.weaponType;
-
-    this.mixer = null;
-    this.clipActions = {};
-    this.activeClipName = null;
 
     const result = ModelLoader.createFighterFromGLB(
       animData.model, animData.clips, animData.texture
@@ -82,43 +72,17 @@ export class Fighter {
     const trailColor = this.isP2 ? 0x4488ff : 0xff4444;
     this.trail = new TrailEffect(trailColor);
 
-    // Systems
-    this.damageSystem = new DamageSystem();
-    this.fsm = new FighterStateMachine(this);
-
     // State indicators (floating shapes above head)
     this._stateIndicator = this._createStateIndicators();
     this.group.add(this._stateIndicator.group);
     this._playerMarker = this._createPlayerMarker();
     this.group.add(this._playerMarker);
 
-    // Position
-    this.position = this.group.position;
-    this.facingRight = !this.isP2;
-
-    // Walk cycle timer
-    this.walkPhase = 0;
-
-    // Discrete step state
-    this._stepping = false;
-    this._stepFrames = 0;
-    this._stepDirection = 0; // +1 = toward, -1 = away
-    this._stepCooldown = 0;
-
     // Knockback multiplier (set by Game on clash/block for heavy advantage)
     this.knockbackMult = 1;
 
     // Ragdoll state
     this._ragdoll = null;
-
-    this._tipWorldPosition = new THREE.Vector3();
-    this._tipVelocity = new THREE.Vector3();
-    this._baseWorldPosition = new THREE.Vector3();
-    this._baseVelocity = new THREE.Vector3();
-    this._tipMotionInitialized = false;
-    this._debugCollision = null;
-    this._wasAttacking = false;
-    this._postAttackTurnTime = 0;
 
     this._setImmediateIdlePose();
     this._updatePlayerMarker();
@@ -221,13 +185,6 @@ export class Fighter {
     this.activeClipName = 'idle';
   }
 
-  get state() { return this.fsm.state; }
-  get stateFrames() { return this.fsm.stateFrames; }
-  get currentAttackData() { return this.fsm.currentAttackData; }
-  get currentAttackType() { return this.fsm.currentAttackType; }
-  get hitApplied() { return this.fsm.hitApplied; }
-  set hitApplied(v) { this.fsm.hitApplied = v; }
-
   _syncWorldMatrices() {
     this.group.updateWorldMatrix(true, true);
   }
@@ -241,88 +198,10 @@ export class Fighter {
       this._updateTipMotion();
       return;
     }
-    // Update FSM
-    this.fsm.update();
-
-    // Face toward opponent. Attacks still lock facing, but post-attack reacquisition
-    // turns quickly instead of blinking to the new heading in one frame.
-    if (opponent) {
-      this.getBodyCollisionPosition(_selfBodyPosition);
-      opponent.getBodyCollisionPosition(_opponentBodyPosition);
-      const dx = _opponentBodyPosition.x - _selfBodyPosition.x;
-      const dz = _opponentBodyPosition.z - _selfBodyPosition.z;
-      if ((dx * dx + dz * dz) > 1e-6) {
-        const desiredYaw = Math.atan2(dx, dz);
-        const yawDelta = Math.abs(angleDelta(this.group.rotation.y, desiredYaw));
-        const justExitedAttack = this._wasAttacking && !this.fsm.isAttacking;
-
-        if (justExitedAttack && yawDelta >= FACING_TUNING.postAttackTurnMinDelta) {
-          this._postAttackTurnTime = FACING_TUNING.postAttackTurnMaxDuration;
-        }
-
-        this.facingRight = dx >= 0;
-
-        if (!this.fsm.isAttacking) {
-          if (this._postAttackTurnTime > 0) {
-            const maxStep = FACING_TUNING.postAttackTurnRate * dt;
-            this.group.rotation.y = moveAngleTowards(this.group.rotation.y, desiredYaw, maxStep);
-            this._postAttackTurnTime = Math.max(0, this._postAttackTurnTime - dt);
-            if (Math.abs(angleDelta(this.group.rotation.y, desiredYaw)) <= FACING_TUNING.postAttackTurnStopDelta) {
-              this.group.rotation.y = desiredYaw;
-              this._postAttackTurnTime = 0;
-            }
-          } else {
-            this.group.rotation.y = desiredYaw;
-          }
-        }
-      } else {
-        this._postAttackTurnTime = 0;
-      }
-    } else {
-      this._postAttackTurnTime = 0;
-    }
+    this._beginUpdateCore(dt, opponent);
 
     // Update animation based on state
     this._updateClipAnimation();
-
-    // Attack lunge — move toward opponent during active frames
-    if (this.state === FighterState.ATTACK_ACTIVE && this.currentAttackData) {
-      const atk = this.currentAttackData;
-      const startFrac = atk.lungeStart ?? 0;
-      const endFrac = atk.lungeEnd ?? (atk.lungeRatio || 1.0);
-      const attackFrames = Math.max(this.fsm.stateDuration, 1);
-      const startFrame = attackFrames * startFrac;
-      const endFrame = attackFrames * endFrac;
-      const lungeFrames = endFrame - startFrame;
-      if (lungeFrames > 0 && this.stateFrames >= startFrame && this.stateFrames < endFrame) {
-        const lungeSpeed = atk.lunge / lungeFrames * 60;
-        const angle = this.group.rotation.y;
-        this.position.x += Math.sin(angle) * lungeSpeed * dt;
-        this.position.z += Math.cos(angle) * lungeSpeed * dt;
-      }
-    }
-
-    // Sidestep movement — perpendicular to facing direction
-    if (this.state === FighterState.SIDESTEP && this.fsm.sidestepPhase === 'dash') {
-      const sidestepDistance = this.charDef.sidestepDistance ?? SIDESTEP_DASH_DISTANCE;
-      const sidestepFrames = this.charDef.sidestepFrames ?? SIDESTEP_DASH_FRAMES;
-      const speed = sidestepDistance / sidestepFrames * 60;
-      const angle = this.group.rotation.y;
-      const perpX = -Math.cos(angle) * this.fsm.sidestepDirection;
-      const perpZ = Math.sin(angle) * this.fsm.sidestepDirection;
-      this.position.x += perpX * speed * dt;
-      this.position.z += perpZ * speed * dt;
-    }
-
-    // Backstep movement — away from opponent
-    if (this.state === FighterState.DODGE) {
-      const backstepDistance = this.charDef.backstepDistance ?? BACKSTEP_DISTANCE;
-      const backstepFrames = this.charDef.backstepFrames ?? BACKSTEP_FRAMES;
-      const speed = backstepDistance / backstepFrames * 60;
-      const angle = this.group.rotation.y;
-      this.position.x -= Math.sin(angle) * speed * dt;
-      this.position.z -= Math.cos(angle) * speed * dt;
-    }
 
     // Update mixer for clip-based animations
     if (this.mixer) {
@@ -336,15 +215,7 @@ export class Fighter {
 
     // Update state indicators
     this._updateStateIndicators();
-
-    this._updateTipMotion();
-
-    // Walk animation phase
-    if (this.state === FighterState.WALK_FORWARD || this.state === FighterState.WALK_BACK) {
-      this.walkPhase += dt * 8;
-    }
-
-    this._wasAttacking = this.fsm.isAttacking;
+    this._finishUpdateCore();
   }
 
   getWeaponTipWorldPosition(target = new THREE.Vector3()) {
@@ -878,10 +749,7 @@ export class Fighter {
   }
 
   resetForRound(xPos) {
-    this.position.set(xPos, 0, 0);
-    this.group.rotation.y = xPos < 0 ? Math.PI / 2 : -Math.PI / 2;
-    this.fsm.reset();
-    this.damageSystem.reset();
+    this._resetCoreState(xPos);
     this.trail.stop();
     this.walkPhase = 0;
     this._ragdoll = null;
@@ -894,12 +762,6 @@ export class Fighter {
       this._setImmediateIdlePose();
     }
 
-    this._tipMotionInitialized = false;
-    this._tipVelocity.set(0, 0, 0);
-    this._baseVelocity.set(0, 0, 0);
-    this._debugCollision = null;
-    this._wasAttacking = false;
-    this._postAttackTurnTime = 0;
     this._updatePlayerMarker();
     this._updateTipMotion();
   }

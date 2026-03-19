@@ -3,6 +3,9 @@
 Current direction: server-authoritative.
 
 What exists now:
+- `src/combat/FighterCore.js`
+  - shared non-visual fighter core used by both browser `Fighter` and headless `FighterSim`
+  - owns shared facing, movement, lunge, reset, and weapon-velocity bookkeeping
 - `src/sim/MatchSim.js`
   - shared combat simulation used by local `Game` flow and self-play
 - `src/sim/InputFrame.js`
@@ -52,6 +55,7 @@ Current state:
 - the Node server still runs on `FighterSim`, not the browser `Fighter`
 - `FighterSim` now uses sampled authoritative attack/idle weapon tracks from the real browser asset path
 - fallback hand-authored pose code still exists for missing tracks
+- browser `Fighter` and headless `FighterSim` now share a real fighter core instead of fully duplicating their update/reset logic
 - local offline play and web self-play still use the animation-driven browser fighter
 
 That means:
@@ -63,8 +67,9 @@ That means:
 Next required refactor:
 1. tighten `FighterSim` geometry until it matches browser combat closely enough
 2. sample additional authoritative data if needed (for example more non-attack clips or body anchor paths)
-3. or split browser `Fighter` into simulation + view so both server and client share the exact same fighter core
-4. add a proper lobby/ready/error UI around the existing online flow
+3. continue moving remaining duplicated fighter methods fully into `FighterCore`
+4. or split browser `Fighter` further into explicit simulation + view layers
+5. add a proper lobby/ready/error UI around the existing online flow
 
 Local dev command:
 

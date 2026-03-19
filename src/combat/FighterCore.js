@@ -10,6 +10,7 @@ import {
 } from './CombatTuning.js';
 import {
   FighterState,
+  AttackType,
   SIDESTEP_DASH_FRAMES,
   SIDESTEP_DASH_DISTANCE,
   BACKSTEP_FRAMES,
@@ -392,6 +393,29 @@ export class FighterCore {
     this._baseVelocity.set(0, 0, 0);
   }
 
+  _applySnapshotCore(snapshot, getAttackDataForType = null) {
+    if (!snapshot) return;
+
+    this.position.set(
+      snapshot.position?.x ?? this.position.x,
+      snapshot.position?.y ?? this.position.y,
+      snapshot.position?.z ?? this.position.z,
+    );
+    this.group.rotation.y = snapshot.rotationY ?? this.group.rotation.y;
+    this.facingRight = snapshot.facingRight ?? this.facingRight;
+
+    this.fsm.state = snapshot.state ?? this.fsm.state;
+    this.fsm.stateFrames = snapshot.stateFrames ?? this.fsm.stateFrames;
+    this.fsm.stateDuration = snapshot.stateDuration ?? this.fsm.stateDuration;
+    this.fsm.currentAttackType = snapshot.currentAttackType ?? null;
+    this.fsm.currentAttackData = (this.fsm.currentAttackType && getAttackDataForType)
+      ? getAttackDataForType(this.fsm.currentAttackType)
+      : null;
+    this.fsm.hitApplied = Boolean(snapshot.hitApplied);
+
+    this.damageSystem.alive = !snapshot.dead;
+  }
+
   _updateTipMotion() {
     const tip = this.getWeaponTipWorldPosition(_weaponTip);
     const base = this.getWeaponBaseWorldPosition(_weaponBase);
@@ -409,5 +433,76 @@ export class FighterCore {
 
   _getAttackFrameCount() {
     return 30;
+  }
+
+  _getPresentationClip(resolveClipName) {
+    const resolve = resolveClipName ?? ((...names) => names[names.length - 1]);
+    let clipName = 'idle';
+    let loopOnce = false;
+
+    switch (this.state) {
+      case FighterState.IDLE:
+        clipName = resolve('idle');
+        break;
+      case FighterState.BLOCK:
+        clipName = resolve('block_parry', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.BLOCK_STUN:
+        clipName = resolve('block_knockback', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.PARRY:
+        clipName = resolve('block_parry', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.PARRY_SUCCESS:
+        clipName = resolve('block_parry', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.PARRIED_STUN:
+        clipName = resolve('clash_knockback', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.HIT_STUN:
+        clipName = resolve('clash_knockback', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.DODGE:
+        clipName = resolve('backstep', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.CLASH:
+        clipName = resolve('clash_knockback', 'idle');
+        loopOnce = true;
+        break;
+      case FighterState.WALK_FORWARD:
+        clipName = resolve('walk_forward', 'walk_right');
+        break;
+      case FighterState.WALK_BACK:
+        clipName = resolve('walk_backward', 'walk_left');
+        break;
+      case FighterState.SIDESTEP:
+        clipName = this.fsm.sidestepDirection > 0
+          ? resolve('strafe_right', 'walk_right', 'walk_forward')
+          : resolve('strafe_left', 'walk_left', 'walk_backward');
+        break;
+      case FighterState.ATTACK_ACTIVE:
+        if (this.fsm.currentAttackType === AttackType.THRUST) {
+          clipName = resolve('attack_thrust', 'attack');
+        } else if (this.fsm.currentAttackType === AttackType.HEAVY) {
+          clipName = resolve('attack_heavy', 'attack');
+        } else {
+          clipName = resolve('attack_quick', 'attack');
+        }
+        loopOnce = true;
+        break;
+      case FighterState.DYING:
+      case FighterState.DEAD:
+        clipName = resolve('idle');
+        break;
+    }
+
+    return { clipName, loopOnce };
   }
 }

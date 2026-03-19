@@ -5,28 +5,13 @@ import { getAttackData } from '../combat/AttackData.js';
 import { FighterCore } from '../combat/FighterCore.js';
 import {
   BODY_COLLISION,
-  HURT_CYLINDER,
   WEAPON_FALLBACKS,
-  getBodyRadius,
-  getDefaultWeaponClashRadius,
 } from '../combat/CombatTuning.js';
 import { TrailEffect } from '../animation/TrailEffect.js';
 import {
   FighterState, AttackType, WeaponType,
-  SIDESTEP_DASH_FRAMES, SIDESTEP_DASH_DISTANCE,
-  BACKSTEP_FRAMES, BACKSTEP_DISTANCE,
-  STEP_DISTANCE, STEP_FRAMES, STEP_COOLDOWN_FRAMES,
 } from '../core/Constants.js';
-import { distance2D } from '../utils/MathUtils.js';
 
-const _relativeVelocity = new THREE.Vector3();
-const _toTarget = new THREE.Vector3();
-const _spearForward = new THREE.Vector3();
-const _pointVelocity = new THREE.Vector3();
-const _pointToTarget = new THREE.Vector3();
-const _debugOpponentCenter = new THREE.Vector3();
-const _selfBodyPosition = new THREE.Vector3();
-const _opponentBodyPosition = new THREE.Vector3();
 const _markerBodyPosition = new THREE.Vector3();
 
 export class Fighter extends FighterCore {
@@ -253,171 +238,14 @@ export class Fighter extends FighterCore {
     return target.copy(this.position).setY(BODY_COLLISION.centerHeight);
   }
 
-  getBodyCollisionPosition(target = new THREE.Vector3()) {
-    this.getBodyAnchorWorldPosition(target);
-    target.y = this.position.y;
-    return target;
-  }
-
-  getHurtCenterWorldPosition(target = new THREE.Vector3()) {
-    this.getBodyAnchorWorldPosition(target);
-    target.y = this.position.y + BODY_COLLISION.centerHeight;
-    return target;
-  }
-
-  getTipRelativeVelocityToward(target) {
-    _relativeVelocity.subVectors(this._tipVelocity, this._baseVelocity);
-    _toTarget.subVectors(target, this._tipWorldPosition);
-    if (_toTarget.lengthSq() < 1e-6) return 0;
-    _toTarget.normalize();
-    return _relativeVelocity.dot(_toTarget);
-  }
-
-  getTipRelativeForwardSpeed() {
-    _relativeVelocity.subVectors(this._tipVelocity, this._baseVelocity);
-    _spearForward.subVectors(this._tipWorldPosition, this._baseWorldPosition);
-    if (_spearForward.lengthSq() < 1e-6) return 0;
-    _spearForward.normalize();
-    return _relativeVelocity.dot(_spearForward);
-  }
-
-  getTipRelativeSpeed() {
-    _relativeVelocity.subVectors(this._tipVelocity, this._baseVelocity);
-    return _relativeVelocity.length();
-  }
-
-  getWeaponPointVelocityToward(target, t = 1, relativeToBase = false) {
-    _pointVelocity.lerpVectors(this._baseVelocity, this._tipVelocity, THREE.MathUtils.clamp(t, 0, 1));
-    if (relativeToBase) {
-      _pointVelocity.sub(this._baseVelocity);
-    }
-    _pointToTarget.subVectors(target, this.getWeaponPointWorldPosition(new THREE.Vector3(), t));
-    if (_pointToTarget.lengthSq() < 1e-6) return 0;
-    _pointToTarget.normalize();
-    return _pointVelocity.dot(_pointToTarget);
-  }
-
-  getWeaponPointSpeed(t = 1, relativeToBase = false) {
-    _pointVelocity.lerpVectors(this._baseVelocity, this._tipVelocity, THREE.MathUtils.clamp(t, 0, 1));
-    if (relativeToBase) {
-      _pointVelocity.sub(this._baseVelocity);
-    }
-    return _pointVelocity.length();
-  }
-
-  getWeaponPointWorldPosition(target = new THREE.Vector3(), t = 1) {
-    const clampedT = THREE.MathUtils.clamp(t, 0, 1);
-    const base = this.getWeaponBaseWorldPosition(new THREE.Vector3());
-    const tip = this.getWeaponTipWorldPosition(new THREE.Vector3());
-    return target.lerpVectors(base, tip, clampedT);
-  }
-
-  _updateTipMotion() {
-    const tip = this.getWeaponTipWorldPosition(new THREE.Vector3());
-    const base = this.getWeaponBaseWorldPosition(new THREE.Vector3());
-    if (this._tipMotionInitialized) {
-      this._tipVelocity.subVectors(tip, this._tipWorldPosition);
-      this._baseVelocity.subVectors(base, this._baseWorldPosition);
-    } else {
-      this._tipVelocity.set(0, 0, 0);
-      this._baseVelocity.set(0, 0, 0);
-      this._tipMotionInitialized = true;
-    }
-    this._tipWorldPosition.copy(tip);
-    this._baseWorldPosition.copy(base);
-  }
-
   _updateClipAnimation() {
-    const state = this.state;
-    let clipName = 'idle';
-    let loopOnce = false;
-
     const pick = (...names) => {
       for (const n of names) {
         if (this.clipActions[n]) return n;
       }
       return names[names.length - 1];
     };
-
-    switch (state) {
-      case FighterState.IDLE:
-        clipName = 'idle';
-        break;
-
-      case FighterState.BLOCK:
-        clipName = pick('block_parry', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.BLOCK_STUN:
-        clipName = pick('block_knockback', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.PARRY:
-        clipName = pick('block_parry', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.PARRY_SUCCESS:
-        clipName = pick('block_parry', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.PARRIED_STUN:
-        clipName = pick('clash_knockback', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.HIT_STUN:
-        clipName = pick('clash_knockback', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.DODGE:
-        clipName = pick('backstep', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.CLASH:
-        clipName = pick('clash_knockback', 'idle');
-        loopOnce = true;
-        break;
-
-      case FighterState.WALK_FORWARD:
-        clipName = pick('walk_forward', 'walk_right');
-        break;
-
-      case FighterState.WALK_BACK:
-        clipName = pick('walk_backward', 'walk_left');
-        break;
-
-      case FighterState.SIDESTEP:
-        if (this.fsm.sidestepDirection > 0) {
-          clipName = pick('strafe_right', 'walk_right', 'walk_forward');
-        } else {
-          clipName = pick('strafe_left', 'walk_left', 'walk_backward');
-        }
-        break;
-
-      case FighterState.ATTACK_ACTIVE: {
-        const atkType = this.fsm.currentAttackType;
-        if (atkType === AttackType.THRUST) {
-          clipName = pick('attack_thrust', 'attack');
-        } else if (atkType === AttackType.HEAVY) {
-          clipName = pick('attack_heavy', 'attack');
-        } else {
-          clipName = pick('attack_quick', 'attack');
-        }
-        loopOnce = true;
-        break;
-      }
-
-      case FighterState.DYING:
-      case FighterState.DEAD:
-        clipName = 'idle';
-        break;
-    }
+    const { clipName, loopOnce } = this._getPresentationClip(pick);
 
     const action = this.clipActions[clipName];
     if (!action) return;
@@ -608,30 +436,7 @@ export class Fighter extends FighterCore {
   }
 
   applyAuthoritativeSnapshot(snapshot) {
-    if (!snapshot) return;
-
-    this.position.set(
-      snapshot.position?.x ?? this.position.x,
-      snapshot.position?.y ?? this.position.y,
-      snapshot.position?.z ?? this.position.z,
-    );
-    this.group.rotation.y = snapshot.rotationY ?? this.group.rotation.y;
-    this.facingRight = snapshot.facingRight ?? this.facingRight;
-
-    this.fsm.state = snapshot.state ?? this.fsm.state;
-    this.fsm.stateFrames = snapshot.stateFrames ?? this.fsm.stateFrames;
-    this.fsm.stateDuration = snapshot.stateDuration ?? this.fsm.stateDuration;
-    this.fsm.currentAttackType = snapshot.currentAttackType ?? null;
-    this.fsm.currentAttackData = this.fsm.currentAttackType
-      ? getAttackData(this.fsm.currentAttackType, this.weaponType)
-      : null;
-    this.fsm.hitApplied = Boolean(snapshot.hitApplied);
-
-    if (snapshot.dead) {
-      this.damageSystem.alive = false;
-    } else {
-      this.damageSystem.alive = true;
-    }
+    this._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, this.weaponType));
 
     this._updatePlayerMarker();
     this.syncStatePresentation();

@@ -6,10 +6,7 @@ import {
   WEAPON_FALLBACKS,
 } from '../combat/CombatTuning.js';
 import { WEAPON_STATS } from '../entities/WeaponData.js';
-import {
-  FighterState,
-  AttackType,
-} from '../core/Constants.js';
+import { AttackType } from '../core/Constants.js';
 
 const _relativeVelocity = new THREE.Vector3();
 const _pointVelocity = new THREE.Vector3();
@@ -117,6 +114,14 @@ export class FighterSim extends FighterCore {
     return target.copy(_weaponTip);
   }
 
+  getBodyAnchorWorldPosition(target = new THREE.Vector3()) {
+    const sampledAnchor = this.authoritativeTracks?.bodyAnchorOffset;
+    if (Array.isArray(sampledAnchor) && sampledAnchor.length === 3) {
+      return this._localToWorld(_sampledBase.fromArray(sampledAnchor), target);
+    }
+    return super.getBodyAnchorWorldPosition(target);
+  }
+
   _getDebugSnapshotExtras() {
     return { headless: true };
   }
@@ -131,43 +136,7 @@ export class FighterSim extends FighterCore {
   startRagdoll() {}
 
   _updateVirtualClipName() {
-    switch (this.state) {
-      case FighterState.BLOCK:
-      case FighterState.PARRY:
-      case FighterState.PARRY_SUCCESS:
-        this.activeClipName = 'block_parry';
-        break;
-      case FighterState.BLOCK_STUN:
-        this.activeClipName = 'block_knockback';
-        break;
-      case FighterState.CLASH:
-      case FighterState.HIT_STUN:
-      case FighterState.PARRIED_STUN:
-        this.activeClipName = 'clash_knockback';
-        break;
-      case FighterState.WALK_FORWARD:
-        this.activeClipName = 'walk_forward';
-        break;
-      case FighterState.WALK_BACK:
-        this.activeClipName = 'walk_backward';
-        break;
-      case FighterState.SIDESTEP:
-        this.activeClipName = this.fsm.sidestepDirection > 0 ? 'strafe_right' : 'strafe_left';
-        break;
-      case FighterState.DODGE:
-        this.activeClipName = 'backstep';
-        break;
-      case FighterState.ATTACK_ACTIVE:
-        this.activeClipName = this.currentAttackType === AttackType.HEAVY
-          ? 'attack_heavy'
-          : this.currentAttackType === AttackType.THRUST
-            ? 'attack_thrust'
-            : 'attack_quick';
-        break;
-      default:
-        this.activeClipName = 'idle';
-        break;
-    }
+    this.activeClipName = this._getPresentationClip((...names) => names[0]).clipName;
   }
 
   _computeWeaponPose(baseTarget, tipTarget) {

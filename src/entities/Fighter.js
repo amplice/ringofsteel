@@ -486,9 +486,7 @@ export class Fighter extends FighterCore {
       case FighterState.PARRY_SUCCESS:
       case FighterState.PARRIED_STUN:
       case FighterState.HIT_STUN:
-      case FighterState.DODGE:
       case FighterState.CLASH:
-      case FighterState.SIDESTEP:
       case FighterState.DYING:
         return true;
       default:

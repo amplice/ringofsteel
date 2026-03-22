@@ -12,6 +12,9 @@ export class OnlineSession extends EventTarget {
     this.lastLobbyState = null;
     this.lastLobbyList = [];
     this.lastSnapshot = null;
+    this.pingMs = null;
+    this._pingTimer = null;
+    this._lastPingSentAt = null;
     this._wireClientEvents();
   }
 
@@ -19,16 +22,20 @@ export class OnlineSession extends EventTarget {
     const welcome = await this.client.connect(this.url);
     this.connected = true;
     this.clientId = welcome.clientId;
+    this._startPingLoop();
     return welcome;
   }
 
   disconnect() {
+    this._stopPingLoop();
     this.client.disconnect();
     this.connected = false;
     this.lobbyCode = null;
     this.lastLobbyState = null;
     this.lastLobbyList = [];
     this.lastSnapshot = null;
+    this.pingMs = null;
+    this._lastPingSentAt = null;
   }
 
   async createLobby(characterId = null, visibility = 'private') {
@@ -78,7 +85,9 @@ export class OnlineSession extends EventTarget {
   }
 
   ping() {
-    this.client.ping();
+    const sentAt = Date.now();
+    this._lastPingSentAt = sentAt;
+    this.client.ping(sentAt);
   }
 
   _wireClientEvents() {
@@ -91,6 +100,9 @@ export class OnlineSession extends EventTarget {
 
     rebroadcast('close', () => {
       this.connected = false;
+      this._stopPingLoop();
+      this.pingMs = null;
+      this._lastPingSentAt = null;
     });
     rebroadcast('error');
     rebroadcast('lobby_state', (detail) => {
@@ -107,6 +119,21 @@ export class OnlineSession extends EventTarget {
       this.lastSnapshot = detail.snapshot;
     });
     rebroadcast('pong');
+    this.client.addEventListener('pong', (event) => {
+      const detail = event.detail ?? {};
+      const sentAt = Number(detail.sentAt);
+      if (!Number.isFinite(sentAt)) return;
+      const rtt = Math.max(0, Date.now() - sentAt);
+      this.pingMs = this.pingMs === null
+        ? rtt
+        : Math.round(this.pingMs * 0.7 + rtt * 0.3);
+      this.dispatchEvent(new CustomEvent('ping_update', {
+        detail: {
+          pingMs: this.pingMs,
+          rtt,
+        },
+      }));
+    });
   }
 
   async _ensureConnected() {
@@ -135,5 +162,20 @@ export class OnlineSession extends EventTarget {
 
       this.addEventListener(type, handler);
     });
+  }
+
+  _startPingLoop() {
+    this._stopPingLoop();
+    this.ping();
+    this._pingTimer = window.setInterval(() => {
+      if (!this.connected) return;
+      this.ping();
+    }, 2000);
+  }
+
+  _stopPingLoop() {
+    if (!this._pingTimer) return;
+    window.clearInterval(this._pingTimer);
+    this._pingTimer = null;
   }
 }

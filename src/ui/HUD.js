@@ -9,6 +9,7 @@ export class HUD {
     this.onlineStrip = document.getElementById('online-hud-strip');
     this.onlineStatus = document.getElementById('online-hud-status');
     this.onlineCode = document.getElementById('online-hud-code');
+    this.onlinePing = document.getElementById('online-hud-ping');
   }
 
   show() {
@@ -25,11 +26,12 @@ export class HUD {
     this.el.style.display = 'none';
   }
 
-  setOnlineMeta({ visible = false, status = 'Offline', code = '------' } = {}) {
-    if (!this.onlineStrip || !this.onlineStatus || !this.onlineCode) return;
+  setOnlineMeta({ visible = false, status = 'Offline', code = '------', pingMs = null } = {}) {
+    if (!this.onlineStrip || !this.onlineStatus || !this.onlineCode || !this.onlinePing) return;
     this.onlineStrip.style.display = visible ? 'flex' : 'none';
     this.onlineStatus.textContent = status;
     this.onlineCode.textContent = code || '------';
+    this.onlinePing.textContent = Number.isFinite(pingMs) ? `${Math.round(pingMs)} ms` : '--';
   }
 
   updateRoundPips(p1Wins, p2Wins) {

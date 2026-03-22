@@ -48,6 +48,7 @@ export class Game {
     this.onlineMatchPlayers = null;
     this._suppressOnlineClose = false;
     this.onlinePendingMatchResult = null;
+    this.onlinePingMs = null;
     this._charCache = {};
 
     this.gameState = GameState.TITLE;
@@ -460,6 +461,10 @@ export class Game {
     session.addEventListener('state_snapshot', (event) => {
       this._handleOnlineStateSnapshot(event.detail?.snapshot);
     });
+    session.addEventListener('ping_update', (event) => {
+      this.onlinePingMs = event.detail?.pingMs ?? null;
+      this._updateHUD();
+    });
     session.addEventListener('combat_event', (event) => {
       const combatEvent = event.detail?.event;
       if (combatEvent) {
@@ -553,6 +558,7 @@ export class Game {
       visible: true,
       status: this.onlineLocalSlot === 0 ? 'ONLINE P1' : 'ONLINE P2',
       code: this.onlineSession?.lobbyCode ?? '------',
+      pingMs: this.onlinePingMs,
     });
     this.ui.hud.showRoundAnnounce(this.currentRound);
     this.input.clearBuffers();
@@ -605,6 +611,7 @@ export class Game {
     this.onlineLocalSlot = null;
     this.onlineMatchPlayers = null;
     this.onlinePendingMatchResult = null;
+    this.onlinePingMs = null;
     this.ui.select.setOnlineBusy(false);
     this.ui.select.setOnlineLocked(false);
     this.ui.select.clearOnlineLobbyInfo();
@@ -634,6 +641,7 @@ export class Game {
     this.onlineLocalSlot = null;
     this.onlineMatchPlayers = null;
     this.onlinePendingMatchResult = null;
+    this.onlinePingMs = null;
   }
 
   _startOnlineLobbyRefresh() {
@@ -772,11 +780,13 @@ export class Game {
         this.screenEffects.stopKillEffects();
         this._killRealStart = null;
 
-        if (this.fighter2 && this.fighter2.damageSystem.isDead()) {
-          this.p1Score++;
-        }
-        if (this.fighter1 && this.fighter1.damageSystem.isDead()) {
-          this.p2Score++;
+        if (this.mode !== 'online' || this.matchSim) {
+          if (this.fighter2 && this.fighter2.damageSystem.isDead()) {
+            this.p1Score++;
+          }
+          if (this.fighter1 && this.fighter1.damageSystem.isDead()) {
+            this.p2Score++;
+          }
         }
 
         this.gameState = GameState.ROUND_END;
@@ -1013,6 +1023,14 @@ export class Game {
   _updateHUD() {
     if (!this.fighter1 || !this.fighter2) return;
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
+    if (this.mode === 'online' && !this.matchSim) {
+      this.ui.hud.setOnlineMeta({
+        visible: true,
+        status: this.onlineLocalSlot === 0 ? 'ONLINE P1' : 'ONLINE P2',
+        code: this.onlineSession?.lobbyCode ?? '------',
+        pingMs: this.onlinePingMs,
+      });
+    }
   }
 
 }

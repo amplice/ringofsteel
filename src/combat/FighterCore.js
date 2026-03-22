@@ -411,6 +411,8 @@ export class FighterCore {
     this.fsm.stateFrames = snapshot.stateFrames ?? this.fsm.stateFrames;
     this.fsm.stateDuration = snapshot.stateDuration ?? this.fsm.stateDuration;
     this.fsm.currentAttackType = snapshot.currentAttackType ?? null;
+    this.fsm.sidestepDirection = snapshot.sidestepDirection ?? this.fsm.sidestepDirection;
+    this.fsm.sidestepPhase = snapshot.sidestepPhase ?? this.fsm.sidestepPhase;
     this.fsm.currentAttackData = (this.fsm.currentAttackType && getAttackDataForType)
       ? getAttackDataForType(this.fsm.currentAttackType)
       : null;

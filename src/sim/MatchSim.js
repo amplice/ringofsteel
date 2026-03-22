@@ -142,6 +142,8 @@ export class MatchSim {
       stateFrames: fighter.stateFrames,
       stateDuration: fighter.fsm.stateDuration,
       currentAttackType: fighter.currentAttackType,
+      sidestepDirection: fighter.fsm.sidestepDirection,
+      sidestepPhase: fighter.fsm.sidestepPhase,
       hitApplied: fighter.hitApplied,
       position: {
         x: fighter.position.x,

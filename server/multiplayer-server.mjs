@@ -30,6 +30,28 @@ const EMPTY_LOBBY_TTL_MS = Number(process.env.EMPTY_LOBBY_TTL_MS || 30000);
 const PUBLIC_LOBBY_IDLE_TTL_MS = Number(process.env.PUBLIC_LOBBY_IDLE_TTL_MS || 10 * 60 * 1000);
 const PRIVATE_LOBBY_IDLE_TTL_MS = Number(process.env.PRIVATE_LOBBY_IDLE_TTL_MS || 30 * 60 * 1000);
 const MATCH_COMPLETE_TTL_MS = Number(process.env.MATCH_COMPLETE_TTL_MS || 30000);
+const SERVER_INSTANCE_ID = crypto.randomUUID().slice(0, 8);
+
+const metrics = {
+  startedAt: Date.now(),
+  totalConnections: 0,
+  currentConnections: 0,
+  totalLobbiesCreated: 0,
+  totalMatchesStarted: 0,
+  totalMatchesCompleted: 0,
+  totalDisconnects: 0,
+  totalErrors: 0,
+  totalPings: 0,
+};
+
+function log(event, data = null) {
+  const timestamp = new Date().toISOString();
+  if (data == null) {
+    console.log(`[multiplayer ${timestamp}] ${event}`);
+    return;
+  }
+  console.log(`[multiplayer ${timestamp}] ${event} ${JSON.stringify(data)}`);
+}
 
 class MatchRoom {
   constructor(lobby) {
@@ -51,6 +73,16 @@ class MatchRoom {
     this.sim = new MatchSim({ fighter1, fighter2 });
     this.sim.startRound(FIGHT_START_DISTANCE);
     this.lobby.phase = 'match_running';
+    metrics.totalMatchesStarted++;
+    log('match_started', {
+      code: this.lobby.code,
+      roundNumber: this.roundNumber,
+      players: this.lobby.players.map((player) => ({
+        slot: player.slot,
+        id: player.id,
+        characterId: player.characterId,
+      })),
+    });
 
     for (const player of this.lobby.players) {
       this.latestInputs.set(player.id, createEmptyInputFrame(0));
@@ -169,6 +201,13 @@ class MatchRoom {
       });
 
       if (phase === 'match_complete') {
+        metrics.totalMatchesCompleted++;
+        log('match_completed', {
+          code: this.lobby.code,
+          scores: this.scores,
+          winner: matchWinner + 1,
+          killReason: step.killReason,
+        });
         this.stop('match_complete');
         return;
       }
@@ -207,6 +246,12 @@ class LobbyManager {
       room: null,
     };
     this.lobbies.set(code, lobby);
+    metrics.totalLobbiesCreated++;
+    log('lobby_created', {
+      code,
+      visibility,
+      hostId: client.id,
+    });
     client.lobbyCode = code;
     client.slot = 0;
     return lobby;
@@ -224,6 +269,12 @@ class LobbyManager {
     this._touchLobby(lobby);
     client.lobbyCode = code;
     client.slot = slot;
+    log('lobby_joined', {
+      code,
+      clientId: client.id,
+      slot,
+      visibility: lobby.visibility,
+    });
     return lobby;
   }
 
@@ -315,6 +366,10 @@ class LobbyManager {
       lobby.room.stop('disconnect');
       lobby.room = null;
       this.lobbies.delete(code);
+      log('match_disconnected', {
+        code,
+        disconnectedClientId: client.id,
+      });
       for (const socket of remainingSockets) {
         try {
           socket.close(4000, 'Match closed');
@@ -332,9 +387,15 @@ class LobbyManager {
     this._touchLobby(lobby);
     if (lobby.players.every((player) => !player.connected)) {
       this.lobbies.delete(code);
+      log('lobby_removed_empty', { code });
       return null;
     }
     lobby.phase = lobby.players.length >= 2 ? 'match_pending' : 'lobby';
+    log('lobby_player_left', {
+      code,
+      disconnectedClientId: client.id,
+      remainingPlayers: lobby.players.length,
+    });
     return lobby;
   }
 
@@ -394,12 +455,14 @@ class LobbyManager {
       if (connectedPlayers === 0 && idleMs >= EMPTY_LOBBY_TTL_MS) {
         if (lobby.room) lobby.room.stop('cleanup');
         this.lobbies.delete(code);
+        log('lobby_swept_empty', { code });
         continue;
       }
 
       if (lobby.phase === 'match_complete' && idleMs >= MATCH_COMPLETE_TTL_MS) {
         if (lobby.room) lobby.room.stop('cleanup');
         this.lobbies.delete(code);
+        log('lobby_swept_match_complete', { code, idleMs });
         continue;
       }
 
@@ -409,6 +472,7 @@ class LobbyManager {
           : PRIVATE_LOBBY_IDLE_TTL_MS;
         if (idleMs >= idleLimit) {
           this.lobbies.delete(code);
+          log('lobby_swept_idle', { code, visibility: lobby.visibility, idleMs });
         }
       }
     }
@@ -433,6 +497,19 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ ok: true }));
     return;
   }
+  if (req.url === '/metrics') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      ok: true,
+      instanceId: SERVER_INSTANCE_ID,
+      uptimeMs: Date.now() - metrics.startedAt,
+      ...metrics,
+      activeLobbies: lobbyManager.lobbies.size,
+      activeMatches: [...lobbyManager.lobbies.values()].filter((lobby) => Boolean(lobby.room)).length,
+      publicLobbies: lobbyManager.listPublicLobbies().length,
+    }));
+    return;
+  }
   if (req.url === '/') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
@@ -440,6 +517,7 @@ const server = http.createServer((req, res) => {
       ok: true,
       websocketPath: '/ws',
       publicLobbySupport: true,
+      metricsPath: '/metrics',
     }));
     return;
   }
@@ -460,7 +538,10 @@ function broadcastPublicLobbyList() {
 
 wss.on('connection', (socket) => {
   connectedClients.add(socket);
+  metrics.totalConnections++;
+  metrics.currentConnections = connectedClients.size;
   socket.id = crypto.randomUUID();
+  log('client_connected', { clientId: socket.id, currentConnections: metrics.currentConnections });
   send(socket, {
     type: ServerMessageType.WELCOME,
     clientId: socket.id,
@@ -521,6 +602,7 @@ wss.on('connection', (socket) => {
           break;
         }
         case ClientMessageType.PING:
+          metrics.totalPings++;
           send(socket, {
             type: ServerMessageType.PONG,
             sentAt: message.sentAt ?? null,
@@ -529,6 +611,11 @@ wss.on('connection', (socket) => {
           break;
       }
     } catch (err) {
+      metrics.totalErrors++;
+      log('client_error', {
+        clientId: socket.id,
+        message: err instanceof Error ? err.message : 'Unknown server error.',
+      });
       send(socket, {
         type: ServerMessageType.ERROR,
         message: err instanceof Error ? err.message : 'Unknown server error.',
@@ -538,7 +625,14 @@ wss.on('connection', (socket) => {
 
   socket.on('close', () => {
     connectedClients.delete(socket);
+    metrics.totalDisconnects++;
+    metrics.currentConnections = connectedClients.size;
     const lobby = lobbyManager.disconnect(socket);
+    log('client_disconnected', {
+      clientId: socket.id,
+      code: socket.lobbyCode ?? null,
+      currentConnections: metrics.currentConnections,
+    });
     if (lobby) broadcastLobby(lobby);
     broadcastPublicLobbyList();
   });
@@ -550,5 +644,27 @@ setInterval(() => {
 }, LOBBY_SWEEP_INTERVAL_MS).unref();
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[multiplayer] server listening on ws://0.0.0.0:${PORT}/ws`);
+  log('server_listening', {
+    port: PORT,
+    wsUrl: `ws://0.0.0.0:${PORT}/ws`,
+    instanceId: SERVER_INSTANCE_ID,
+  });
 });
+
+function shutdown(signal) {
+  log('server_shutdown', { signal, currentConnections: connectedClients.size });
+  for (const socket of connectedClients) {
+    try {
+      socket.close(1012, 'Server restarting');
+    } catch {
+      // Ignore closing errors during shutdown.
+    }
+  }
+  server.close(() => {
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

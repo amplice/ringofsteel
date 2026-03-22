@@ -10,6 +10,7 @@ It exposes:
 
 - health check: `/health`
 - info endpoint: `/`
+- metrics endpoint: `/metrics`
 - websocket endpoint: `/ws`
 
 ## Deploy Shape
@@ -63,6 +64,7 @@ Default behavior:
 - waiting public lobbies expire after inactivity
 - waiting private lobbies expire later
 - completed matches are cleaned up automatically
+- graceful shutdown closes clients with a restart code so the frontend can show a clearer message
 
 ## Current Intended UX
 

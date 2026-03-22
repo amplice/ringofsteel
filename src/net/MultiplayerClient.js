@@ -35,9 +35,15 @@ export class MultiplayerClient extends EventTarget {
         this.dispatchEvent(new CustomEvent(payload.type, { detail: payload }));
       });
 
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
         this.connected = false;
-        this.dispatchEvent(new Event('close'));
+        this.dispatchEvent(new CustomEvent('close', {
+          detail: {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+          },
+        }));
       });
 
       socket.addEventListener('error', (err) => {

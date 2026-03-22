@@ -444,9 +444,16 @@ export class Game {
       this.ui.select.setOnlineStatus(`ERROR: ${String(message).toUpperCase()}`);
     });
 
-    session.addEventListener('close', () => {
+    session.addEventListener('close', (event) => {
       if (this._suppressOnlineClose) return;
-      this._handleOnlineDisconnect('DISCONNECTED FROM SERVER.');
+      const code = event.detail?.code ?? null;
+      const reason = event.detail?.reason ?? '';
+      const message = code === 1012
+        ? 'SERVER RESTARTED. REJOIN A MATCH.'
+        : reason
+          ? `DISCONNECTED: ${String(reason).toUpperCase()}`
+          : 'DISCONNECTED FROM SERVER.';
+      this._handleOnlineDisconnect(message);
     });
 
     session.addEventListener('lobby_list', (event) => {

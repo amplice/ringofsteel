@@ -38,6 +38,30 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
+function summarizeRecentEvents(events = []) {
+  return events.map((event) => ({
+    frame: event.frame,
+    kind: event.kind,
+    actor: event.actor,
+    result: event.result ?? null,
+    attackType: event.attackType ?? null,
+    otherAttackType: event.otherAttackType ?? null,
+    opponent: event.opponent ?? null,
+  }));
+}
+
+function classifyKillSetup(trace) {
+  const events = trace?.killer?.recentEvents ?? [];
+  const killFrame = trace?.frame ?? Number.MAX_SAFE_INTEGER;
+  const recentWindow = events.filter((event) => (killFrame - event.frame) <= 90);
+  if (trace?.reason === 'ring_out') return 'ring_out';
+  if (recentWindow.some((event) => event.kind === 'parry_success')) return 'parry_punish';
+  if (recentWindow.some((event) => event.kind === 'clash_state')) return 'clash_followup';
+  if (recentWindow.some((event) => event.kind === 'sidestep')) return 'sidestep_followup';
+  if (recentWindow.some((event) => event.kind === 'backstep')) return 'backstep_followup';
+  return 'neutral';
+}
+
 function spawnProcess(command, args, extraEnv = {}) {
   const isWinNpm = process.platform === 'win32' && command === 'npm';
   const resolvedCommand = isWinNpm ? 'cmd.exe' : command;
@@ -209,6 +233,8 @@ class OnlineBotClient {
     this._decisionTick = 0;
     this._staleTicks = 0;
     this._lastProgressSignature = '0:0';
+    this._recentEventsByPlayer = new Map();
+    this._prevSnapshotByPlayer = new Map();
   }
 
   async connect() {
@@ -272,6 +298,8 @@ class OnlineBotClient {
       case 'match_start':
         this.phase = message.phase ?? 'match_running';
         this.players = message.players ?? this.players;
+        this._recentEventsByPlayer.clear();
+        this._prevSnapshotByPlayer.clear();
         {
           const self = message.players?.find((player) => player.id === this.clientId);
           if (self) this.slot = self.slot;
@@ -287,6 +315,7 @@ class OnlineBotClient {
         break;
       case 'combat_event':
         this.metrics.combatEvents++;
+        this._recordCombatEvent(message);
         break;
       case 'match_state':
         this.phase = message.phase ?? this.phase;
@@ -335,8 +364,100 @@ class OnlineBotClient {
 
     const selfSnapshot = snapshot.fighters?.find((fighter) => fighter.playerIndex === this.slot);
     const opponentSnapshot = snapshot.fighters?.find((fighter) => fighter.playerIndex !== this.slot);
+    if (selfSnapshot) this._recordSnapshotTransitions(selfSnapshot);
+    if (opponentSnapshot) this._recordSnapshotTransitions(opponentSnapshot);
     if (selfSnapshot) applyShadowSnapshot(this.shadowSelf, selfSnapshot);
     if (opponentSnapshot) applyShadowSnapshot(this.shadowOpponent, opponentSnapshot);
+  }
+
+  _recentEvents(playerIndex) {
+    if (!this._recentEventsByPlayer.has(playerIndex)) {
+      this._recentEventsByPlayer.set(playerIndex, []);
+    }
+    return this._recentEventsByPlayer.get(playerIndex);
+  }
+
+  _pushRecentEvent(playerIndex, event) {
+    const events = this._recentEvents(playerIndex);
+    events.push(event);
+    while (events.length > 24) events.shift();
+  }
+
+  _recordCombatEvent(message) {
+    const event = message.event;
+    if (!event || event.type !== 'combat_result') return;
+    this._pushRecentEvent(event.attackerIndex, {
+      frame: message.frameCount ?? this.lastSnapshot?.frameCount ?? 0,
+      kind: 'combat_result',
+      actor: event.attackerIndex + 1,
+      opponent: event.defenderIndex + 1,
+      result: event.result ?? null,
+      attackType: event.attackerType ?? null,
+      otherAttackType: event.defenderType ?? null,
+    });
+    this._pushRecentEvent(event.defenderIndex, {
+      frame: message.frameCount ?? this.lastSnapshot?.frameCount ?? 0,
+      kind: 'combat_result',
+      actor: event.defenderIndex + 1,
+      opponent: event.attackerIndex + 1,
+      result: event.result ?? null,
+      attackType: event.defenderType ?? null,
+      otherAttackType: event.attackerType ?? null,
+    });
+  }
+
+  _recordSnapshotTransitions(snapshot) {
+    const prev = this._prevSnapshotByPlayer.get(snapshot.playerIndex);
+    if (!prev || prev.state !== snapshot.state) {
+      let kind = null;
+      if (snapshot.state === 'attack_active') kind = 'attack_start';
+      else if (snapshot.state === 'sidestep') kind = 'sidestep';
+      else if (snapshot.state === 'dodge') kind = 'backstep';
+      else if (snapshot.state === 'parry') kind = 'parry_start';
+      else if (snapshot.state === 'parry_success') kind = 'parry_success';
+      else if (snapshot.state === 'clash') kind = 'clash_state';
+      if (kind) {
+        this._pushRecentEvent(snapshot.playerIndex, {
+          frame: snapshot.frameCount ?? this.lastSnapshot?.frameCount ?? 0,
+          kind,
+          actor: snapshot.playerIndex + 1,
+          opponent: snapshot.playerIndex === 0 ? 2 : 1,
+          attackType: snapshot.currentAttackType ?? null,
+        });
+      }
+    }
+    this._prevSnapshotByPlayer.set(snapshot.playerIndex, {
+      state: snapshot.state,
+      currentAttackType: snapshot.currentAttackType,
+    });
+  }
+
+  buildKillTrace(message) {
+    const winner = message.matchWinner ?? message.winner ?? null;
+    const snapshot = message.snapshot ?? this.lastSnapshot;
+    if (!winner || !snapshot?.fighters) return null;
+    const killerIndex = winner - 1;
+    const victimIndex = killerIndex === 0 ? 1 : 0;
+    const killer = snapshot.fighters.find((fighter) => fighter.playerIndex === killerIndex);
+    const victim = snapshot.fighters.find((fighter) => fighter.playerIndex === victimIndex);
+    return {
+      frame: snapshot.frameCount ?? null,
+      winner,
+      reason: message.killReason ?? null,
+      killer: {
+        player: winner,
+        charId: this.players?.find((player) => player.slot === killerIndex)?.characterId ?? null,
+        attackType: killer?.currentAttackType ?? null,
+        state: killer?.state ?? null,
+        recentEvents: summarizeRecentEvents(this._recentEvents(killerIndex)),
+      },
+      victim: {
+        player: victimIndex + 1,
+        charId: this.players?.find((player) => player.slot === victimIndex)?.characterId ?? null,
+        state: victim?.state ?? null,
+        recentEvents: summarizeRecentEvents(this._recentEvents(victimIndex)),
+      },
+    };
   }
 
   _startThinkLoop() {
@@ -549,6 +670,7 @@ async function runMatch({ url, p1Profile, p2Profile, p1Char, p2Char, p1Brain, p2
         scores: message.scores ?? null,
         killReason: message.killReason ?? null,
         lastFrame: message.snapshot?.frameCount ?? bot1.lastSnapshot?.frameCount ?? bot2.lastSnapshot?.frameCount ?? null,
+        killTrace: bot1.buildKillTrace(message) ?? bot2.buildKillTrace(message),
         p1Brain,
         p2Brain,
         bot1: bot1.metrics,
@@ -632,6 +754,16 @@ async function main() {
         averageLastFrame: Math.round(results.reduce((sum, result) => sum + (result.lastFrame || 0), 0) / Math.max(results.length, 1)),
         killReasons: results.reduce((acc, result) => {
           const key = result.killReason || 'unknown';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+        killAttackTypes: results.reduce((acc, result) => {
+          const key = result.killTrace?.killer?.attackType || 'unknown';
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+        killSetups: results.reduce((acc, result) => {
+          const key = classifyKillSetup(result.killTrace);
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {}),

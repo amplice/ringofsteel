@@ -33,6 +33,29 @@ function withSeededRandom(seed, fn) {
   }
 }
 
+function summarizeRecentEvents(events = []) {
+  return events.map((event) => ({
+    frame: event.frame,
+    kind: event.kind,
+    actor: event.actor,
+    result: event.result ?? null,
+    attackType: event.attackType ?? null,
+    otherAttackType: event.otherAttackType ?? null,
+    opponent: event.opponent ?? null,
+  }));
+}
+
+function classifyKillSetup(trace) {
+  const context = trace?.killer?.context;
+  if (!context) return 'unknown';
+  if (trace.reason === 'ring_out') return 'ring_out';
+  if (context.parrySuccessFramesAgo != null && context.parrySuccessFramesAgo <= 45) return 'parry_punish';
+  if (context.clashFramesAgo != null && context.clashFramesAgo <= 45) return 'clash_followup';
+  if (context.sidestepFramesAgo != null && context.sidestepFramesAgo <= 45) return 'sidestep_followup';
+  if (context.backstepFramesAgo != null && context.backstepFramesAgo <= 45) return 'backstep_followup';
+  return 'neutral';
+}
+
 export const DEFAULT_TOURNAMENT_CONFIG = Object.freeze({
   profiles: ['baseline', 'aggressor', 'turtler', 'duelist', 'evasive', 'punisher'],
   characters: ['spearman', 'ronin'],
@@ -198,6 +221,13 @@ export class SelfPlayRunner {
         prevState: fighter.state,
         prevHitApplied: fighter.hitApplied,
         lastSidestepFrame: -9999,
+        lastBackstepFrame: -9999,
+        lastParryFrame: -9999,
+        lastParrySuccessFrame: -9999,
+        lastClashFrame: -9999,
+        lastAttackStartFrame: -9999,
+        lastAttackType: null,
+        recentEvents: [],
       });
     }
 
@@ -239,13 +269,16 @@ export class SelfPlayRunner {
       killReason: state.killReason,
       frames: state.frameCount,
       metrics: state.metrics,
+      killTrace: state.killTrace ?? null,
     };
   }
 
   _createFighter(playerIndex, charId) {
     const charDef = CHARACTER_DEFS[charId];
     const animData = this._charCache.get(charId);
-    return new Fighter(playerIndex, playerIndex === 0 ? 0x991111 : 0x112266, charDef, animData);
+    const fighter = new Fighter(playerIndex, playerIndex === 0 ? 0x991111 : 0x112266, charDef, animData);
+    fighter.charId = charId;
+    return fighter;
   }
 
   _createMatchMetrics(p1Profile, p2Profile, p1Char, p2Char) {
@@ -287,6 +320,7 @@ export class SelfPlayRunner {
       resultCounts: { clash: 0, blocked: 0, parried: 0, clean_hit: 0 },
       p1: this._createSideMetrics(p1Profile, p1Char),
       p2: this._createSideMetrics(p2Profile, p2Char),
+      killTraces: [],
     };
   }
 
@@ -315,18 +349,59 @@ export class SelfPlayRunner {
         state.hitstopFrames = Math.max(state.hitstopFrames, event.hitstopFrames);
       }
 
-      if (event.type !== 'combat_result') continue;
+      if (event.type === 'combat_result') {
+        state.metrics.resultCounts[event.result] = (state.metrics.resultCounts[event.result] || 0) + 1;
+        const attackerMetrics = event.attackerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
+        const defenderMetrics = event.defenderIndex === 0 ? state.metrics.p1 : state.metrics.p2;
+        const attackerFighter = state.fighters[event.attackerIndex];
+        const defenderFighter = state.fighters[event.defenderIndex];
+        const attackerTracker = state.trackers.get(attackerFighter);
+        const defenderTracker = state.trackers.get(defenderFighter);
 
-      state.metrics.resultCounts[event.result] = (state.metrics.resultCounts[event.result] || 0) + 1;
-      const attackerMetrics = event.attackerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
-      const defenderMetrics = event.defenderIndex === 0 ? state.metrics.p1 : state.metrics.p2;
+        attackerTracker?.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'combat_result',
+          actor: event.attackerIndex + 1,
+          opponent: event.defenderIndex + 1,
+          result: event.result,
+          attackType: event.attackerType ?? null,
+          otherAttackType: event.defenderType ?? null,
+        });
+        defenderTracker?.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'combat_result',
+          actor: event.defenderIndex + 1,
+          opponent: event.attackerIndex + 1,
+          result: event.result,
+          attackType: event.defenderType ?? null,
+          otherAttackType: event.attackerType ?? null,
+        });
 
-      if (event.result === HitResult.PARRIED) {
-        defenderMetrics.parrySuccesses++;
-      } else if (event.result === HitResult.BLOCKED) {
-        defenderMetrics.blockedHits++;
-      } else if (event.result === HitResult.CLEAN_HIT) {
-        attackerMetrics.cleanHits++;
+        if (event.result === HitResult.PARRIED) {
+          defenderMetrics.parrySuccesses++;
+        } else if (event.result === HitResult.BLOCKED) {
+          defenderMetrics.blockedHits++;
+        } else if (event.result === HitResult.CLEAN_HIT) {
+          attackerMetrics.cleanHits++;
+        }
+        continue;
+      }
+
+      if (event.type === 'ring_out') {
+        const winnerFighter = state.fighters[event.winnerIndex];
+        const loserFighter = state.fighters[event.loserIndex];
+        state.trackers.get(winnerFighter)?.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'ring_out',
+          actor: event.winnerIndex + 1,
+          opponent: event.loserIndex + 1,
+        });
+        state.trackers.get(loserFighter)?.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'ring_out',
+          actor: event.loserIndex + 1,
+          opponent: event.winnerIndex + 1,
+        });
       }
     }
   }
@@ -337,8 +412,8 @@ export class SelfPlayRunner {
   }
 
   _recordFighterTransitions(state, fighter, sideMetrics) {
-    const tracker = state.trackers.get(fighter);
-    if (!tracker) return;
+      const tracker = state.trackers.get(fighter);
+      if (!tracker) return;
 
     if (tracker.prevState !== fighter.state) {
       if (fighter.state === FighterState.ATTACK_ACTIVE) {
@@ -346,6 +421,15 @@ export class SelfPlayRunner {
         if (fighter.currentAttackType && fighter.currentAttackType in sideMetrics.attackTypes) {
           sideMetrics.attackTypes[fighter.currentAttackType]++;
         }
+        tracker.lastAttackStartFrame = state.frameCount;
+        tracker.lastAttackType = fighter.currentAttackType ?? null;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'attack_start',
+          actor: fighter.playerIndex + 1,
+          attackType: fighter.currentAttackType ?? null,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
       }
       if (tracker.prevState === FighterState.ATTACK_ACTIVE && !tracker.prevHitApplied) {
         sideMetrics.attacksWhiffed++;
@@ -353,13 +437,59 @@ export class SelfPlayRunner {
       if (fighter.state === FighterState.SIDESTEP) {
         sideMetrics.sidesteps++;
         tracker.lastSidestepFrame = state.frameCount;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'sidestep',
+          actor: fighter.playerIndex + 1,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
       }
-      if (fighter.state === FighterState.DODGE) sideMetrics.backsteps++;
-      if (fighter.state === FighterState.BLOCK) sideMetrics.blocks++;
-      if (fighter.state === FighterState.PARRY) sideMetrics.parries++;
-      if (fighter.state === FighterState.PARRY_SUCCESS) sideMetrics.parrySuccesses++;
-      if (fighter.state === FighterState.CLASH) sideMetrics.clashes++;
+      if (fighter.state === FighterState.DODGE) {
+        sideMetrics.backsteps++;
+        tracker.lastBackstepFrame = state.frameCount;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'backstep',
+          actor: fighter.playerIndex + 1,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
+      }
+      if (fighter.state === FighterState.BLOCK) {
+        sideMetrics.blocks++;
+      }
+      if (fighter.state === FighterState.PARRY) {
+        sideMetrics.parries++;
+        tracker.lastParryFrame = state.frameCount;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'parry_start',
+          actor: fighter.playerIndex + 1,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
+      }
+      if (fighter.state === FighterState.PARRY_SUCCESS) {
+        sideMetrics.parrySuccesses++;
+        tracker.lastParrySuccessFrame = state.frameCount;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'parry_success',
+          actor: fighter.playerIndex + 1,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
+      }
+      if (fighter.state === FighterState.CLASH) {
+        sideMetrics.clashes++;
+        tracker.lastClashFrame = state.frameCount;
+        tracker.recentEvents.push({
+          frame: state.frameCount,
+          kind: 'clash_state',
+          actor: fighter.playerIndex + 1,
+          opponent: fighter.playerIndex === 0 ? 2 : 1,
+        });
+      }
     }
+
+    tracker.recentEvents = tracker.recentEvents.filter((event) => (state.frameCount - event.frame) <= 180);
 
     tracker.prevState = fighter.state;
     tracker.prevHitApplied = fighter.hitApplied;
@@ -379,6 +509,7 @@ export class SelfPlayRunner {
     const killerMetrics = killer.playerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
     const victimMetrics = victim.playerIndex === 0 ? state.metrics.p1 : state.metrics.p2;
     const killerTracker = state.trackers.get(killer);
+    const victimTracker = state.trackers.get(victim);
     killerMetrics.kills++;
     victimMetrics.deaths++;
 
@@ -391,6 +522,42 @@ export class SelfPlayRunner {
     if (this._getFacingDot(killer, victim) < 0.55) {
       killerMetrics.offAngleKills++;
     }
+
+    const killTrace = {
+      frame: state.frameCount,
+      winner: state.winner,
+      reason,
+      killer: {
+        player: killer.playerIndex + 1,
+        charId: killer.charId,
+        profile: killerMetrics.profile,
+        attackType: killer.currentAttackType ?? killerTracker?.lastAttackType ?? null,
+        state: killer.state,
+        recentEvents: summarizeRecentEvents(killerTracker?.recentEvents ?? []),
+        context: {
+          sidestepFramesAgo: killerTracker ? state.frameCount - killerTracker.lastSidestepFrame : null,
+          backstepFramesAgo: killerTracker ? state.frameCount - killerTracker.lastBackstepFrame : null,
+          parrySuccessFramesAgo: killerTracker ? state.frameCount - killerTracker.lastParrySuccessFrame : null,
+          clashFramesAgo: killerTracker ? state.frameCount - killerTracker.lastClashFrame : null,
+          offAngle: this._getFacingDot(killer, victim) < 0.55,
+        },
+      },
+      victim: {
+        player: victim.playerIndex + 1,
+        charId: victim.charId,
+        profile: victimMetrics.profile,
+        state: victim.state,
+        recentEvents: summarizeRecentEvents(victimTracker?.recentEvents ?? []),
+        context: {
+          sidestepFramesAgo: victimTracker ? state.frameCount - victimTracker.lastSidestepFrame : null,
+          backstepFramesAgo: victimTracker ? state.frameCount - victimTracker.lastBackstepFrame : null,
+          parrySuccessFramesAgo: victimTracker ? state.frameCount - victimTracker.lastParrySuccessFrame : null,
+          clashFramesAgo: victimTracker ? state.frameCount - victimTracker.lastClashFrame : null,
+        },
+      },
+    };
+    state.killTrace = killTrace;
+    state.metrics.killTraces.push(killTrace);
   }
 
 
@@ -430,6 +597,11 @@ export class SelfPlayRunner {
         totalWhiffs: 0,
         totalAttacks: 0,
       },
+      killTraceSummary: {
+        byAttackType: {},
+        bySetup: {},
+        byClassMatchup: {},
+      },
       matchupRecords: {},
       findings: [],
     };
@@ -465,6 +637,16 @@ export class SelfPlayRunner {
         summary.globalMetrics.totalKills += metrics.kills;
         summary.globalMetrics.totalWhiffs += metrics.attacksWhiffed;
         summary.globalMetrics.totalAttacks += metrics.attacksStarted;
+      }
+
+      for (const round of match.rounds) {
+        if (!round.killTrace) continue;
+        const attackType = round.killTrace.killer.attackType ?? 'unknown';
+        const setup = classifyKillSetup(round.killTrace);
+        const matchup = `${round.killTrace.killer.charId}->${round.killTrace.victim.charId}`;
+        summary.killTraceSummary.byAttackType[attackType] = (summary.killTraceSummary.byAttackType[attackType] || 0) + 1;
+        summary.killTraceSummary.bySetup[setup] = (summary.killTraceSummary.bySetup[setup] || 0) + 1;
+        summary.killTraceSummary.byClassMatchup[matchup] = (summary.killTraceSummary.byClassMatchup[matchup] || 0) + 1;
       }
 
       const matchupKey = `${match.p1Char}:${match.p1Profile} vs ${match.p2Char}:${match.p2Profile}`;

@@ -13,7 +13,7 @@ function readJson(filePath) {
 
 function getLatestResultPath() {
   const files = fs.readdirSync(ANALYSIS_DIR)
-    .filter((name) => name.endsWith('.json'))
+    .filter((name) => name.endsWith('.json') && name.startsWith('selfplay-'))
     .map((name) => ({
       name,
       fullPath: path.join(ANALYSIS_DIR, name),
@@ -93,6 +93,11 @@ function main() {
   console.log(`Profile wins: ${JSON.stringify(summary.profileWins)}`);
   console.log(`Global whiff rate: ${pct(summary.globalMetrics.totalAttacks ? summary.globalMetrics.totalWhiffs / summary.globalMetrics.totalAttacks : 0)}`);
   console.log(`Global sidestep kill share: ${pct(summary.globalMetrics.totalKills ? summary.globalMetrics.sidestepKills / summary.globalMetrics.totalKills : 0)}`);
+  if (summary.killTraceSummary) {
+    console.log(`Kill attack types: ${JSON.stringify(summary.killTraceSummary.byAttackType ?? {})}`);
+    console.log(`Kill setups: ${JSON.stringify(summary.killTraceSummary.bySetup ?? {})}`);
+    console.log(`Kill class matchups: ${JSON.stringify(summary.killTraceSummary.byClassMatchup ?? {})}`);
+  }
 
   const byProfileChar = aggregateSides(matches, (side) => `${side.profile}[${side.charId}]`)
     .sort((a, b) => b.kills - a.kills);

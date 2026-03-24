@@ -67,8 +67,8 @@ export class Fighter extends FighterCore {
     this._playerMarker = this._createPlayerMarker();
     this.group.add(this._playerMarker);
 
-    // Knockback multiplier (set by Game on clash/block for heavy advantage)
-    this.knockbackMult = 1;
+    // Slide multiplier used by the sim during stun displacement.
+    this.slideMult = 1;
 
     // Ragdoll state
     this._ragdoll = null;

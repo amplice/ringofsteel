@@ -23,12 +23,23 @@ export const MOTION_THRESHOLDS = Object.freeze({
   weaponClashClosingDrive: 0.0025,
 });
 
-export const IMPACT_TUNING = Object.freeze({
+export const STUN_IMPACT_TUNING = Object.freeze({
   defaultAttackStrength: 1.0,
   defaultDefenseStoutness: 1.0,
   minScale: 0.85,
-  maxScale: 1.35,
+  maxScale: 2.5,
 });
+
+export const SLIDE_IMPACT_TUNING = Object.freeze({
+  defaultAttackStrength: 1.0,
+  defaultDefenseStoutness: 1.0,
+  minScale: 0.85,
+  maxScale: 2.5,
+});
+
+// Backward-compatible alias for older callers. New code should use the
+// explicit stun/slide helpers.
+export const IMPACT_TUNING = STUN_IMPACT_TUNING;
 
 export const FACING_TUNING = Object.freeze({
   postAttackTurnRate: 5.5,
@@ -87,9 +98,21 @@ export function getBodyRadius(charDef) {
   return BODY_COLLISION.defaultRadius;
 }
 
-export function getImpactScale(attackerCharDef, defenderCharDef, bonus = 1) {
-  const attackStrength = attackerCharDef?.attackStrength ?? IMPACT_TUNING.defaultAttackStrength;
-  const defenseStoutness = defenderCharDef?.defenseStoutness ?? IMPACT_TUNING.defaultDefenseStoutness;
+function getScaledImpact(attackerCharDef, defenderCharDef, bonus, tuning) {
+  const attackStrength = attackerCharDef?.attackStrength ?? tuning.defaultAttackStrength;
+  const defenseStoutness = defenderCharDef?.defenseStoutness ?? tuning.defaultDefenseStoutness;
   const rawScale = bonus * (attackStrength / defenseStoutness);
-  return Math.min(IMPACT_TUNING.maxScale, Math.max(IMPACT_TUNING.minScale, rawScale));
+  return Math.min(tuning.maxScale, Math.max(tuning.minScale, rawScale));
+}
+
+export function getImpactStunScale(attackerCharDef, defenderCharDef, bonus = 1) {
+  return getScaledImpact(attackerCharDef, defenderCharDef, bonus, STUN_IMPACT_TUNING);
+}
+
+export function getImpactSlideScale(attackerCharDef, defenderCharDef, bonus = 1) {
+  return getScaledImpact(attackerCharDef, defenderCharDef, bonus, SLIDE_IMPACT_TUNING);
+}
+
+export function getImpactScale(attackerCharDef, defenderCharDef, bonus = 1) {
+  return getImpactStunScale(attackerCharDef, defenderCharDef, bonus);
 }

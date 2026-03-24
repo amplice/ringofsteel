@@ -26,6 +26,7 @@ export class AIController {
     this._opponentLastState = null;
     this._opponentBlockCount = 0;
     this._opponentAttackCount = 0;
+    this._opponentLastBlockFrame = -9999;
     this._decayTimer = 0;
     this._selfLastState = null;
     this._selfWasAttacking = false;
@@ -33,6 +34,7 @@ export class AIController {
     this._opponentLastSidestepFrame = -9999;
     this._selfLastSidestepFrame = -9999;
     this._selfLastBackstepFrame = -9999;
+    this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
   }
 
@@ -91,6 +93,7 @@ export class AIController {
     if (state !== this._opponentLastState) {
       if (state === FighterState.BLOCK || state === FighterState.BLOCK_STUN) {
         this._opponentBlockCount++;
+        this._opponentLastBlockFrame = frameCount;
       }
       if (state === FighterState.ATTACK_ACTIVE) {
         this._opponentAttackCount++;
@@ -119,6 +122,9 @@ export class AIController {
       if (state === FighterState.DODGE) {
         this._selfLastBackstepFrame = frameCount;
         this._mobilityFatigue += 0.75;
+      }
+      if (state === FighterState.CLASH) {
+        this._selfLastClashFrame = frameCount;
       }
       this._selfLastState = state;
     }
@@ -173,6 +179,9 @@ export class AIController {
     const recentOpponentSidestep = frameCount - this._opponentLastSidestepFrame <= RECENT_OPPONENT_SIDESTEP_FRAMES;
     const repeatedSidestep = frameCount - this._selfLastSidestepFrame <= REPEAT_MOBILITY_FRAMES;
     const repeatedBackstep = frameCount - this._selfLastBackstepFrame <= REPEAT_MOBILITY_FRAMES;
+    const recentOpponentBlock = frameCount - this._opponentLastBlockFrame <= 42;
+    const recentSelfClash = frameCount - this._selfLastClashFrame <= 45;
+    const heavySpecialist = (p.heavyBias || 0) >= 0.3 || p.heavyMixup >= 0.7;
 
     const opponentAttacking = opponent.fsm.isAttacking;
     const opponentRecovering = false;
@@ -212,8 +221,18 @@ export class AIController {
 
       const blockRatio = this._getOpponentBlockRatio();
       const heavyBonus = blockRatio * p.heavyMixup;
+      const heavyContextBonus =
+        (opponentVulnerable ? 0.35 : 0) +
+        (recentSelfClash ? 0.45 : 0) +
+        ((opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN || recentOpponentBlock) ? 0.28 : 0) +
+        (heavySpecialist ? 0.18 : 0);
       scores.heavyAttack = (scores.heavyAttack || 0) +
-        this._scoreAttackOpportunity(fighter, AttackType.HEAVY, engagement, 0.15 + p.aggression * 0.2 + heavyBonus + (p.heavyBias || 0) + noise());
+        this._scoreAttackOpportunity(
+          fighter,
+          AttackType.HEAVY,
+          engagement,
+          0.15 + p.aggression * 0.2 + heavyBonus + heavyContextBonus + (p.heavyBias || 0) + noise(),
+        );
 
       if (closeRange) {
         scores.quickAttack += this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 0.2 + (p.quickBias || 0));
@@ -243,6 +262,9 @@ export class AIController {
 
     if (!inRange) {
       scores.moveForward = (scores.moveForward || 0) + 0.6 + p.aggression * 0.3 + (p.moveForwardBias || 0) + noise();
+      if (heavySpecialist && dist < ranges.engage + 0.9) {
+        scores.moveForward += 0.2;
+      }
     }
 
     if (closeRange && !nearEdge && !opponentVulnerable) {
@@ -283,7 +305,7 @@ export class AIController {
 
     if (recentOwnWhiff) {
       scores.quickAttack = (scores.quickAttack || 0) * 0.3;
-      scores.heavyAttack = (scores.heavyAttack || 0) * 0.2;
+      scores.heavyAttack = (scores.heavyAttack || 0) * (heavySpecialist ? 0.45 : 0.2);
       scores.thrustAttack = (scores.thrustAttack || 0) * 0.25;
       scores.sidestep = (scores.sidestep || 0) + 0.03;
       scores.moveBack = (scores.moveBack || 0) + 0.22;
@@ -472,6 +494,7 @@ export class AIController {
     this._opponentLastState = null;
     this._opponentBlockCount = 0;
     this._opponentAttackCount = 0;
+    this._opponentLastBlockFrame = -9999;
     this._decayTimer = 0;
     this._selfLastState = null;
     this._selfWasAttacking = false;
@@ -479,6 +502,7 @@ export class AIController {
     this._opponentLastSidestepFrame = -9999;
     this._selfLastSidestepFrame = -9999;
     this._selfLastBackstepFrame = -9999;
+    this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
   }
 }

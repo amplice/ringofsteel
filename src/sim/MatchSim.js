@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { HitResolver } from '../combat/HitResolver.js';
-import { getBodyRadius, getImpactScale } from '../combat/CombatTuning.js';
+import { getBodyRadius, getImpactSlideScale, getImpactStunScale } from '../combat/CombatTuning.js';
 import {
   FRAME_DURATION,
   FighterState,
@@ -10,7 +10,10 @@ import {
   ARENA_RADIUS,
   BLOCK_PUSHBACK_SPEED,
   KNOCKBACK_SLIDE_SPEED,
-  HEAVY_ADVANTAGE_MULT,
+  HEAVY_ADVANTAGE_STUN_MULT,
+  HEAVY_ADVANTAGE_SLIDE_MULT,
+  HEAVY_CLASH_STUN_MULT,
+  HEAVY_CLASH_SLIDE_MULT,
   CLASH_PUSHBACK_FRAMES,
   BLOCK_STUN_FRAMES,
   HIT_STUN_FRAMES,
@@ -178,15 +181,17 @@ export class MatchSim {
 
     if (defender.state === FighterState.BLOCK) {
       const isHeavy = attacker.fsm.currentAttackType === AttackType.HEAVY;
-      const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-      const mult = this._getImpactScale(attacker, defender, heavyBonus);
-      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * mult));
-      defender.knockbackMult = mult;
+      const stunBonus = isHeavy ? HEAVY_ADVANTAGE_STUN_MULT : 1;
+      const slideBonus = isHeavy ? HEAVY_ADVANTAGE_SLIDE_MULT : 1;
+      const stunScale = this._getImpactStunScale(attacker, defender, stunBonus);
+      const slideScale = this._getImpactSlideScale(attacker, defender, slideBonus);
+      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * stunScale));
+      defender.slideMult = slideScale;
     }
 
     const nx = dx / (dist || 0.01);
     const nz = dz / (dist || 0.01);
-    const pushbackScale = defender.knockbackMult || this._getImpactScale(attacker, defender);
+    const pushbackScale = defender.slideMult || this._getImpactSlideScale(attacker, defender);
     defender.position.x += nx * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
     defender.position.z += nz * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
   }
@@ -202,12 +207,12 @@ export class MatchSim {
     const nz = dz / dist;
 
     if (aStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (a.knockbackMult || 1) * dt;
+      const slide = KNOCKBACK_SLIDE_SPEED * (a.slideMult || 1) * dt;
       a.position.x -= nx * slide;
       a.position.z -= nz * slide;
     }
     if (bStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (b.knockbackMult || 1) * dt;
+      const slide = KNOCKBACK_SLIDE_SPEED * (b.slideMult || 1) * dt;
       b.position.x += nx * slide;
       b.position.z += nz * slide;
     }
@@ -264,14 +269,18 @@ export class MatchSim {
         const defType = result.defenderType;
         const atkHeavy = atkType === AttackType.HEAVY;
         const defHeavy = defType === AttackType.HEAVY;
-        const atkHeavyBonus = (defHeavy && !atkHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const defHeavyBonus = (atkHeavy && !defHeavy) ? HEAVY_ADVANTAGE_MULT : 1;
-        const atkMult = this._getImpactScale(defender, attacker, atkHeavyBonus);
-        const defMult = this._getImpactScale(attacker, defender, defHeavyBonus);
-        attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkMult));
-        defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defMult));
-        attacker.knockbackMult = atkMult;
-        defender.knockbackMult = defMult;
+        const atkStunBonus = (defHeavy && !atkHeavy) ? HEAVY_CLASH_STUN_MULT : 1;
+        const defStunBonus = (atkHeavy && !defHeavy) ? HEAVY_CLASH_STUN_MULT : 1;
+        const atkSlideBonus = (defHeavy && !atkHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
+        const defSlideBonus = (atkHeavy && !defHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
+        const atkStunScale = this._getImpactStunScale(defender, attacker, atkStunBonus);
+        const defStunScale = this._getImpactStunScale(attacker, defender, defStunBonus);
+        const atkSlideScale = this._getImpactSlideScale(defender, attacker, atkSlideBonus);
+        const defSlideScale = this._getImpactSlideScale(attacker, defender, defSlideBonus);
+        attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkStunScale));
+        defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defStunScale));
+        attacker.slideMult = atkSlideScale;
+        defender.slideMult = defSlideScale;
         this.events.push({
           type: 'combat_result',
           result: HitResult.CLASH,
@@ -289,9 +298,10 @@ export class MatchSim {
         break;
 
       case HitResult.PARRIED: {
-        const parryMult = this._getImpactScale(defender, attacker);
-        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryMult));
-        attacker.knockbackMult = parryMult;
+        const parryStunScale = this._getImpactStunScale(defender, attacker);
+        const parrySlideScale = this._getImpactSlideScale(defender, attacker);
+        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryStunScale));
+        attacker.slideMult = parrySlideScale;
         defender.fsm.applyParrySuccess();
         this.events.push({
           type: 'combat_result',
@@ -307,11 +317,13 @@ export class MatchSim {
 
       case HitResult.BLOCKED: {
         const isHeavy = result.attackerType === AttackType.HEAVY;
-        const heavyBonus = isHeavy ? HEAVY_ADVANTAGE_MULT : 1;
-        const blockMult = this._getImpactScale(attacker, defender, heavyBonus);
+        const stunBonus = isHeavy ? HEAVY_ADVANTAGE_STUN_MULT : 1;
+        const slideBonus = isHeavy ? HEAVY_ADVANTAGE_SLIDE_MULT : 1;
+        const blockStunScale = this._getImpactStunScale(attacker, defender, stunBonus);
+        const blockSlideScale = this._getImpactSlideScale(attacker, defender, slideBonus);
         attacker.fsm.applyBlockStun();
-        defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockMult));
-        defender.knockbackMult = blockMult;
+        defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockStunScale));
+        defender.slideMult = blockSlideScale;
         this.events.push({
           type: 'combat_result',
           result: HitResult.BLOCKED,
@@ -326,9 +338,10 @@ export class MatchSim {
 
       case HitResult.CLEAN_HIT: {
         const isKill = defender.damageSystem.applyDamage();
-        const hitMult = this._getImpactScale(attacker, defender);
-        defender.fsm.applyHitStun(Math.round(HIT_STUN_FRAMES * hitMult));
-        defender.knockbackMult = hitMult;
+        const hitStunScale = this._getImpactStunScale(attacker, defender);
+        const hitSlideScale = this._getImpactSlideScale(attacker, defender);
+        defender.fsm.applyHitStun(Math.round(HIT_STUN_FRAMES * hitStunScale));
+        defender.slideMult = hitSlideScale;
         this.events.push({
           type: 'combat_result',
           result: HitResult.CLEAN_HIT,
@@ -405,7 +418,15 @@ export class MatchSim {
   }
 
   _getImpactScale(attacker, defender, bonus = 1) {
-    return getImpactScale(attacker?.charDef, defender?.charDef, bonus);
+    return this._getImpactStunScale(attacker, defender, bonus);
+  }
+
+  _getImpactStunScale(attacker, defender, bonus = 1) {
+    return getImpactStunScale(attacker?.charDef, defender?.charDef, bonus);
+  }
+
+  _getImpactSlideScale(attacker, defender, bonus = 1) {
+    return getImpactSlideScale(attacker?.charDef, defender?.charDef, bonus);
   }
 
   _getFighterPairDelta(a, b) {

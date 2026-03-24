@@ -137,8 +137,26 @@ async function main() {
       }
       return acc;
     }, {}),
+    killClassAttackTypes: runs.reduce((acc, run) => {
+      for (const [key, value] of Object.entries(run.aggregate?.killClassAttackTypes ?? {})) {
+        acc[key] = (acc[key] || 0) + value;
+      }
+      return acc;
+    }, {}),
     killSetups: runs.reduce((acc, run) => {
       for (const [key, value] of Object.entries(run.aggregate?.killSetups ?? {})) {
+        acc[key] = (acc[key] || 0) + value;
+      }
+      return acc;
+    }, {}),
+    killClassSetups: runs.reduce((acc, run) => {
+      for (const [key, value] of Object.entries(run.aggregate?.killClassSetups ?? {})) {
+        acc[key] = (acc[key] || 0) + value;
+      }
+      return acc;
+    }, {}),
+    killClassAttackSetups: runs.reduce((acc, run) => {
+      for (const [key, value] of Object.entries(run.aggregate?.killClassAttackSetups ?? {})) {
         acc[key] = (acc[key] || 0) + value;
       }
       return acc;
@@ -168,8 +186,11 @@ async function main() {
   console.log(`Matches: ${aggregate.totalMatches}`);
   console.log(`Winner counts: ${JSON.stringify(aggregate.winnerCounts)}`);
   console.log(`Kill reasons: ${JSON.stringify(aggregate.killReasons)}`);
+  console.log(`Kill attack types by class: ${JSON.stringify(aggregate.killClassAttackTypes)}`);
   console.log(`Kill attack types: ${JSON.stringify(aggregate.killAttackTypes)}`);
   console.log(`Kill setups: ${JSON.stringify(aggregate.killSetups)}`);
+  console.log(`Kill setups by class: ${JSON.stringify(aggregate.killClassSetups)}`);
+  console.log(`Kill class+attack+setup: ${JSON.stringify(aggregate.killClassAttackSetups)}`);
 }
 
 main().catch((err) => {

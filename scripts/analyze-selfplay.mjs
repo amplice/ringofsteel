@@ -94,8 +94,11 @@ function main() {
   console.log(`Global whiff rate: ${pct(summary.globalMetrics.totalAttacks ? summary.globalMetrics.totalWhiffs / summary.globalMetrics.totalAttacks : 0)}`);
   console.log(`Global sidestep kill share: ${pct(summary.globalMetrics.totalKills ? summary.globalMetrics.sidestepKills / summary.globalMetrics.totalKills : 0)}`);
   if (summary.killTraceSummary) {
-    console.log(`Kill attack types: ${JSON.stringify(summary.killTraceSummary.byAttackType ?? {})}`);
+    console.log(`Kill attack types by class: ${JSON.stringify(summary.killTraceSummary.byClassAttackType ?? {})}`);
+    console.log(`Kill attack types overall: ${JSON.stringify(summary.killTraceSummary.byAttackType ?? {})}`);
     console.log(`Kill setups: ${JSON.stringify(summary.killTraceSummary.bySetup ?? {})}`);
+    console.log(`Kill setups by class: ${JSON.stringify(summary.killTraceSummary.byClassSetup ?? {})}`);
+    console.log(`Kill class+attack+setup: ${JSON.stringify(summary.killTraceSummary.byClassAttackSetup ?? {})}`);
     console.log(`Kill class matchups: ${JSON.stringify(summary.killTraceSummary.byClassMatchup ?? {})}`);
   }
 

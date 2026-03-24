@@ -144,7 +144,7 @@ export class FighterStateMachine {
       case FighterState.PARRIED_STUN:
       case FighterState.CLASH:
         if (this.stateFrames >= this.stateDuration) {
-          this.fighter.knockbackMult = 1;
+          this.fighter.slideMult = 1;
           this.transition(FighterState.IDLE);
         }
         break;

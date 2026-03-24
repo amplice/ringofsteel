@@ -33,7 +33,10 @@ function analyzeSingleRun(data) {
   const winnerCounts = data.winnerCounts ?? {};
   const killReasons = data.aggregate?.killReasons ?? {};
   const killAttackTypes = data.aggregate?.killAttackTypes ?? {};
+  const killClassAttackTypes = data.aggregate?.killClassAttackTypes ?? {};
   const killSetups = data.aggregate?.killSetups ?? {};
+  const killClassSetups = data.aggregate?.killClassSetups ?? {};
+  const killClassAttackSetups = data.aggregate?.killClassAttackSetups ?? {};
   console.log(`File: ${process.argv[2] || 'latest online bot run'}`);
   console.log(`Mode: ${data.url}`);
   console.log(`Brains: p1=${data.p1Brain} p2=${data.p2Brain}`);
@@ -42,8 +45,11 @@ function analyzeSingleRun(data) {
   console.log(`Matches: ${totalMatches}`);
   console.log(`Winner counts: ${JSON.stringify(winnerCounts)}`);
   console.log(`Kill reasons: ${JSON.stringify(killReasons)}`);
+  console.log(`Kill attack types by class: ${JSON.stringify(killClassAttackTypes)}`);
   console.log(`Kill attack types: ${JSON.stringify(killAttackTypes)}`);
   console.log(`Kill setups: ${JSON.stringify(killSetups)}`);
+  console.log(`Kill setups by class: ${JSON.stringify(killClassSetups)}`);
+  console.log(`Kill class+attack+setup: ${JSON.stringify(killClassAttackSetups)}`);
   if (data.aggregate) {
     console.log(`Average scores: p1=${data.aggregate.averageScores?.player1 ?? 0} p2=${data.aggregate.averageScores?.player2 ?? 0}`);
     console.log(`Average last frame: ${data.aggregate.averageLastFrame ?? 0}`);
@@ -61,8 +67,11 @@ function analyzeMatrix(data) {
   console.log(`Chars: ${data.chars.join(', ')}`);
   console.log(`Winner counts: ${JSON.stringify(data.aggregate?.winnerCounts ?? {})}`);
   console.log(`Kill reasons: ${JSON.stringify(data.aggregate?.killReasons ?? {})}`);
+  console.log(`Kill attack types by class: ${JSON.stringify(data.aggregate?.killClassAttackTypes ?? {})}`);
   console.log(`Kill attack types: ${JSON.stringify(data.aggregate?.killAttackTypes ?? {})}`);
   console.log(`Kill setups: ${JSON.stringify(data.aggregate?.killSetups ?? {})}`);
+  console.log(`Kill setups by class: ${JSON.stringify(data.aggregate?.killClassSetups ?? {})}`);
+  console.log(`Kill class+attack+setup: ${JSON.stringify(data.aggregate?.killClassAttackSetups ?? {})}`);
 
   const rows = [];
   for (const run of data.runs ?? []) {

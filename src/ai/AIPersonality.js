@@ -108,6 +108,27 @@ export const AI_PROFILE_LIBRARY = {
     moveForwardBias: -0.05,
     idleBias: -0.05,
   },
+  heavy_bully: {
+    ...COMMON_DEFAULTS,
+    reactionFrames: 9,
+    decisionNoise: 0.08,
+    aggression: 0.78,
+    parryRate: 0.06,
+    dodgeRate: 0.12,
+    counterRate: 0.22,
+    punishRate: 0.45,
+    heavyMixup: 0.9,
+    spacingAwareness: 0.28,
+    quickBias: -0.08,
+    heavyBias: 0.55,
+    thrustBias: -0.04,
+    blockBias: -0.02,
+    sidestepBias: -0.06,
+    backstepBias: -0.05,
+    moveForwardBias: 0.2,
+    moveBackBias: -0.12,
+    idleBias: -0.14,
+  },
 };
 
 export const AI_DIFFICULTY_ALIASES = Object.freeze({

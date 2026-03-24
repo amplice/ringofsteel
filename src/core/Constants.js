@@ -64,8 +64,12 @@ export const CLASH_PUSHBACK_FRAMES = 16;
 // Knockback slide speed (units/sec) — fighters slide apart during stun
 export const KNOCKBACK_SLIDE_SPEED = 1.88;
 
-// Heavy attack advantage multiplier (clash & block vs heavy)
-export const HEAVY_ADVANTAGE_MULT = 1.5;
+// Heavy attack advantage multipliers.
+// Stun and displacement are separated so they can be tuned independently.
+export const HEAVY_ADVANTAGE_STUN_MULT = 1.5;
+export const HEAVY_ADVANTAGE_SLIDE_MULT = 1.5;
+export const HEAVY_CLASH_STUN_MULT = 1.8;
+export const HEAVY_CLASH_SLIDE_MULT = 1.8;
 
 
 // Sidestep

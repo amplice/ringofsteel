@@ -53,7 +53,7 @@ export class FighterCore {
     this._stepFrames = 0;
     this._stepDirection = 0;
     this._stepCooldown = 0;
-    this.knockbackMult = 1;
+    this.slideMult = 1;
     this._debugCollision = null;
     this._wasAttacking = false;
     this._postAttackTurnTime = 0;
@@ -379,7 +379,7 @@ export class FighterCore {
     this.fsm.reset();
     this.damageSystem.reset();
     this.walkPhase = 0;
-    this.knockbackMult = 1;
+    this.slideMult = 1;
     this.activeClipName = 'idle';
     this._stepping = false;
     this._stepFrames = 0;

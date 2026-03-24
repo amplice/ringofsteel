@@ -762,8 +762,30 @@ async function main() {
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {}),
+        killClassAttackTypes: results.reduce((acc, result) => {
+          const killerCharId = result.killTrace?.killer?.charId || 'unknown';
+          const attackType = result.killTrace?.killer?.attackType || 'unknown';
+          const key = `${killerCharId}:${attackType}`;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
         killSetups: results.reduce((acc, result) => {
           const key = classifyKillSetup(result.killTrace);
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+        killClassSetups: results.reduce((acc, result) => {
+          const killerCharId = result.killTrace?.killer?.charId || 'unknown';
+          const setup = classifyKillSetup(result.killTrace);
+          const key = `${killerCharId}:${setup}`;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {}),
+        killClassAttackSetups: results.reduce((acc, result) => {
+          const killerCharId = result.killTrace?.killer?.charId || 'unknown';
+          const attackType = result.killTrace?.killer?.attackType || 'unknown';
+          const setup = classifyKillSetup(result.killTrace);
+          const key = `${killerCharId}:${attackType}:${setup}`;
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {}),

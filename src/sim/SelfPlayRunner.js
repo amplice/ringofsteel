@@ -599,7 +599,10 @@ export class SelfPlayRunner {
       },
       killTraceSummary: {
         byAttackType: {},
+        byClassAttackType: {},
         bySetup: {},
+        byClassSetup: {},
+        byClassAttackSetup: {},
         byClassMatchup: {},
       },
       matchupRecords: {},
@@ -641,11 +644,18 @@ export class SelfPlayRunner {
 
       for (const round of match.rounds) {
         if (!round.killTrace) continue;
+        const killerCharId = round.killTrace.killer.charId ?? 'unknown';
         const attackType = round.killTrace.killer.attackType ?? 'unknown';
+        const classAttackType = `${killerCharId}:${attackType}`;
         const setup = classifyKillSetup(round.killTrace);
-        const matchup = `${round.killTrace.killer.charId}->${round.killTrace.victim.charId}`;
+        const classSetup = `${killerCharId}:${setup}`;
+        const classAttackSetup = `${killerCharId}:${attackType}:${setup}`;
+        const matchup = `${killerCharId}->${round.killTrace.victim.charId}`;
         summary.killTraceSummary.byAttackType[attackType] = (summary.killTraceSummary.byAttackType[attackType] || 0) + 1;
+        summary.killTraceSummary.byClassAttackType[classAttackType] = (summary.killTraceSummary.byClassAttackType[classAttackType] || 0) + 1;
         summary.killTraceSummary.bySetup[setup] = (summary.killTraceSummary.bySetup[setup] || 0) + 1;
+        summary.killTraceSummary.byClassSetup[classSetup] = (summary.killTraceSummary.byClassSetup[classSetup] || 0) + 1;
+        summary.killTraceSummary.byClassAttackSetup[classAttackSetup] = (summary.killTraceSummary.byClassAttackSetup[classAttackSetup] || 0) + 1;
         summary.killTraceSummary.byClassMatchup[matchup] = (summary.killTraceSummary.byClassMatchup[matchup] || 0) + 1;
       }
 

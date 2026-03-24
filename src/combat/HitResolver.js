@@ -66,7 +66,7 @@ export class HitResolver {
       return finish(HitResult.BLOCKED);
     }
 
-    // Priority 5: Block -> Blocked (no zone check, blocks everything)
+    // Priority 5: Active block only -> Blocked
     if (defender.state === FighterState.BLOCK) {
       return finish(HitResult.BLOCKED);
     }
@@ -150,6 +150,22 @@ export class HitResolver {
     bCollision.weaponClashMotionGate = motionGatePassed;
 
     return overlap && motionGatePassed;
+  }
+
+  checkWeaponGuardContact(attacker, defender) {
+    const aBase = attacker.getWeaponBaseWorldPosition(_segP1);
+    const aTip = attacker.getWeaponTipWorldPosition(_segQ1);
+    const bBase = defender.getWeaponBaseWorldPosition(_segP2);
+    const bTip = defender.getWeaponTipWorldPosition(_segQ2);
+    const aRadius = attacker.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(attacker.weaponType);
+    const bRadius = defender.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(defender.weaponType);
+    const dist = this._distBetweenSegments(aBase, aTip, bBase, bTip);
+    return dist <= (aRadius + bRadius);
+  }
+
+  checkBlockContact(attacker, defender) {
+    if (!this._isWithinContactWindow(attacker)) return false;
+    return this.checkWeaponGuardContact(attacker, defender) || this.checkWeaponOverlap(attacker, defender);
   }
 
   checkSwordCollision(attacker, defender) {

@@ -174,20 +174,10 @@ export class MatchSim {
 
   _applyBlockPushback(attacker, defender, dt) {
     if (!attacker.fsm.isAttacking) return;
-    if (defender.state !== FighterState.BLOCK && defender.state !== FighterState.BLOCK_STUN) return;
+    if (defender.state !== FighterState.BLOCK_STUN) return;
     if (!this.hitResolver.checkWeaponOverlap(attacker, defender)) return;
 
     const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
-
-    if (defender.state === FighterState.BLOCK) {
-      const isHeavy = attacker.fsm.currentAttackType === AttackType.HEAVY;
-      const stunBonus = isHeavy ? HEAVY_ADVANTAGE_STUN_MULT : 1;
-      const slideBonus = isHeavy ? HEAVY_ADVANTAGE_SLIDE_MULT : 1;
-      const stunScale = this._getImpactStunScale(attacker, defender, stunBonus);
-      const slideScale = this._getImpactSlideScale(attacker, defender, slideBonus);
-      defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * stunScale));
-      defender.slideMult = slideScale;
-    }
 
     const nx = dx / (dist || 0.01);
     const nz = dz / (dist || 0.01);
@@ -237,14 +227,20 @@ export class MatchSim {
     }
 
     if (this.fighter1.fsm.isAttacking && !this.fighter1.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)) {
+      if (
+        (this.fighter2.state === FighterState.BLOCK && this.hitResolver.checkBlockContact(this.fighter1, this.fighter2)) ||
+        this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)
+      ) {
         this._resolveHit(this.fighter1, this.fighter2);
         this.fighter1.hitApplied = true;
       }
     }
 
     if (this.fighter2.fsm.isAttacking && !this.fighter2.hitApplied) {
-      if (this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)) {
+      if (
+        (this.fighter1.state === FighterState.BLOCK && this.hitResolver.checkBlockContact(this.fighter2, this.fighter1)) ||
+        this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)
+      ) {
         this._resolveHit(this.fighter2, this.fighter1);
         this.fighter2.hitApplied = true;
       }

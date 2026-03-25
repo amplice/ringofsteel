@@ -3,7 +3,7 @@ import { AttackType, WeaponType } from '../core/Constants.js';
 const ATTACK_DATA = {
   [WeaponType.KATANA]: {
     [AttackType.QUICK]: {
-      reach: 1.5,
+      aiRange: 1.5,
       lunge: 0.4,
       blockPush: 0.5,
       lungeStart: 1 / 3,
@@ -13,7 +13,7 @@ const ATTACK_DATA = {
       name: 'Slash',
     },
     [AttackType.HEAVY]: {
-      reach: 1.8,
+      aiRange: 1.8,
       lunge: 1.05,
       blockPush: 1.2,
       lungeStart: 1 / 5,
@@ -23,7 +23,7 @@ const ATTACK_DATA = {
       name: 'Heavy Slash',
     },
     [AttackType.THRUST]: {
-      reach: 2.0,
+      aiRange: 2.0,
       lunge: 0.82,
       blockPush: 0.8,
       lungeStart: 0.25,
@@ -35,7 +35,7 @@ const ATTACK_DATA = {
   },
   [WeaponType.SPEAR]: {
     [AttackType.QUICK]: {
-      reach: 2.0,
+      aiRange: 2.0,
       lunge: 0.2,
       blockPush: 0.5,
       lungeStart: 0.5,
@@ -45,7 +45,7 @@ const ATTACK_DATA = {
       name: 'Slash',
     },
     [AttackType.HEAVY]: {
-      reach: 2.3,
+      aiRange: 2.3,
       lunge: 0.6,
       blockPush: 1.2,
       lungeStart: 1 / 3,
@@ -55,7 +55,7 @@ const ATTACK_DATA = {
       name: 'Heavy Slash',
     },
     [AttackType.THRUST]: {
-      reach: 2.5,
+      aiRange: 2.5,
       lunge: 0.18,
       blockPush: 0.8,
       lungeRatio: 0.5,

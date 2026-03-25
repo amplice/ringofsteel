@@ -381,7 +381,7 @@ export class AIController {
 
   _scoreAttackOpportunity(fighter, attackType, engagement, baseScore) {
     const attack = getAttackData(attackType, fighter.weaponType);
-    const effectiveReach = attack.reach + attack.lunge + ATTACK_RANGE_MARGIN;
+    const effectiveReach = attack.aiRange + attack.lunge + ATTACK_RANGE_MARGIN;
     if (engagement.dist > effectiveReach) return 0;
     if (engagement.forwardDot <= ATTACK_FRONT_DOT_MIN) return 0;
 
@@ -389,7 +389,7 @@ export class AIController {
       1,
       Math.max(0, (engagement.forwardDot - ATTACK_FRONT_DOT_MIN) / (ATTACK_FRONT_DOT_STRONG - ATTACK_FRONT_DOT_MIN)),
     );
-    const farPenalty = Math.max(0, engagement.dist - attack.reach);
+    const farPenalty = Math.max(0, engagement.dist - attack.aiRange);
     const penaltySpan = Math.max(effectiveReach * 0.35, 0.4);
     const rangeWeight = Math.max(0.35, 1 - (farPenalty / penaltySpan));
     return baseScore * facingWeight * rangeWeight;

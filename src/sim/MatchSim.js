@@ -302,9 +302,10 @@ export class MatchSim {
       case HitResult.PARRIED: {
         const parryStunScale = this._getImpactStunScale(defender, attacker);
         const parrySlideScale = this._getImpactSlideScale(defender, attacker);
-        attacker.fsm.applyParriedStun(Math.round(PARRIED_STUN_FRAMES * parryStunScale));
+        const parryFrames = Math.round(PARRIED_STUN_FRAMES * parryStunScale);
+        attacker.fsm.applyParriedStun(parryFrames);
         attacker.slideMult = parrySlideScale;
-        defender.fsm.applyParrySuccess();
+        defender.fsm.applyParrySuccess(parryFrames);
         this.events.push({
           type: 'combat_result',
           result: HitResult.PARRIED,

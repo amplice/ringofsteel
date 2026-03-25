@@ -82,6 +82,7 @@ async function main() {
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--use-gl=angle', '--use-angle=swiftshader'],
       defaultViewport: { width: 1280, height: 720 },
+      protocolTimeout: 0,
     });
 
     const page = await browser.newPage();

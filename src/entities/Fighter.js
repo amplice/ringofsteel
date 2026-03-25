@@ -11,7 +11,7 @@ import {
 import { TrailEffect } from '../animation/TrailEffect.js';
 import { moveAngleTowards } from '../utils/MathUtils.js';
 import {
-  FighterState, AttackType, WeaponType,
+  FighterState, AttackType, WeaponType, PARRY_WINDOW_FRAMES,
 } from '../core/Constants.js';
 
 const _markerBodyPosition = new THREE.Vector3();
@@ -268,10 +268,15 @@ export class Fighter extends FighterCore {
         action.clampWhenFinished = false;
       }
 
+      action.stopFading();
+      action.stopWarping();
       action.reset();
+      action.setEffectiveTimeScale(1);
       action.setEffectiveWeight(1);
       if (prevAction) {
-        action.crossFadeFrom(prevAction, 0.15, true);
+        prevAction.stopWarping();
+        prevAction.setEffectiveTimeScale(1);
+        action.crossFadeFrom(prevAction, 0.15, false);
       }
       action.play();
 
@@ -298,8 +303,8 @@ export class Fighter extends FighterCore {
     const ind = this._stateIndicator;
     const s = this.state;
 
-    const parryActive = s === FighterState.PARRY && this.fsm.stateFrames <= 5;
-    const parryFallback = s === FighterState.PARRY && this.fsm.stateFrames > 5;
+    const parryActive = s === FighterState.PARRY && this.fsm.stateFrames <= PARRY_WINDOW_FRAMES;
+    const parryFallback = s === FighterState.PARRY && this.fsm.stateFrames > PARRY_WINDOW_FRAMES;
     ind.block.visible = (s === FighterState.BLOCK || s === FighterState.BLOCK_STUN || parryFallback);
     ind.parry.visible = parryActive;
     ind.success.visible = (s === FighterState.PARRY_SUCCESS);

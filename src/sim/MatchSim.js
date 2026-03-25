@@ -14,6 +14,8 @@ import {
   HEAVY_ADVANTAGE_SLIDE_MULT,
   HEAVY_CLASH_STUN_MULT,
   HEAVY_CLASH_SLIDE_MULT,
+  HEAVY_CLASH_WINNER_STUN_MULT,
+  CLASH_SLIDE_MULT,
   CLASH_PUSHBACK_FRAMES,
   BLOCK_STUN_FRAMES,
   HIT_STUN_FRAMES,
@@ -265,14 +267,18 @@ export class MatchSim {
         const defType = result.defenderType;
         const atkHeavy = atkType === AttackType.HEAVY;
         const defHeavy = defType === AttackType.HEAVY;
-        const atkStunBonus = (defHeavy && !atkHeavy) ? HEAVY_CLASH_STUN_MULT : 1;
-        const defStunBonus = (atkHeavy && !defHeavy) ? HEAVY_CLASH_STUN_MULT : 1;
+        const atkStunBonus = (defHeavy && !atkHeavy)
+          ? HEAVY_CLASH_STUN_MULT
+          : ((atkHeavy && !defHeavy) ? HEAVY_CLASH_WINNER_STUN_MULT : 1);
+        const defStunBonus = (atkHeavy && !defHeavy)
+          ? HEAVY_CLASH_STUN_MULT
+          : ((defHeavy && !atkHeavy) ? HEAVY_CLASH_WINNER_STUN_MULT : 1);
         const atkSlideBonus = (defHeavy && !atkHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
         const defSlideBonus = (atkHeavy && !defHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
         const atkStunScale = this._getImpactStunScale(defender, attacker, atkStunBonus);
         const defStunScale = this._getImpactStunScale(attacker, defender, defStunBonus);
-        const atkSlideScale = this._getImpactSlideScale(defender, attacker, atkSlideBonus);
-        const defSlideScale = this._getImpactSlideScale(attacker, defender, defSlideBonus);
+        const atkSlideScale = this._getImpactSlideScale(defender, attacker, atkSlideBonus) * CLASH_SLIDE_MULT;
+        const defSlideScale = this._getImpactSlideScale(attacker, defender, defSlideBonus) * CLASH_SLIDE_MULT;
         attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkStunScale));
         defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defStunScale));
         attacker.slideMult = atkSlideScale;

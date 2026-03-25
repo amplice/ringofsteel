@@ -26,15 +26,11 @@ export const MOTION_THRESHOLDS = Object.freeze({
 export const STUN_IMPACT_TUNING = Object.freeze({
   defaultAttackStrength: 1.0,
   defaultDefenseStoutness: 1.0,
-  minScale: 0.85,
-  maxScale: 2.5,
 });
 
 export const SLIDE_IMPACT_TUNING = Object.freeze({
   defaultAttackStrength: 1.0,
   defaultDefenseStoutness: 1.0,
-  minScale: 0.85,
-  maxScale: 2.5,
 });
 
 // Backward-compatible alias for older callers. New code should use the
@@ -101,8 +97,7 @@ export function getBodyRadius(charDef) {
 function getScaledImpact(attackerCharDef, defenderCharDef, bonus, tuning) {
   const attackStrength = attackerCharDef?.attackStrength ?? tuning.defaultAttackStrength;
   const defenseStoutness = defenderCharDef?.defenseStoutness ?? tuning.defaultDefenseStoutness;
-  const rawScale = bonus * (attackStrength / defenseStoutness);
-  return Math.min(tuning.maxScale, Math.max(tuning.minScale, rawScale));
+  return bonus * (attackStrength / defenseStoutness);
 }
 
 export function getImpactStunScale(attackerCharDef, defenderCharDef, bonus = 1) {

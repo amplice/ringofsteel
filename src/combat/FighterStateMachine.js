@@ -1,5 +1,6 @@
 import {
   FighterState, AttackType,
+  PARRY_WINDOW_FRAMES,
   BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES,
   CLASH_PUSHBACK_FRAMES,
   SIDESTEP_DASH_FRAMES, SIDESTEP_RECOVERY_FRAMES,
@@ -126,8 +127,9 @@ export class FighterStateMachine {
         break;
 
       case FighterState.PARRY:
-        // Parry window expires after 10 frames, then auto-transition to BLOCK (safe fallback)
-        if (this.stateFrames >= 10) {
+        // Keep the post-window guard fallback, but derive it from the parry window
+        // so gameplay and presentation stay aligned.
+        if (this.stateFrames >= PARRY_WINDOW_FRAMES + 5) {
           this.transition(FighterState.BLOCK);
         }
         break;

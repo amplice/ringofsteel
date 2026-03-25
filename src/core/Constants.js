@@ -55,7 +55,7 @@ export const WeaponType = {
 // Timing constants (in frames at 60fps)
 export const FRAME_DURATION = 1 / 60;
 
-export const PARRY_WINDOW_FRAMES = 5;
+export const PARRY_WINDOW_FRAMES = 7;
 export const BLOCK_STUN_FRAMES = 16;
 export const HIT_STUN_FRAMES = 16;
 export const PARRIED_STUN_FRAMES = 24;
@@ -68,8 +68,10 @@ export const KNOCKBACK_SLIDE_SPEED = 1.88;
 // Stun and displacement are separated so they can be tuned independently.
 export const HEAVY_ADVANTAGE_STUN_MULT = 1.5;
 export const HEAVY_ADVANTAGE_SLIDE_MULT = 1.5;
-export const HEAVY_CLASH_STUN_MULT = 1.8;
-export const HEAVY_CLASH_SLIDE_MULT = 1.8;
+export const HEAVY_CLASH_STUN_MULT = 1.6;
+export const HEAVY_CLASH_SLIDE_MULT = 1.2;
+export const HEAVY_CLASH_WINNER_STUN_MULT = 0.45;
+export const CLASH_SLIDE_MULT = 0.35;
 
 
 // Sidestep

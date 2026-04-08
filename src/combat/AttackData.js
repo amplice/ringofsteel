@@ -56,7 +56,7 @@ const ATTACK_DATA = {
     },
     [AttackType.THRUST]: {
       aiRange: 2.5,
-      lunge: 0.18,
+      lunge: 0.24,
       blockPush: 0.8,
       lungeRatio: 0.5,
       contactStart: 27 / 83,

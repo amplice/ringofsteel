@@ -26,6 +26,26 @@ If it is missing, create it from:
 - Multiplayer health: `https://ringofsteel-production.up.railway.app/health`
 - Multiplayer metrics: `https://ringofsteel-production.up.railway.app/metrics`
 
+## Local Playtest Servers
+
+For reliable local playtesting on this machine, start the two local services in visible PowerShell windows instead of detached wrappers.
+
+Use:
+
+```powershell
+Start-Process powershell -ArgumentList '-NoExit','-Command','Set-Location "C:\Users\cobra\wuxia-warrior"; & npm.cmd run dev -- --host 127.0.0.1 --port 5180'
+Start-Process powershell -ArgumentList '-NoExit','-Command','Set-Location "C:\Users\cobra\wuxia-warrior"; $env:MULTIPLAYER_PORT="3010"; & npm.cmd run multiplayer:server'
+```
+
+Expected local endpoints:
+- app: `http://127.0.0.1:5180`
+- multiplayer websocket: `ws://127.0.0.1:3010/ws`
+- multiplayer health: `http://127.0.0.1:3010/health`
+
+Reason:
+- detached/background launch wrappers in this environment have been unreliable and sometimes policy-blocked
+- visible PowerShell windows are the stable option
+
 ## What To Deploy
 
 ### Frontend-only changes

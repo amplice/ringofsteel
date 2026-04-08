@@ -55,8 +55,8 @@ export const CHARACTER_DEFS = {
     },
     clipSpeedFactor: { walk: 2, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
     clipSpeedOverrides: {
-      attack_quick: 1.08,
-      attack_heavy: 1.2,
+      attack_quick: 1.12,
+      attack_heavy: 1.15,
       attack_thrust: 0.8125,
       backstep: 0.8333333333333334,
       block_parry: 7.5,

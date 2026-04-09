@@ -1,0 +1,118 @@
+import { AttackType, WeaponType } from '../core/Constants.js';
+import { defineCharacter } from './shared/characterContract.js';
+
+export const spearman = defineCharacter('spearman', {
+  displayName: 'Spearman',
+  glbPath: '/spearman.glb',
+  weapon: {
+    type: WeaponType.SPEAR,
+    stats: {
+      name: 'Spear',
+      description: 'Long thrusting weapon',
+      length: 2.0,
+      width: 0.02,
+      color: 0x886644,
+      guardSize: 0,
+    },
+    tuning: {
+      hitRadius: 0.02,
+      clashRadius: 0.09,
+      hitMode: 'tip',
+    },
+  },
+  attackData: {
+    [AttackType.QUICK]: {
+      aiRange: 2.0,
+      lunge: 0.2,
+      blockPush: 0.5,
+      lungeStart: 0.5,
+      lungeEnd: 1.0,
+      contactStart: 9 / 45,
+      contactEnd: 22.001 / 45,
+      name: 'Slash',
+    },
+    [AttackType.HEAVY]: {
+      aiRange: 2.3,
+      lunge: 0.6,
+      blockPush: 1.2,
+      lungeStart: 1 / 3,
+      lungeEnd: 2 / 3,
+      contactStart: 7 / 53,
+      contactEnd: 26.001 / 53,
+      name: 'Heavy Slash',
+    },
+    [AttackType.THRUST]: {
+      aiRange: 2.5,
+      lunge: 0.24,
+      blockPush: 0.8,
+      lungeRatio: 0.5,
+      contactStart: 13 / 48,
+      contactEnd: 26.001 / 48,
+      name: 'Thrust',
+    },
+  },
+  sim: {
+    attackFrames: {
+      [AttackType.QUICK]: 37,
+      [AttackType.HEAVY]: 43,
+      [AttackType.THRUST]: 34,
+    },
+    poseProfile: {
+      idle: {
+        [AttackType.QUICK]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
+        [AttackType.HEAVY]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
+        [AttackType.THRUST]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
+      },
+      attack: {
+        [AttackType.QUICK]: {
+          yawStart: -0.45, yawEnd: 0.32, reachStart: 1.80, reachEnd: 2.05, liftStart: 0.08, liftEnd: 0.02,
+          windupLead: 0.10, recoveryEnd: 0.55,
+        },
+        [AttackType.HEAVY]: {
+          yawStart: -0.82, yawEnd: 0.82, reachStart: 1.90, reachEnd: 2.20, liftStart: 0.28, liftEnd: 0.08,
+          windupLead: 0.12, recoveryEnd: 0.34,
+        },
+        [AttackType.THRUST]: {
+          yawStart: -0.04, yawEnd: 0.04, reachStart: 2.00, reachEnd: 2.50, liftStart: 0.04, liftEnd: 0.00,
+          windupLead: 0.18, recoveryEnd: 0.72,
+        },
+      },
+      sideOffset: 0.08,
+      baseForward: 0.22,
+      idleTipLift: 0.04,
+    },
+  },
+  motionThresholds: {
+    towardTarget: 0.001,
+    relativeSpeed: 0.002,
+  },
+  modelYOffset: -0.02,
+  modelRotationX: -0.02,
+  idleDuringStepCooldown: true,
+  walkSpeedMult: 0.5,
+  clipSpeedups: {
+    walk: ['walk_forward', 'walk_backward'],
+    strafe: ['strafe_left', 'strafe_right'],
+    attack: ['attack_quick', 'attack_heavy', 'attack_thrust'],
+    backstep: ['backstep'],
+    knockback: ['clash_knockback', 'block_knockback'],
+  },
+  clipSpeedFactor: { walk: 1, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
+  clipSpeedOverrides: {
+    walk_forward: 1.9,
+    walk_backward: 2.1,
+    strafe_left: 1.484375,
+    strafe_right: 1.2109375,
+    attack_thrust: 0.86,
+    block_parry: 1.25,
+    clash_knockback: 2.5,
+    block_knockback: 2.5,
+  },
+  hipsLeanDeg: 4.5,
+  swapIdle: { from: 'idle_alt', to: 'idle' },
+  bakeWeapon: true,
+  aiRanges: { engage: 3.5, close: 2.5 },
+  attackStrength: 1.0,
+  defenseStoutness: 0.95,
+  bodySeparation: 1.6,
+});

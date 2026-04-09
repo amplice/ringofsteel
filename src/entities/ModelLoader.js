@@ -114,6 +114,11 @@ export class ModelLoader {
       }
     }
 
+    const missingClips = (charDef.requiredClips || []).filter((clipName) => !clips[clipName]);
+    if (missingClips.length) {
+      throw new Error(`Character '${charDef.displayName}' is missing required clips: ${missingClips.join(', ')}`);
+    }
+
     // Zero out Hips horizontal root motion on attack clips (keep Y for vertical bob)
     const attackClips = charDef.clipSpeedups?.attack || [];
     for (const clipName of attackClips) {
@@ -518,6 +523,7 @@ export class ModelLoader {
           baseName === 'Character_Geo' ||
           baseName === 'original_geo' ||
           baseName === 'Katana' ||
+          baseName === 'longsword' ||
           baseName === 'LeftHandKatanaGripTarget' ||
           baseName === 'LeftHandKatanaPoleTarget'
         )

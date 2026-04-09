@@ -335,6 +335,8 @@ export class FighterCore {
     return {
       charName: this.charDef.displayName || 'Unknown',
       weaponType: this.weaponType,
+      weaponHitRadius: this.charDef.weaponHitRadius,
+      weaponHitMode: this.charDef.weaponHitMode,
       state: this.state,
       stateFrames: this.stateFrames,
       attackType: this.currentAttackType,

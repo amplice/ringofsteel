@@ -51,12 +51,15 @@ export class Fighter extends FighterCore {
     if (charDef.modelYOffset) {
       this.visualRoot.position.y += charDef.modelYOffset;
     }
+    if (charDef.modelScale) {
+      this.visualRoot.scale.setScalar(charDef.modelScale);
+    }
 
     this.group = new THREE.Group();
     this.group.add(this.visualRoot);
     this.position = this.group.position;
 
-    this.weapon = new Weapon(this.weaponType);
+    this.weapon = new Weapon(this.charDef.weapon);
 
     const trailColor = this.isP2 ? 0x4488ff : 0xff4444;
     this.trail = new TrailEffect(trailColor);
@@ -437,6 +440,7 @@ export class Fighter extends FighterCore {
     this.visualRoot.rotation.y = this.charDef.rootRotationY ?? 0;
     this.visualRoot.rotation.x = this.charDef.modelRotationX ?? 0;
     this.visualRoot.rotation.z = 0;
+    this.visualRoot.scale.setScalar(this.charDef.modelScale ?? 1);
     this.position.y = 0;
 
     if (this.mixer) {
@@ -465,7 +469,7 @@ export class Fighter extends FighterCore {
       }
     }
 
-    this._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, this.weaponType), {
+    this._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, this.charDef), {
       applyTransform: false,
     });
 

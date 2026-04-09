@@ -380,7 +380,7 @@ export class AIController {
   }
 
   _scoreAttackOpportunity(fighter, attackType, engagement, baseScore) {
-    const attack = getAttackData(attackType, fighter.weaponType);
+    const attack = getAttackData(attackType, fighter.charDef);
     const effectiveReach = attack.aiRange + attack.lunge + ATTACK_RANGE_MARGIN;
     if (engagement.dist > effectiveReach) return 0;
     if (engagement.forwardDot <= ATTACK_FRONT_DOT_MIN) return 0;

@@ -50,6 +50,7 @@ export const HitResult = {
 export const WeaponType = {
   KATANA: 'katana',
   SPEAR: 'spear',
+  SWORD: 'sword',
 };
 
 // Timing constants (in frames at 60fps)

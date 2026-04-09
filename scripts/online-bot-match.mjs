@@ -196,7 +196,7 @@ class BotFighterProxy {
 }
 
 function applyShadowSnapshot(fighter, snapshot) {
-  fighter._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, fighter.weaponType), {
+  fighter._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, fighter.charDef), {
     applyTransform: true,
   });
   fighter._updateVirtualClipName();

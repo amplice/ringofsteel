@@ -58,7 +58,7 @@ function classifyKillSetup(trace) {
 
 export const DEFAULT_TOURNAMENT_CONFIG = Object.freeze({
   profiles: ['baseline', 'aggressor', 'turtler', 'duelist', 'evasive', 'punisher'],
-  characters: ['spearman', 'ronin'],
+  characters: Object.keys(CHARACTER_DEFS),
   roundsToWin: ROUNDS_TO_WIN,
   repeats: 1,
   maxRoundFrames: 60 * 25,

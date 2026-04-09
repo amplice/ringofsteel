@@ -19,55 +19,6 @@ const _sampledBody = new THREE.Vector3();
 const _sampledBase = new THREE.Vector3();
 const _sampledTip = new THREE.Vector3();
 
-const SIM_ATTACK_FRAMES = Object.freeze({
-  spearman: Object.freeze({
-    [AttackType.QUICK]: 37,
-    [AttackType.HEAVY]: 43,
-    [AttackType.THRUST]: 34,
-  }),
-  ronin: Object.freeze({
-    [AttackType.QUICK]: 37,
-    [AttackType.HEAVY]: 47,
-    [AttackType.THRUST]: 27,
-  }),
-});
-
-const SIM_WEAPON_POSE = Object.freeze({
-  idle: Object.freeze({
-    [AttackType.QUICK]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
-    [AttackType.HEAVY]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
-    [AttackType.THRUST]: { yawStart: 0, yawEnd: 0, reachStart: 0.85, reachEnd: 0.85, liftStart: 0.12, liftEnd: 0.12 },
-  }),
-  katana: Object.freeze({
-    [AttackType.QUICK]: {
-      yawStart: -0.95, yawEnd: 0.55, reachStart: 0.95, reachEnd: 1.25, liftStart: 0.20, liftEnd: 0.08,
-      windupLead: 0.08, recoveryEnd: 0.42,
-    },
-    [AttackType.HEAVY]: {
-      yawStart: -1.25, yawEnd: 0.95, reachStart: 1.00, reachEnd: 1.35, liftStart: 0.45, liftEnd: 0.15,
-      windupLead: 0.10, recoveryEnd: 0.30,
-    },
-    [AttackType.THRUST]: {
-      yawStart: -0.10, yawEnd: 0.08, reachStart: 1.15, reachEnd: 1.75, liftStart: 0.18, liftEnd: 0.10,
-      windupLead: 0.22, recoveryEnd: 0.60,
-    },
-  }),
-  spear: Object.freeze({
-    [AttackType.QUICK]: {
-      yawStart: -0.45, yawEnd: 0.32, reachStart: 1.80, reachEnd: 2.05, liftStart: 0.08, liftEnd: 0.02,
-      windupLead: 0.10, recoveryEnd: 0.55,
-    },
-    [AttackType.HEAVY]: {
-      yawStart: -0.82, yawEnd: 0.82, reachStart: 1.90, reachEnd: 2.20, liftStart: 0.28, liftEnd: 0.08,
-      windupLead: 0.12, recoveryEnd: 0.34,
-    },
-    [AttackType.THRUST]: {
-      yawStart: -0.04, yawEnd: 0.04, reachStart: 2.00, reachEnd: 2.50, liftStart: 0.04, liftEnd: 0.00,
-      windupLead: 0.18, recoveryEnd: 0.72,
-    },
-  }),
-});
-
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -151,15 +102,16 @@ export class FighterSim extends FighterCore {
     }
 
     const yaw = this.group.rotation.y;
-    const stats = WEAPON_STATS[this.weaponType];
+    const stats = this.charDef.weaponStats ?? WEAPON_STATS[this.weaponType];
     const attackType = this.currentAttackType || AttackType.QUICK;
     const progress = this.fsm.isAttacking && this.fsm.stateDuration > 0
       ? THREE.MathUtils.clamp(this.stateFrames / this.fsm.stateDuration, 0, 1)
       : 0;
-    const poseSet = this.weaponType === 'katana' ? SIM_WEAPON_POSE.katana : SIM_WEAPON_POSE.spear;
-    const idlePose = SIM_WEAPON_POSE.idle[attackType];
+    const poseProfile = this.charDef.sim?.poseProfile;
+    const poseSet = poseProfile?.attack;
+    const idlePose = poseProfile?.idle?.[attackType];
     const pose = this.fsm.isAttacking ? poseSet[attackType] : idlePose;
-    const attackData = this.currentAttackData ?? getAttackData(attackType, this.weaponType);
+    const attackData = this.currentAttackData ?? getAttackData(attackType, this.charDef);
     const poseProgress = this.fsm.isAttacking
       ? this._getAttackPoseProgress(progress, attackData, pose)
       : 0;
@@ -167,9 +119,9 @@ export class FighterSim extends FighterCore {
     const reach = lerp(pose.reachStart, pose.reachEnd, poseProgress);
     const lift = lerp(pose.liftStart, pose.liftEnd, poseProgress);
 
-    const sideOffset = this.weaponType === 'katana' ? 0.16 : 0.08;
+    const sideOffset = poseProfile?.sideOffset ?? 0.08;
     const sideSign = this.isP2 ? -1 : 1;
-    const baseForward = this.weaponType === 'katana' ? 0.14 : 0.22;
+    const baseForward = poseProfile?.baseForward ?? 0.22;
     const baseHeight = WEAPON_FALLBACKS.baseHeight;
 
     const forwardX = Math.sin(yaw);
@@ -188,7 +140,7 @@ export class FighterSim extends FighterCore {
     tipTarget.y += lift;
 
     if (!this.fsm.isAttacking) {
-      tipTarget.y += this.weaponType === 'katana' ? 0.12 : 0.04;
+      tipTarget.y += poseProfile?.idleTipLift ?? 0.04;
       tipTarget.x += forwardX * (stats.length * 0.12);
       tipTarget.z += forwardZ * (stats.length * 0.12);
     }
@@ -221,7 +173,7 @@ export class FighterSim extends FighterCore {
     if (authoritativeClip?.frameCount) {
       return authoritativeClip.frameCount;
     }
-    return SIM_ATTACK_FRAMES[this.charId]?.[attackType] ?? 30;
+    return this.charDef.sim?.attackFrames?.[attackType] ?? 30;
   }
 
   _getAttackClipName(attackType = this.currentAttackType) {

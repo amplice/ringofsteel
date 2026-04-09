@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ModelLoader } from '../entities/ModelLoader.js';
+import { CHARACTER_DEFS } from '../entities/CharacterDefs.js';
 
 export class AnimationSandbox {
   constructor({ scene, camera, cameraController, environment, input, ui }) {
@@ -33,17 +34,27 @@ export class AnimationSandbox {
 
   async start() {
     if (!this.animPlayerEntries) {
-      this.animPlayerEntries = await ModelLoader.loadAnimPlayerEntries([
-        '/spearman.glb',
-        '/ronin.glb',
-      ]);
+      this.animPlayerEntries = await Promise.all(
+        Object.entries(CHARACTER_DEFS).map(async ([charId, charDef]) => {
+          const animData = await ModelLoader.loadCharacter(charDef);
+          const entry = ModelLoader.createFighterFromGLB(
+            animData.model,
+            animData.clips,
+            animData.texture,
+          );
+          entry.fileName = charId;
+          entry.label = charDef.displayName;
+          entry.charDef = charDef;
+          return entry;
+        }),
+      );
     }
 
     this.animPlayerModel = null;
     this.animPlayerMixer = null;
 
     for (const entry of this.animPlayerEntries) {
-      entry.label = entry.fileName
+      entry.label = entry.label || entry.fileName
         .replace(/[_-]+/g, ' ')
         .replace(/\b\w/g, (c) => c.toUpperCase());
       for (const [name, action] of Object.entries(entry.actions)) {

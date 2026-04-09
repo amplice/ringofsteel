@@ -17,4 +17,12 @@ export const WEAPON_STATS = {
     color: 0x886644,
     guardSize: 0,
   },
+  [WeaponType.SWORD]: {
+    name: 'Sword',
+    description: 'Straight longsword',
+    length: 1.0,
+    width: 0.04,
+    color: 0xd8d8d8,
+    guardSize: 0.12,
+  },
 };

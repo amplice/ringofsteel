@@ -3,9 +3,14 @@ import { WEAPON_STATS } from './WeaponData.js';
 import { WeaponType } from '../core/Constants.js';
 
 export class Weapon {
-  constructor(weaponType) {
-    this.type = weaponType;
-    this.stats = WEAPON_STATS[weaponType];
+  constructor(weaponDefOrType) {
+    if (weaponDefOrType && typeof weaponDefOrType === 'object' && weaponDefOrType.type) {
+      this.type = weaponDefOrType.type;
+      this.stats = weaponDefOrType.stats;
+    } else {
+      this.type = weaponDefOrType;
+      this.stats = WEAPON_STATS[this.type];
+    }
     this.group = new THREE.Group();
     this.bladeMesh = null;
     this.tipPosition = new THREE.Vector3();

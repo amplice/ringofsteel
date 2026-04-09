@@ -71,11 +71,14 @@ async function main() {
     await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
 
     const data = await page.evaluate(async () => {
+      const { CHARACTER_DEFS } = await import('/src/entities/CharacterDefs.js');
+      const expectedCharacters = Object.keys(CHARACTER_DEFS);
       const waitForReady = async () => {
         const start = performance.now();
         while (performance.now() - start < 30000) {
           const game = window.__ringOfSteelGame;
-          if (game?._charCache?.ronin && game?._charCache?.spearman) {
+          const cache = game?._charCache;
+          if (cache && expectedCharacters.every((charId) => cache[charId])) {
             return game;
           }
           await new Promise((resolve) => window.setTimeout(resolve, 100));

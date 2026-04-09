@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
+import { CHARACTER_DEFS } from '../src/entities/CharacterDefs.js';
 
 const PROJECT_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ANALYSIS_DIR = path.join(PROJECT_ROOT, 'analysis');
@@ -61,7 +62,7 @@ function runBotMatch(args) {
 
 async function main() {
   const profilesArg = parseArg('profiles', 'hard,medium,easy');
-  const charsArg = parseArg('chars', 'spearman,ronin');
+  const charsArg = parseArg('chars', Object.keys(CHARACTER_DEFS).join(','));
   const repeats = Number(parseArg('repeats', '3'));
   const timeoutMs = Number(parseArg('timeout-ms', '90000'));
   const brain = parseArg('brain', 'balance');

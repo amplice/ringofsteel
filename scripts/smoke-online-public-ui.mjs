@@ -57,9 +57,12 @@ async function waitForHttp(url, timeoutMs = 15000) {
 async function waitForGameReady(page) {
   const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
-    const ready = await page.evaluate(() => {
+    const ready = await page.evaluate(async () => {
+      const { CHARACTER_DEFS } = await import('/src/entities/CharacterDefs.js');
       const game = window.__ringOfSteelGame;
-      return Boolean(game?._charCache?.ronin && game?._charCache?.spearman);
+      const expectedCharacters = Object.keys(CHARACTER_DEFS);
+      if (!expectedCharacters.length) return false;
+      return expectedCharacters.every((charId) => game?._charCache?.[charId]);
     });
     if (ready) return;
     await delay(200);

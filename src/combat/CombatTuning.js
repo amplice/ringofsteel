@@ -61,6 +61,11 @@ export const DEFAULT_WEAPON_TUNING = Object.freeze({
     clashRadius: 0.09,
     hitMode: 'capsule',
   }),
+  [WeaponType.SWORD]: Object.freeze({
+    hitRadius: 0.09,
+    clashRadius: 0.1,
+    hitMode: 'capsule',
+  }),
 });
 
 export function getDefaultWeaponTuning(weaponType) {
@@ -75,8 +80,15 @@ export function getDefaultWeaponClashRadius(weaponType) {
   return getDefaultWeaponTuning(weaponType).clashRadius;
 }
 
-export function getMotionThresholds(weaponType) {
-  if (weaponType === WeaponType.KATANA) {
+export function getMotionThresholds(charDefOrWeaponType) {
+  const charDef = charDefOrWeaponType && typeof charDefOrWeaponType === 'object'
+    ? charDefOrWeaponType
+    : null;
+  if (charDef?.motionThresholds) {
+    return charDef.motionThresholds;
+  }
+  const weaponType = charDef ? charDef.weaponType : charDefOrWeaponType;
+  if (weaponType === WeaponType.KATANA || weaponType === WeaponType.SWORD) {
     return {
       towardTarget: MOTION_THRESHOLDS.katanaTowardTarget,
       relativeSpeed: MOTION_THRESHOLDS.katanaRelativeSpeed,

@@ -52,7 +52,7 @@ export class FighterStateMachine {
   startAttack(attackType, durationFrames) {
     if (!this.isActionable) return false;
 
-    const data = getAttackData(attackType, this.fighter.weaponType);
+    const data = getAttackData(attackType, this.fighter.charDef);
 
     this.currentAttackData = data;
     this.currentAttackType = attackType;

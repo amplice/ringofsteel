@@ -3,6 +3,7 @@ import { DEBUG_OPTIONS } from '../core/Constants.js';
 import {
   BODY_COLLISION,
   getDefaultWeaponClashRadius,
+  getDefaultWeaponHitRadius,
 } from '../combat/CombatTuning.js';
 
 const _segMid = new THREE.Vector3();
@@ -18,8 +19,8 @@ export class DebugOverlay {
     this.el.id = 'debug-overlay';
     this.el.style.cssText = [
       'position:fixed',
-      'top:8px',
-      'right:8px',
+      'bottom:8px',
+      'left:8px',
       'z-index:1000',
       'width:min(320px, 32vw)',
       'max-height:min(42vh, 360px)',
@@ -116,7 +117,7 @@ export class DebugOverlay {
     lines.push(`  tipSpeed=${fighter.tipSpeed.toFixed(4)} baseSpeed=${fighter.baseSpeed.toFixed(4)} relTarget=${fighter.tipRelativeToward.toFixed(4)} relForward=${fighter.tipRelativeForward.toFixed(4)}`);
     if (fighter.collision) {
       lines.push(`  collision dist=${fighter.collision.distance.toFixed(4)} hurtRadius=${fighter.collision.hurtRadius.toFixed(3)} hurtHeight=${fighter.collision.hurtHeight.toFixed(3)} defender=${fighter.collision.defenderState ?? '-'}`);
-      lines.push(`  collision mode=${fighter.collision.weaponHitMode ?? '-'} hitRadius=${(fighter.collision.weaponHitRadius ?? 0).toFixed(3)} window=${fighter.collision.contactWindowPassed} progress=${(fighter.collision.attackProgress ?? 0).toFixed(2)} [${(fighter.collision.contactWindowStart ?? 0).toFixed(2)}..${(fighter.collision.contactWindowEnd ?? 1).toFixed(2)}] motionGate=${fighter.collision.motionGatePassed} forward=${fighter.collision.forwardDrive.toFixed(4)} toward=${fighter.collision.towardTarget.toFixed(4)} segmentHit=${fighter.collision.segmentHit}`);
+      lines.push(`  collision mode=${fighter.collision.weaponHitMode ?? fighter.weaponHitMode ?? '-'} hitRadius=${(fighter.collision.weaponHitRadius ?? fighter.weaponHitRadius ?? 0).toFixed(3)} window=${fighter.collision.contactWindowPassed} progress=${(fighter.collision.attackProgress ?? 0).toFixed(2)} [${(fighter.collision.contactWindowStart ?? 0).toFixed(2)}..${(fighter.collision.contactWindowEnd ?? 1).toFixed(2)}] motionGate=${fighter.collision.motionGatePassed} forward=${fighter.collision.forwardDrive.toFixed(4)} toward=${fighter.collision.towardTarget.toFixed(4)} segmentHit=${fighter.collision.segmentHit}`);
       lines.push(`  collision resolve=${fighter.collision.lastResolve ?? '-'} result=${fighter.collision.lastCheckResult ?? '-'}`);
       if (Number.isFinite(fighter.collision.weaponClashDistance)) {
         lines.push(`  clash dist=${fighter.collision.weaponClashDistance.toFixed(4)} radius=${fighter.weaponClashRadius.toFixed(3)} overlap=${fighter.collision.weaponClashOverlap} motion=${fighter.collision.weaponClashMotionGate} closing=${fighter.collision.weaponClashClosingDrive.toFixed(4)}`);
@@ -217,7 +218,7 @@ export class DebugOverlay {
       new THREE.MeshBasicMaterial({
         color: segmentColor,
         transparent: true,
-        opacity: 0.16,
+        opacity: 0.08,
         depthWrite: false,
       }),
     );
@@ -226,17 +227,53 @@ export class DebugOverlay {
       new THREE.MeshBasicMaterial({
         color: segmentColor,
         transparent: true,
-        opacity: 0.12,
+        opacity: 0.06,
         depthWrite: false,
       }),
     );
     const clashCapB = clashCapA.clone();
 
+    const hitCylinder = new THREE.Mesh(
+      new THREE.CylinderGeometry(1, 1, 1, 12, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: segmentColor,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+      }),
+    );
+    const hitCapA = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 12, 10),
+      new THREE.MeshBasicMaterial({
+        color: segmentColor,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+      }),
+    );
+    const hitCapB = hitCapA.clone();
+
     group.add(clashCylinder);
     group.add(clashCapA);
     group.add(clashCapB);
+    group.add(hitCylinder);
+    group.add(hitCapA);
+    group.add(hitCapB);
 
-    return { group, hurt, body, weaponLine, base, tip, clashCylinder, clashCapA, clashCapB };
+    return {
+      group,
+      hurt,
+      body,
+      weaponLine,
+      base,
+      tip,
+      clashCylinder,
+      clashCapA,
+      clashCapB,
+      hitCylinder,
+      hitCapA,
+      hitCapB,
+    };
   }
 
   _updateSceneHelpers(data) {
@@ -282,7 +319,8 @@ export class DebugOverlay {
     helper.tip.position.copy(tip);
     helper.weaponLine.geometry.setFromPoints([base, tip]);
 
-    const radius = fighter.weaponClashRadius ?? getDefaultWeaponClashRadius(fighter.weaponType);
+    const clashRadius = fighter.weaponClashRadius ?? getDefaultWeaponClashRadius(fighter.weaponType);
+    const hitRadius = fighter.collision?.weaponHitRadius ?? fighter.weaponHitRadius ?? getDefaultWeaponHitRadius(fighter.weaponType);
     _segMid.addVectors(base, tip).multiplyScalar(0.5);
     _segDir.subVectors(tip, base);
     const segLen = _segDir.length();
@@ -290,17 +328,26 @@ export class DebugOverlay {
     helper.clashCylinder.position.copy(_segMid);
     helper.clashCapA.position.copy(base);
     helper.clashCapB.position.copy(tip);
-    helper.clashCapA.scale.setScalar(radius);
-    helper.clashCapB.scale.setScalar(radius);
+    helper.clashCapA.scale.setScalar(clashRadius);
+    helper.clashCapB.scale.setScalar(clashRadius);
+    helper.hitCylinder.position.copy(_segMid);
+    helper.hitCapA.position.copy(base);
+    helper.hitCapB.position.copy(tip);
+    helper.hitCapA.scale.setScalar(hitRadius);
+    helper.hitCapB.scale.setScalar(hitRadius);
 
     if (segLen > 1e-5) {
       _segDir.normalize();
       _segQuat.setFromUnitVectors(_worldUp, _segDir);
       helper.clashCylinder.quaternion.copy(_segQuat);
-      helper.clashCylinder.scale.set(radius, segLen, radius);
+      helper.clashCylinder.scale.set(clashRadius, segLen, clashRadius);
       helper.clashCylinder.visible = true;
+      helper.hitCylinder.quaternion.copy(_segQuat);
+      helper.hitCylinder.scale.set(hitRadius, segLen, hitRadius);
+      helper.hitCylinder.visible = true;
     } else {
       helper.clashCylinder.visible = false;
+      helper.hitCylinder.visible = false;
     }
   }
 }

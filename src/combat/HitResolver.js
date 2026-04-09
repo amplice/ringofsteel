@@ -9,7 +9,6 @@ import {
   MOTION_THRESHOLDS,
   getDefaultWeaponClashRadius,
   getDefaultWeaponHitRadius,
-  getMotionThresholds,
 } from './CombatTuning.js';
 
 const _defenderCenter = new THREE.Vector3();
@@ -100,8 +99,9 @@ export class HitResolver {
     const base = attacker.getWeaponBaseWorldPosition(new THREE.Vector3());
     defender.getHurtCenterWorldPosition(_defenderCenter);
     const hitRadius = this._getWeaponHitRadius(attacker);
+    const hitMode = attacker.charDef?.weaponHitMode ?? (attacker.weaponType === WeaponType.SPEAR ? 'tip' : 'capsule');
 
-    if (attacker.weaponType === WeaponType.SPEAR) {
+    if (hitMode === 'tip') {
       return this._pointToCylinderDistanceForCenter(
         tip,
         _defenderCenter,
@@ -184,7 +184,7 @@ export class HitResolver {
     collision.motionGatePassed = false;
     collision.segmentHit = false;
     collision.weaponHitRadius = hitRadius;
-    collision.weaponHitMode = attacker.weaponType === WeaponType.SPEAR ? 'tip' : 'capsule';
+    collision.weaponHitMode = attacker.charDef?.weaponHitMode ?? (attacker.weaponType === WeaponType.SPEAR ? 'tip' : 'capsule');
     collision.contactT = 1;
     collision.attackProgress = Math.max(attacker.fsm.stateDuration || 0, 1) > 0
       ? attacker.stateFrames / Math.max(attacker.fsm.stateDuration || 0, 1)
@@ -203,7 +203,7 @@ export class HitResolver {
     let towardTarget;
     let relativeSpeed;
 
-    if (attacker.weaponType === WeaponType.SPEAR) {
+    if (collision.weaponHitMode === 'tip') {
       towardTarget = attacker.getTipRelativeVelocityToward(_defenderCenter);
       relativeSpeed = attacker.getTipRelativeSpeed();
     } else {
@@ -215,21 +215,9 @@ export class HitResolver {
 
     collision.forwardDrive = relativeSpeed;
     collision.towardTarget = towardTarget;
-    const { towardTarget: towardThreshold, relativeSpeed: speedThreshold } =
-      getMotionThresholds(attacker.weaponType);
+    collision.motionGatePassed = true;
 
-    collision.motionGatePassed =
-      relativeSpeed > speedThreshold &&
-      towardTarget > towardThreshold;
-    if (
-      relativeSpeed <= speedThreshold ||
-      towardTarget <= towardThreshold
-    ) {
-      collision.lastCheckResult = 'blocked_motion';
-      return false;
-    }
-
-    const dist = attacker.weaponType === WeaponType.SPEAR
+    const dist = collision.weaponHitMode === 'tip'
       ? this._pointToCylinderDistanceForCenter(
         tip,
         _defenderCenter,

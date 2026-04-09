@@ -74,11 +74,14 @@ async function main() {
         return Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
       };
 
+      const { CHARACTER_DEFS } = await import('/src/entities/CharacterDefs.js');
+      const expectedCharacters = Object.keys(CHARACTER_DEFS);
       const waitForReady = async () => {
         const start = performance.now();
         while (performance.now() - start < 30000) {
           const game = window.__ringOfSteelGame;
-          if (game?._charCache?.ronin && game?._charCache?.spearman) {
+          const cache = game?._charCache;
+          if (cache && expectedCharacters.every((charId) => cache[charId])) {
             return game;
           }
           await new Promise((resolve) => window.setTimeout(resolve, 100));
@@ -87,16 +90,14 @@ async function main() {
       };
 
       const game = await waitForReady();
-      const [{ FighterSim }, { AUTHORITATIVE_TRACKS }, characterDefsModule, combatTuningModule, constantsModule, attackDataModule] = await Promise.all([
+      const [{ FighterSim }, { AUTHORITATIVE_TRACKS }, combatTuningModule, constantsModule, attackDataModule] = await Promise.all([
         import('/src/sim/FighterSim.js'),
         import('/src/data/authoritativeTracks.js'),
-        import('/src/entities/CharacterDefs.js'),
         import('/src/combat/CombatTuning.js'),
         import('/src/core/Constants.js'),
         import('/src/combat/AttackData.js'),
       ]);
 
-      const { CHARACTER_DEFS } = characterDefsModule;
       const { BODY_COLLISION } = combatTuningModule;
       const { FighterState, AttackType } = constantsModule;
       const { getAttackData } = attackDataModule;
@@ -150,7 +151,7 @@ async function main() {
             if (attackType) {
               fighter.fsm.state = FighterState.ATTACK_ACTIVE;
               fighter.fsm.currentAttackType = attackType;
-              fighter.fsm.currentAttackData = getAttackData(attackType, fighter.weaponType);
+              fighter.fsm.currentAttackData = getAttackData(attackType, fighter.charDef);
             } else if (clipName === 'strafe_left' || clipName === 'strafe_right') {
               fighter.fsm.sidestepPhase = 'dash';
               fighter.fsm.sidestepDirection = clipName === 'strafe_left' ? 1 : -1;

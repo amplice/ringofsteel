@@ -1,6 +1,6 @@
 import { AttackType, WeaponType } from '../core/Constants.js';
 
-const ATTACK_DATA = {
+const FALLBACK_ATTACK_DATA = {
   [WeaponType.KATANA]: {
     [AttackType.QUICK]: {
       aiRange: 1.5,
@@ -64,10 +64,46 @@ const ATTACK_DATA = {
       name: 'Thrust',
     },
   },
+  [WeaponType.SWORD]: {
+    [AttackType.QUICK]: {
+      aiRange: 1.55,
+      lunge: 0.4,
+      blockPush: 0.6,
+      lungeStart: 1 / 3,
+      lungeEnd: 2 / 3,
+      contactStart: 0.28,
+      contactEnd: 0.5,
+      name: 'Cut',
+    },
+    [AttackType.HEAVY]: {
+      aiRange: 1.85,
+      lunge: 0.95,
+      blockPush: 1.3,
+      lungeStart: 0.2,
+      lungeEnd: 0.8,
+      contactStart: 0.24,
+      contactEnd: 0.5,
+      name: 'Heavy Cut',
+    },
+    [AttackType.THRUST]: {
+      aiRange: 2.0,
+      lunge: 0.75,
+      blockPush: 0.9,
+      lungeStart: 0.25,
+      lungeEnd: 0.75,
+      contactStart: 0.3,
+      contactEnd: 0.62,
+      name: 'Thrust',
+    },
+  },
 };
 
-export function getAttackData(attackType, weaponType = WeaponType.KATANA) {
-  const weaponData = ATTACK_DATA[weaponType] || ATTACK_DATA[WeaponType.KATANA];
+export function getAttackData(attackType, charDefOrWeaponType = WeaponType.KATANA) {
+  const charDef = charDefOrWeaponType && typeof charDefOrWeaponType === 'object'
+    ? charDefOrWeaponType
+    : null;
+  const weaponType = charDef ? charDef.weaponType : charDefOrWeaponType;
+  const weaponData = charDef?.attackData || FALLBACK_ATTACK_DATA[weaponType] || FALLBACK_ATTACK_DATA[WeaponType.KATANA];
   const attackData = weaponData[attackType] || weaponData[AttackType.QUICK];
   return { ...attackData, attackType };
 }

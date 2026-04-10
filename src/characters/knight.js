@@ -16,14 +16,13 @@ export const knight = defineCharacter('knight', {
     },
     tuning: {
       hitRadius: 0.16,
-      clashRadius: 0.1,
       hitMode: 'capsule',
     },
   },
   attackData: {
     [AttackType.QUICK]: {
       aiRange: 1.55,
-      lunge: 0.42,
+      lunge: 0.45,
       blockPush: 0.6,
       lungeStart: 0.28,
       lungeEnd: 0.68,
@@ -33,7 +32,7 @@ export const knight = defineCharacter('knight', {
     },
     [AttackType.HEAVY]: {
       aiRange: 1.9,
-      lunge: 1.0,
+      lunge: 1.04,
       blockPush: 1.35,
       lungeStart: 0.18,
       lungeEnd: 0.82,
@@ -43,7 +42,7 @@ export const knight = defineCharacter('knight', {
     },
     [AttackType.THRUST]: {
       aiRange: 2.0,
-      lunge: 0.8,
+      lunge: 0.84,
       blockPush: 0.9,
       lungeStart: 0.24,
       lungeEnd: 0.78,

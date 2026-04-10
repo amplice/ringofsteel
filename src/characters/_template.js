@@ -16,7 +16,6 @@ export const template = defineCharacter('template', {
     },
     tuning: {
       hitRadius: 0.08,
-      clashRadius: 0.09,
       hitMode: 'capsule',
     },
   },

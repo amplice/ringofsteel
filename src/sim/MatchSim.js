@@ -13,7 +13,6 @@ import {
   HEAVY_ADVANTAGE_STUN_MULT,
   HEAVY_ADVANTAGE_SLIDE_MULT,
   HEAVY_CLASH_STUN_MULT,
-  HEAVY_CLASH_SLIDE_MULT,
   HEAVY_CLASH_WINNER_STUN_MULT,
   CLASH_SLIDE_MULT,
   CLASH_PUSHBACK_FRAMES,
@@ -267,18 +266,18 @@ export class MatchSim {
         const defType = result.defenderType;
         const atkHeavy = atkType === AttackType.HEAVY;
         const defHeavy = defType === AttackType.HEAVY;
+        const atkClashAdvantage = attacker.fsm.currentAttackData?.clashAdvantage;
+        const defClashAdvantage = defender.fsm.currentAttackData?.clashAdvantage;
         const atkStunBonus = (defHeavy && !atkHeavy)
-          ? HEAVY_CLASH_STUN_MULT
-          : ((atkHeavy && !defHeavy) ? HEAVY_CLASH_WINNER_STUN_MULT : 1);
+          ? (defClashAdvantage?.targetStunMult ?? HEAVY_CLASH_STUN_MULT)
+          : ((atkHeavy && !defHeavy) ? (atkClashAdvantage?.selfStunMult ?? HEAVY_CLASH_WINNER_STUN_MULT) : 1);
         const defStunBonus = (atkHeavy && !defHeavy)
-          ? HEAVY_CLASH_STUN_MULT
-          : ((defHeavy && !atkHeavy) ? HEAVY_CLASH_WINNER_STUN_MULT : 1);
-        const atkSlideBonus = (defHeavy && !atkHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
-        const defSlideBonus = (atkHeavy && !defHeavy) ? HEAVY_CLASH_SLIDE_MULT : 1;
+          ? (atkClashAdvantage?.targetStunMult ?? HEAVY_CLASH_STUN_MULT)
+          : ((defHeavy && !atkHeavy) ? (defClashAdvantage?.selfStunMult ?? HEAVY_CLASH_WINNER_STUN_MULT) : 1);
         const atkStunScale = this._getImpactStunScale(defender, attacker, atkStunBonus);
         const defStunScale = this._getImpactStunScale(attacker, defender, defStunBonus);
-        const atkSlideScale = this._getImpactSlideScale(defender, attacker, atkSlideBonus) * CLASH_SLIDE_MULT;
-        const defSlideScale = this._getImpactSlideScale(attacker, defender, defSlideBonus) * CLASH_SLIDE_MULT;
+        const atkSlideScale = this._getImpactSlideScale(defender, attacker) * CLASH_SLIDE_MULT;
+        const defSlideScale = this._getImpactSlideScale(attacker, defender) * CLASH_SLIDE_MULT;
         attacker.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * atkStunScale));
         defender.fsm.applyClash(Math.round(CLASH_PUSHBACK_FRAMES * defStunScale));
         attacker.slideMult = atkSlideScale;
@@ -302,16 +301,21 @@ export class MatchSim {
       case HitResult.PARRIED: {
         const parryStunScale = this._getImpactStunScale(defender, attacker);
         const parrySlideScale = this._getImpactSlideScale(defender, attacker);
-        const parryFrames = Math.round(PARRIED_STUN_FRAMES * parryStunScale);
+        const attackType = result.attackerType;
+        const baseParryFrames =
+          attackType === AttackType.QUICK ? Math.round(PARRIED_STUN_FRAMES * 1.25) :
+          attackType === AttackType.HEAVY ? Math.round(PARRIED_STUN_FRAMES * 0.9) :
+          PARRIED_STUN_FRAMES;
+        const parryFrames = Math.round(baseParryFrames * parryStunScale);
         attacker.fsm.applyParriedStun(parryFrames);
         attacker.slideMult = parrySlideScale;
-        defender.fsm.applyParrySuccess(parryFrames);
+        defender.fsm.applyParrySuccess(undefined, attackType);
         this.events.push({
           type: 'combat_result',
           result: HitResult.PARRIED,
           attackerIndex: attacker.playerIndex,
           defenderIndex: defender.playerIndex,
-          attackerType: result.attackerType,
+          attackerType: attackType,
           hitstopFrames: 8,
           contactPoint,
         });
@@ -339,7 +343,7 @@ export class MatchSim {
         break;
       }
 
-      case HitResult.CLEAN_HIT: {
+      case HitResult.LETHAL_HIT: {
         const isKill = defender.damageSystem.applyDamage();
         const hitStunScale = this._getImpactStunScale(attacker, defender);
         const hitSlideScale = this._getImpactSlideScale(attacker, defender);
@@ -347,7 +351,7 @@ export class MatchSim {
         defender.slideMult = hitSlideScale;
         this.events.push({
           type: 'combat_result',
-          result: HitResult.CLEAN_HIT,
+          result: HitResult.LETHAL_HIT,
           attackerIndex: attacker.playerIndex,
           defenderIndex: defender.playerIndex,
           attackerType: result.attackerType,
@@ -360,7 +364,7 @@ export class MatchSim {
           defender.fsm.startDying();
           this.roundOver = true;
           this.winner = attacker.playerIndex + 1;
-          this.killReason = 'clean_hit';
+          this.killReason = 'lethal_hit';
         }
         break;
       }

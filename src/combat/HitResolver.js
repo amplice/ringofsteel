@@ -6,8 +6,6 @@ import {
 } from '../core/Constants.js';
 import {
   HURT_CYLINDER,
-  MOTION_THRESHOLDS,
-  getDefaultWeaponClashRadius,
   getDefaultWeaponHitRadius,
 } from './CombatTuning.js';
 
@@ -25,8 +23,6 @@ const _segD2 = new THREE.Vector3();
 const _segR = new THREE.Vector3();
 const _segC1 = new THREE.Vector3();
 const _segC2 = new THREE.Vector3();
-const _aMid = new THREE.Vector3();
-const _bMid = new THREE.Vector3();
 
 export class HitResolver {
   resolve(attacker, defender) {
@@ -46,17 +42,12 @@ export class HitResolver {
       return finish(HitResult.CLASH);
     }
 
-    // Priority 2: Sidestep dash phase -> Whiff (invulnerable during dash)
-    if (defender.state === FighterState.SIDESTEP && defender.fsm.sidestepPhase === 'dash') {
-      return finish(HitResult.WHIFF);
-    }
-
-    // Priority 3: Backstep i-frames -> Whiff
+    // Priority 2: Backstep i-frames -> Whiff
     if (defender.state === FighterState.DODGE && defender.stateFrames <= BACKSTEP_INVULN_FRAMES) {
       return finish(HitResult.WHIFF);
     }
 
-    // Priority 4: Parry -> Parried (within window), or Blocked (past window but still in parry state)
+    // Priority 3: Parry -> Parried (within window), or Blocked (past window but still in parry state)
     if (defender.state === FighterState.PARRY) {
       if (defender.stateFrames <= PARRY_WINDOW_FRAMES) {
         return finish(HitResult.PARRIED);
@@ -65,13 +56,13 @@ export class HitResolver {
       return finish(HitResult.BLOCKED);
     }
 
-    // Priority 5: Active block only -> Blocked
+    // Priority 4: Active block only -> Blocked
     if (defender.state === FighterState.BLOCK) {
       return finish(HitResult.BLOCKED);
     }
 
-    // Priority 6: Clean Hit
-    return finish(HitResult.CLEAN_HIT);
+    // Priority 5: Lethal Hit
+    return finish(HitResult.LETHAL_HIT);
   }
 
   _isInActiveFrames(fighter) {
@@ -124,17 +115,11 @@ export class HitResolver {
     const aTip = attacker.getWeaponTipWorldPosition(_segQ1);
     const bBase = defender.getWeaponBaseWorldPosition(_segP2);
     const bTip = defender.getWeaponTipWorldPosition(_segQ2);
-    _aMid.addVectors(aBase, aTip).multiplyScalar(0.5);
-    _bMid.addVectors(bBase, bTip).multiplyScalar(0.5);
 
-    const aRadius = attacker.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(attacker.weaponType);
-    const bRadius = defender.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(defender.weaponType);
+    const aRadius = attacker.charDef?.weaponClashRadius ?? getDefaultWeaponHitRadius(attacker.weaponType);
+    const bRadius = defender.charDef?.weaponClashRadius ?? getDefaultWeaponHitRadius(defender.weaponType);
     const dist = this._distBetweenSegments(aBase, aTip, bBase, bTip);
     const overlap = dist <= (aRadius + bRadius);
-    const closingDrive =
-      attacker.getTipRelativeVelocityToward(_bMid) +
-      defender.getTipRelativeVelocityToward(_aMid);
-    const motionGatePassed = closingDrive > MOTION_THRESHOLDS.weaponClashClosingDrive;
 
     const aCollision = attacker._debugCollision || (attacker._debugCollision = {});
     const bCollision = defender._debugCollision || (defender._debugCollision = {});
@@ -144,12 +129,8 @@ export class HitResolver {
     bCollision.weaponClashDistance = dist;
     aCollision.weaponClashOverlap = overlap;
     bCollision.weaponClashOverlap = overlap;
-    aCollision.weaponClashClosingDrive = closingDrive;
-    bCollision.weaponClashClosingDrive = closingDrive;
-    aCollision.weaponClashMotionGate = motionGatePassed;
-    bCollision.weaponClashMotionGate = motionGatePassed;
 
-    return overlap && motionGatePassed;
+    return overlap;
   }
 
   checkWeaponGuardContact(attacker, defender) {
@@ -157,8 +138,8 @@ export class HitResolver {
     const aTip = attacker.getWeaponTipWorldPosition(_segQ1);
     const bBase = defender.getWeaponBaseWorldPosition(_segP2);
     const bTip = defender.getWeaponTipWorldPosition(_segQ2);
-    const aRadius = attacker.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(attacker.weaponType);
-    const bRadius = defender.charDef?.weaponClashRadius ?? getDefaultWeaponClashRadius(defender.weaponType);
+    const aRadius = attacker.charDef?.weaponClashRadius ?? getDefaultWeaponHitRadius(attacker.weaponType);
+    const bRadius = defender.charDef?.weaponClashRadius ?? getDefaultWeaponHitRadius(defender.weaponType);
     const dist = this._distBetweenSegments(aBase, aTip, bBase, bTip);
     return dist <= (aRadius + bRadius);
   }
@@ -375,3 +356,4 @@ export class HitResolver {
   }
 
 }
+

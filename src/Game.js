@@ -908,7 +908,7 @@ export class Game {
         this.cameraController.shake(0.1);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
-      case HitResult.CLEAN_HIT:
+      case HitResult.LETHAL_HIT:
         this.particles.emitSparks(contactPoint, 8);
         this.particles.emitBlood(contactPoint, 15);
         this.cameraController.shake(0.25);
@@ -918,7 +918,7 @@ export class Game {
     }
   }
 
-  _startKillPresentation(killer, victim, reason = 'clean_hit') {
+  _startKillPresentation(killer, victim, reason = 'lethal_hit') {
     if (!killer || !victim) return;
 
     const dx = victim.position.x - killer.position.x;

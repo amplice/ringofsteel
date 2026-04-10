@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { DEBUG_OPTIONS } from '../core/Constants.js';
 import {
   BODY_COLLISION,
-  getDefaultWeaponClashRadius,
   getDefaultWeaponHitRadius,
 } from '../combat/CombatTuning.js';
 
@@ -120,7 +119,7 @@ export class DebugOverlay {
       lines.push(`  collision mode=${fighter.collision.weaponHitMode ?? fighter.weaponHitMode ?? '-'} hitRadius=${(fighter.collision.weaponHitRadius ?? fighter.weaponHitRadius ?? 0).toFixed(3)} window=${fighter.collision.contactWindowPassed} progress=${(fighter.collision.attackProgress ?? 0).toFixed(2)} [${(fighter.collision.contactWindowStart ?? 0).toFixed(2)}..${(fighter.collision.contactWindowEnd ?? 1).toFixed(2)}] motionGate=${fighter.collision.motionGatePassed} forward=${fighter.collision.forwardDrive.toFixed(4)} toward=${fighter.collision.towardTarget.toFixed(4)} segmentHit=${fighter.collision.segmentHit}`);
       lines.push(`  collision resolve=${fighter.collision.lastResolve ?? '-'} result=${fighter.collision.lastCheckResult ?? '-'}`);
       if (Number.isFinite(fighter.collision.weaponClashDistance)) {
-        lines.push(`  clash dist=${fighter.collision.weaponClashDistance.toFixed(4)} radius=${fighter.weaponClashRadius.toFixed(3)} overlap=${fighter.collision.weaponClashOverlap} motion=${fighter.collision.weaponClashMotionGate} closing=${fighter.collision.weaponClashClosingDrive.toFixed(4)}`);
+        lines.push(`  clash dist=${fighter.collision.weaponClashDistance.toFixed(4)} radius=${fighter.weaponClashRadius.toFixed(3)} overlap=${fighter.collision.weaponClashOverlap}`);
       }
     }
     return lines.join('\n');
@@ -319,7 +318,7 @@ export class DebugOverlay {
     helper.tip.position.copy(tip);
     helper.weaponLine.geometry.setFromPoints([base, tip]);
 
-    const clashRadius = fighter.weaponClashRadius ?? getDefaultWeaponClashRadius(fighter.weaponType);
+    const clashRadius = fighter.weaponClashRadius ?? getDefaultWeaponHitRadius(fighter.weaponType);
     const hitRadius = fighter.collision?.weaponHitRadius ?? fighter.weaponHitRadius ?? getDefaultWeaponHitRadius(fighter.weaponType);
     _segMid.addVectors(base, tip).multiplyScalar(0.5);
     _segDir.subVectors(tip, base);

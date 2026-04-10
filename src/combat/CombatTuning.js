@@ -20,7 +20,6 @@ export const MOTION_THRESHOLDS = Object.freeze({
   spearRelativeSpeed: 0.002,
   katanaTowardTarget: 0.004,
   katanaRelativeSpeed: 0.0055,
-  weaponClashClosingDrive: 0.0025,
 });
 
 export const STUN_IMPACT_TUNING = Object.freeze({
@@ -53,17 +52,14 @@ export const REMOTE_VIEW_TUNING = Object.freeze({
 export const DEFAULT_WEAPON_TUNING = Object.freeze({
   [WeaponType.SPEAR]: Object.freeze({
     hitRadius: 0.02,
-    clashRadius: 0.09,
     hitMode: 'tip',
   }),
   [WeaponType.KATANA]: Object.freeze({
     hitRadius: 0.08,
-    clashRadius: 0.09,
     hitMode: 'capsule',
   }),
   [WeaponType.SWORD]: Object.freeze({
     hitRadius: 0.09,
-    clashRadius: 0.1,
     hitMode: 'capsule',
   }),
 });
@@ -74,10 +70,6 @@ export function getDefaultWeaponTuning(weaponType) {
 
 export function getDefaultWeaponHitRadius(weaponType) {
   return getDefaultWeaponTuning(weaponType).hitRadius;
-}
-
-export function getDefaultWeaponClashRadius(weaponType) {
-  return getDefaultWeaponTuning(weaponType).clashRadius;
 }
 
 export function getMotionThresholds(charDefOrWeaponType) {

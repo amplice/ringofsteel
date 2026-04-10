@@ -16,14 +16,13 @@ export const ronin = defineCharacter('ronin', {
     },
     tuning: {
       hitRadius: 0.08,
-      clashRadius: 0.09,
       hitMode: 'capsule',
     },
   },
   attackData: {
     [AttackType.QUICK]: {
       aiRange: 1.5,
-      lunge: 0.4,
+      lunge: 0.46,
       blockPush: 0.5,
       lungeStart: 1 / 3,
       lungeEnd: 2 / 3,
@@ -100,7 +99,7 @@ export const ronin = defineCharacter('ronin', {
   },
   clipSpeedFactor: { walk: 2, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
   clipSpeedOverrides: {
-    attack_quick: 1.12,
+    attack_quick: 1.16,
     attack_heavy: 1.15,
     attack_thrust: 0.8125,
     backstep: 0.8333333333333334,
@@ -113,6 +112,7 @@ export const ronin = defineCharacter('ronin', {
   attackStrength: 1.1,
   defenseStoutness: 1.05,
   sidestepDistance: 1.2,
+  sidestepFrames: 24,
   sidestepRecoveryFrames: 5,
   bodySeparation: 1.6,
 });

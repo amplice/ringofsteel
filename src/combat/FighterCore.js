@@ -6,7 +6,7 @@ import {
   FACING_TUNING,
   HURT_CYLINDER,
   getBodyRadius,
-  getDefaultWeaponClashRadius,
+  getDefaultWeaponHitRadius,
 } from './CombatTuning.js';
 import {
   FighterState,
@@ -15,6 +15,8 @@ import {
   SIDESTEP_DASH_DISTANCE,
   BACKSTEP_FRAMES,
   BACKSTEP_DISTANCE,
+  BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES,
+  BACKSTEP_ATTACK_LUNGE_BONUS,
   STEP_DISTANCE,
   STEP_FRAMES,
   STEP_COOLDOWN_FRAMES,
@@ -57,6 +59,7 @@ export class FighterCore {
     this._debugCollision = null;
     this._wasAttacking = false;
     this._postAttackTurnTime = 0;
+    this._backstepAttackBonusFrames = 0;
 
     this._tipWorldPosition = new THREE.Vector3();
     this._tipVelocity = new THREE.Vector3();
@@ -145,6 +148,10 @@ export class FighterCore {
       const angle = this.group.rotation.y;
       this.position.x -= Math.sin(angle) * speed * dt;
       this.position.z -= Math.cos(angle) * speed * dt;
+    }
+
+    if (this._backstepAttackBonusFrames > 0 && this.state !== FighterState.DODGE) {
+      this._backstepAttackBonusFrames--;
     }
 
     if (this.state === FighterState.WALK_FORWARD || this.state === FighterState.WALK_BACK) {
@@ -362,7 +369,7 @@ export class FighterCore {
       weaponTip: { x: weaponTip.x, y: weaponTip.y, z: weaponTip.z },
       bodyCollision: { x: bodyCollision.x, y: bodyCollision.y, z: bodyCollision.z },
       hurtCenter: { x: hurtCenter.x, y: hurtCenter.y, z: hurtCenter.z },
-      weaponClashRadius: this.charDef.weaponClashRadius ?? getDefaultWeaponClashRadius(this.weaponType),
+      weaponClashRadius: this.charDef.weaponClashRadius ?? getDefaultWeaponHitRadius(this.weaponType),
       hurtRadius: this._debugCollision?.hurtRadius ?? HURT_CYLINDER.radius,
       hurtHeight: this._debugCollision?.hurtHeight ?? HURT_CYLINDER.height,
       bodyRadius: getBodyRadius(this.charDef),
@@ -390,6 +397,7 @@ export class FighterCore {
     this._debugCollision = null;
     this._wasAttacking = false;
     this._postAttackTurnTime = 0;
+    this._backstepAttackBonusFrames = 0;
     this._tipMotionInitialized = false;
     this._tipVelocity.set(0, 0, 0);
     this._baseVelocity.set(0, 0, 0);
@@ -440,6 +448,23 @@ export class FighterCore {
 
   _getAttackFrameCount() {
     return 30;
+  }
+
+  _getBackstepAttackLungeBonus() {
+    if (this._backstepAttackBonusFrames <= 0) return 0;
+    return this.charDef.backstepAttackLungeBonus ?? BACKSTEP_ATTACK_LUNGE_BONUS;
+  }
+
+  _getBackstepAttackBonusWindowFrames() {
+    return this.charDef.backstepAttackBonusWindowFrames ?? BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES;
+  }
+
+  _consumeBackstepAttackBonus() {
+    this._backstepAttackBonusFrames = 0;
+  }
+
+  _grantBackstepAttackBonus() {
+    this._backstepAttackBonusFrames = this._getBackstepAttackBonusWindowFrames();
   }
 
   _getPresentationClip(resolveClipName) {

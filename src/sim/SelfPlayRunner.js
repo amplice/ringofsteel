@@ -284,7 +284,7 @@ export class SelfPlayRunner {
   _createMatchMetrics(p1Profile, p2Profile, p1Char, p2Char) {
     return {
       totalFrames: 0,
-      resultCounts: { clash: 0, blocked: 0, parried: 0, clean_hit: 0 },
+      resultCounts: { clash: 0, blocked: 0, parried: 0, lethal_hit: 0 },
       p1: this._createSideMetrics(p1Profile, p1Char),
       p2: this._createSideMetrics(p2Profile, p2Char),
     };
@@ -304,7 +304,7 @@ export class SelfPlayRunner {
       clashes: 0,
       blockedHits: 0,
       parrySuccesses: 0,
-      cleanHits: 0,
+      lethalHits: 0,
       kills: 0,
       deaths: 0,
       ringOutKills: 0,
@@ -317,7 +317,7 @@ export class SelfPlayRunner {
     return {
       roundIndex,
       timeout: false,
-      resultCounts: { clash: 0, blocked: 0, parried: 0, clean_hit: 0 },
+      resultCounts: { clash: 0, blocked: 0, parried: 0, lethal_hit: 0 },
       p1: this._createSideMetrics(p1Profile, p1Char),
       p2: this._createSideMetrics(p2Profile, p2Char),
       killTraces: [],
@@ -381,8 +381,8 @@ export class SelfPlayRunner {
           defenderMetrics.parrySuccesses++;
         } else if (event.result === HitResult.BLOCKED) {
           defenderMetrics.blockedHits++;
-        } else if (event.result === HitResult.CLEAN_HIT) {
-          attackerMetrics.cleanHits++;
+        } else if (event.result === HitResult.LETHAL_HIT) {
+          attackerMetrics.lethalHits++;
         }
         continue;
       }
@@ -589,7 +589,7 @@ export class SelfPlayRunner {
         clashes: 0,
         blocked: 0,
         parried: 0,
-        cleanHits: 0,
+        lethalHits: 0,
         sidestepKills: 0,
         offAngleKills: 0,
         ringOutKills: 0,
@@ -630,7 +630,7 @@ export class SelfPlayRunner {
       summary.globalMetrics.clashes += match.metrics.resultCounts.clash;
       summary.globalMetrics.blocked += match.metrics.resultCounts.blocked;
       summary.globalMetrics.parried += match.metrics.resultCounts.parried;
-      summary.globalMetrics.cleanHits += match.metrics.resultCounts.clean_hit;
+      summary.globalMetrics.lethalHits += match.metrics.resultCounts.lethal_hit;
 
       for (const side of ['p1', 'p2']) {
         const metrics = match.metrics[side];

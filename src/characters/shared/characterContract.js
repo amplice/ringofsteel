@@ -35,6 +35,14 @@ function validateAttackData(charId, attackData) {
     for (const field of ['aiRange', 'lunge', 'blockPush', 'contactStart', 'contactEnd']) {
       assertField(attack[field], `${charId}.attackData.${attackType}.${field}`);
     }
+    if (attack.clashAdvantage) {
+      const clashPath = `${charId}.attackData.${attackType}.clashAdvantage`;
+      for (const field of ['selfStunMult', 'targetStunMult']) {
+        if (attack.clashAdvantage[field] !== undefined) {
+          assertField(attack.clashAdvantage[field], `${clashPath}.${field}`);
+        }
+      }
+    }
   }
 }
 
@@ -46,7 +54,7 @@ function validateWeapon(charId, weapon) {
   for (const field of ['length', 'width', 'color', 'guardSize']) {
     assertField(weapon.stats[field], `${charId}.weapon.stats.${field}`);
   }
-  for (const field of ['hitRadius', 'clashRadius', 'hitMode']) {
+  for (const field of ['hitRadius', 'hitMode']) {
     assertField(weapon.tuning[field], `${charId}.weapon.tuning.${field}`);
   }
 }
@@ -87,7 +95,7 @@ export function defineCharacter(charId, def) {
     weaponType: def.weapon.type,
     weaponStats: def.weapon.stats,
     weaponHitRadius: def.weapon.tuning.hitRadius,
-    weaponClashRadius: def.weapon.tuning.clashRadius,
+    weaponClashRadius: def.weapon.tuning.hitRadius,
     weaponHitMode: def.weapon.tuning.hitMode,
   });
 }

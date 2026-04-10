@@ -73,16 +73,16 @@ export class AIController {
       }
     }
 
-    const shouldInterrupt = this._checkReactiveInterrupt(fighter, opponent);
+    const shouldInterrupt = this._checkReactiveInterrupt(fighter, opponent, this.personality);
 
     if (shouldInterrupt) {
       this.lastDecisionFrame = frameCount;
-      this._makeDecision(fighter, opponent, dt, frameCount);
+      this._makeDecision(fighter, opponent, dt, frameCount, this.personality);
     } else if (frameCount - this.lastDecisionFrame < this.personality.reactionFrames) {
       this._executePersistent(fighter, dt);
     } else {
       this.lastDecisionFrame = frameCount;
-      this._makeDecision(fighter, opponent, dt, frameCount);
+      this._makeDecision(fighter, opponent, dt, frameCount, this.personality);
     }
 
     this._applyMovement(fighter, dt);
@@ -135,10 +135,8 @@ export class AIController {
     this._selfWasAttacking = fighter.fsm.isAttacking;
   }
 
-  _checkReactiveInterrupt(fighter, opponent) {
+  _checkReactiveInterrupt(fighter, opponent, p) {
     if (!fighter.fsm.isActionable) return false;
-
-    const p = this.personality;
 
     if (opponent.state === FighterState.ATTACK_ACTIVE && this._opponentLastState !== FighterState.ATTACK_ACTIVE) {
       return Math.random() < (p.parryRate + p.dodgeRate) * 0.5;
@@ -151,7 +149,7 @@ export class AIController {
     return false;
   }
 
-  _makeDecision(fighter, opponent, dt, frameCount) {
+  _makeDecision(fighter, opponent, dt, frameCount, p) {
     if (fighter.state === FighterState.BLOCK) {
       fighter.fsm.transition(FighterState.IDLE);
       this.currentAction = null;
@@ -160,7 +158,6 @@ export class AIController {
     if (!fighter.fsm.isActionable) return;
 
     const dist = fighter.distanceTo(opponent);
-    const p = this.personality;
     const noise = () => (Math.random() - 0.5) * p.decisionNoise;
     const engagement = this._getEngagementContext(fighter, opponent, dist);
 

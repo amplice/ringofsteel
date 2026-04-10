@@ -43,7 +43,7 @@ export const HitResult = {
   WHIFF: 'whiff',
   PARRIED: 'parried',
   BLOCKED: 'blocked',
-  CLEAN_HIT: 'clean_hit',
+  LETHAL_HIT: 'lethal_hit',
 };
 
 // Weapon types
@@ -56,10 +56,15 @@ export const WeaponType = {
 // Timing constants (in frames at 60fps)
 export const FRAME_DURATION = 1 / 60;
 
-export const PARRY_WINDOW_FRAMES = 7;
+export const PARRY_WINDOW_FRAMES = 10;
 export const BLOCK_STUN_FRAMES = 16;
 export const HIT_STUN_FRAMES = 16;
 export const PARRIED_STUN_FRAMES = 24;
+export const PARRY_SUCCESS_FRAMES_BY_ATTACK = Object.freeze({
+  quick: 34,
+  heavy: 22,
+  thrust: 28,
+});
 export const CLASH_PUSHBACK_FRAMES = 16;
 
 // Knockback slide speed (units/sec) — fighters slide apart during stun
@@ -70,7 +75,6 @@ export const KNOCKBACK_SLIDE_SPEED = 1.88;
 export const HEAVY_ADVANTAGE_STUN_MULT = 1.5;
 export const HEAVY_ADVANTAGE_SLIDE_MULT = 1.5;
 export const HEAVY_CLASH_STUN_MULT = 1.6;
-export const HEAVY_CLASH_SLIDE_MULT = 1.2;
 export const HEAVY_CLASH_WINNER_STUN_MULT = 0.45;
 export const CLASH_SLIDE_MULT = 0.35;
 
@@ -84,6 +88,8 @@ export const SIDESTEP_RECOVERY_FRAMES = 8;
 export const BACKSTEP_FRAMES = 21;
 export const BACKSTEP_DISTANCE = 1.5;
 export const BACKSTEP_INVULN_FRAMES = 6;
+export const BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES = 18;
+export const BACKSTEP_ATTACK_LUNGE_BONUS = 0.28;
 
 // Block pushback
 export const BLOCK_PUSHBACK_SPEED = 2.0;

@@ -1,7 +1,7 @@
 import {
   FighterState, AttackType,
   PARRY_WINDOW_FRAMES,
-  BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES,
+  BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES, PARRY_SUCCESS_FRAMES_BY_ATTACK,
   CLASH_PUSHBACK_FRAMES,
   SIDESTEP_DASH_FRAMES, SIDESTEP_RECOVERY_FRAMES,
   BACKSTEP_FRAMES, BACKSTEP_INVULN_FRAMES,
@@ -52,7 +52,12 @@ export class FighterStateMachine {
   startAttack(attackType, durationFrames) {
     if (!this.isActionable) return false;
 
-    const data = getAttackData(attackType, this.fighter.charDef);
+    const data = { ...getAttackData(attackType, this.fighter.charDef) };
+    const backstepBonus = this.fighter._getBackstepAttackLungeBonus?.() ?? 0;
+    if (backstepBonus > 0) {
+      data.lunge += backstepBonus;
+      this.fighter._consumeBackstepAttackBonus?.();
+    }
 
     this.currentAttackData = data;
     this.currentAttackType = attackType;
@@ -100,8 +105,11 @@ export class FighterStateMachine {
     this.transition(FighterState.PARRIED_STUN, frames || PARRIED_STUN_FRAMES);
   }
 
-  applyParrySuccess(frames) {
-    this.transition(FighterState.PARRY_SUCCESS, frames || PARRIED_STUN_FRAMES);
+  applyParrySuccess(frames, attackType = null) {
+    const defaultFrames = attackType
+      ? (PARRY_SUCCESS_FRAMES_BY_ATTACK[attackType] ?? PARRIED_STUN_FRAMES)
+      : PARRIED_STUN_FRAMES;
+    this.transition(FighterState.PARRY_SUCCESS, frames || defaultFrames);
   }
 
   applyClash(frames) {
@@ -168,6 +176,7 @@ export class FighterStateMachine {
       case FighterState.DODGE:
         // Backstep
         if (this.stateFrames >= BACKSTEP_FRAMES) {
+          this.fighter._grantBackstepAttackBonus?.();
           this.transition(FighterState.IDLE);
         }
         break;

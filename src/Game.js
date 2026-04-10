@@ -915,31 +915,46 @@ export class Game {
       event.contactPoint.y,
       event.contactPoint.z,
     );
+    const impactDirection = this._getCombatImpactDirection(event);
 
     switch (event.result) {
       case HitResult.CLASH:
-        this.particles.emitClashSparks(contactPoint);
+        this.particles.emitClashSparks(contactPoint, impactDirection);
         this.cameraController.shake(0.2);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
       case HitResult.PARRIED:
-        this.particles.emitSparks(contactPoint, 10);
+        this.particles.emitWhiteImpact(contactPoint, impactDirection, 16);
         this.cameraController.shake(0.15);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
       case HitResult.BLOCKED:
-        this.particles.emitSparks(contactPoint, 6);
+        this.particles.emitWhiteImpact(contactPoint, impactDirection, 12);
         this.cameraController.shake(0.1);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
       case HitResult.LETHAL_HIT:
-        this.particles.emitSparks(contactPoint, 8);
-        this.particles.emitBlood(contactPoint, 15);
+        this.particles.emitWhiteImpact(contactPoint, impactDirection, 10);
+        this.particles.emitBlood(contactPoint, 32, impactDirection);
         this.cameraController.shake(0.25);
         this.screenEffects.flashRed();
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
     }
+  }
+
+  _getCombatImpactDirection(event) {
+    const attacker = event.attackerIndex === 0 ? this.fighter1 : this.fighter2;
+    const defender = event.defenderIndex === 0 ? this.fighter1 : this.fighter2;
+    if (!attacker || !defender) return null;
+
+    const direction = new THREE.Vector3(
+      defender.position.x - attacker.position.x,
+      0.18,
+      defender.position.z - attacker.position.z,
+    );
+    if (direction.lengthSq() < 0.0001) return null;
+    return direction.normalize();
   }
 
   _startKillPresentation(killer, victim, reason = 'lethal_hit') {
@@ -953,7 +968,8 @@ export class Game {
     if (reason !== 'ring_out') {
       const pos = victim.position.clone();
       pos.y += 1.0;
-      this.particles.emitBloodGush(pos, 50);
+      const sprayDirection = new THREE.Vector3(dx / dist, 0.22, dz / dist).normalize();
+      this.particles.emitBloodGush(pos, 95, sprayDirection);
     }
 
     this.clock.setTimeScale(0.0);

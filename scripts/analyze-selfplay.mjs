@@ -43,7 +43,7 @@ function aggregateSides(matches, keyFn) {
           sidesteps: 0,
           blocks: 0,
           parries: 0,
-          cleanHits: 0,
+          lethalHits: 0,
           kills: 0,
           sidestepKills: 0,
           entries: 0,
@@ -57,7 +57,7 @@ function aggregateSides(matches, keyFn) {
       row.sidesteps += side.sidesteps;
       row.blocks += side.blocks;
       row.parries += side.parries;
-      row.cleanHits += side.cleanHits;
+      row.lethalHits += side.lethalHits;
       row.kills += side.kills;
       row.sidestepKills += side.sidestepKills;
     }
@@ -108,11 +108,11 @@ function main() {
     .sort((a, b) => b.kills - a.kills);
 
   printRows('By profile/class', byProfileChar, (row) =>
-    `${row.key.padEnd(18)} kills=${String(row.kills).padStart(3)} hits=${String(row.cleanHits).padStart(3)} whiff=${pct(row.whiffRate).padStart(6)} sidesteps=${String(row.sidesteps).padStart(4)} sidestepKills=${String(row.sidestepKills).padStart(3)} (${pct(row.sidestepKillShare)})`,
+    `${row.key.padEnd(24)} kills=${String(row.kills).padStart(3)} lethalHits=${String(row.lethalHits).padStart(3)} whiff=${pct(row.whiffRate).padStart(6)} sidesteps=${String(row.sidesteps).padStart(4)} sidestepKills=${String(row.sidestepKills).padStart(3)} (${pct(row.sidestepKillShare)})`,
   );
 
   printRows('By class', byChar, (row) =>
-    `${row.key.padEnd(10)} kills=${String(row.kills).padStart(3)} hits=${String(row.cleanHits).padStart(3)} whiff=${pct(row.whiffRate).padStart(6)} sidesteps=${String(row.sidesteps).padStart(4)} sidestepKills=${String(row.sidestepKills).padStart(3)} (${pct(row.sidestepKillShare)})`,
+    `${row.key.padEnd(10)} kills=${String(row.kills).padStart(3)} lethalHits=${String(row.lethalHits).padStart(3)} whiff=${pct(row.whiffRate).padStart(6)} sidesteps=${String(row.sidesteps).padStart(4)} sidestepKills=${String(row.sidestepKills).padStart(3)} (${pct(row.sidestepKillShare)})`,
   );
 
   if (summary.findings.length) {

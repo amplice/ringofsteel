@@ -42,7 +42,7 @@ export const ronin = defineCharacter('ronin', {
     },
     [AttackType.THRUST]: {
       aiRange: 2.0,
-      lunge: 0.82,
+      lunge: 0.58,
       blockPush: 0.8,
       lungeStart: 0.25,
       lungeEnd: 0.75,
@@ -99,7 +99,7 @@ export const ronin = defineCharacter('ronin', {
   },
   clipSpeedFactor: { walk: 2, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
   clipSpeedOverrides: {
-    attack_quick: 1.16,
+    attack_quick: 1.12,
     attack_heavy: 1.15,
     attack_thrust: 0.8125,
     backstep: 0.8333333333333334,

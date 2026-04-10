@@ -22,6 +22,24 @@ import {
   ROUND_END_DELAY,
 } from './core/Constants.js';
 
+const AI_DIFFICULTY_PROFILE_MAP = Object.freeze({
+  spearman: Object.freeze({
+    easy: 'spearman_heavy_bully',
+    medium: 'spearman_evasive',
+    hard: 'spearman_aggressor',
+  }),
+  ronin: Object.freeze({
+    easy: 'ronin_lancer',
+    medium: 'ronin_duelist',
+    hard: 'ronin_evasive',
+  }),
+  knight: Object.freeze({
+    easy: 'knight_bulwark',
+    medium: 'knight_duelist',
+    hard: 'knight_sentinel',
+  }),
+});
+
 
 export class Game {
   constructor() {
@@ -199,7 +217,7 @@ export class Game {
 
     // AI
     if (this.mode === 'ai') {
-      this.aiController = new AIController(this.difficulty);
+      this.aiController = new AIController(this._getAIDifficultyProfile(p2.charDef.id, this.difficulty));
     } else {
       this.aiController = null;
     }
@@ -258,6 +276,12 @@ export class Game {
     this.ui.hud.showRoundAnnounce(this.currentRound);
 
     this.input.clearBuffers();
+  }
+
+  _getAIDifficultyProfile(charId, difficulty) {
+    const charProfiles = AI_DIFFICULTY_PROFILE_MAP[charId];
+    if (charProfiles && charProfiles[difficulty]) return charProfiles[difficulty];
+    return difficulty;
   }
 
   _cleanupFighters() {

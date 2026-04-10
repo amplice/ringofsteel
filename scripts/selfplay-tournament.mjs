@@ -19,8 +19,10 @@ const maxMatchRounds = Number(args.find(a => a.startsWith('--max-match-rounds=')
 const seedBase = Number(args.find(a => a.startsWith('--seed='))?.split('=')[1] || '1337');
 const profilesArg = args.find(a => a.startsWith('--profiles='))?.split('=')[1];
 const charsArg = args.find(a => a.startsWith('--chars='))?.split('=')[1];
+const classProfilesArg = args.find(a => a.startsWith('--class-profiles='))?.split('=')[1];
 const profiles = profilesArg ? profilesArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 const characters = charsArg ? charsArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+const classProfileSets = classProfilesArg === 'default' ? 'default' : undefined;
 
 async function startVite() {
   return new Promise((resolve, reject) => {
@@ -97,7 +99,7 @@ async function main() {
     console.log('[selfplay-script] runner available');
 
     console.log('[selfplay-script] running tournament');
-    const result = await page.evaluate(async ({ repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters }) => {
+    const result = await page.evaluate(async ({ repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets }) => {
       return window.runSelfPlayTournament({
         repeats,
         maxRoundFrames,
@@ -106,8 +108,9 @@ async function main() {
         seedBase,
         profiles,
         characters,
+        classProfileSets,
       });
-    }, { repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters });
+    }, { repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets });
 
     const outPath = path.join(OUT_DIR, `selfplay-${timestamp()}.json`);
     fs.writeFileSync(outPath, JSON.stringify(result, null, 2));

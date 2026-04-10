@@ -2,6 +2,7 @@ import { Fighter } from '../entities/Fighter.js';
 import { ModelLoader } from '../entities/ModelLoader.js';
 import { CHARACTER_DEFS } from '../entities/CharacterDefs.js';
 import { AIController } from '../ai/AIController.js';
+import { AI_CLASS_PROFILE_SETS } from '../ai/AIPersonality.js';
 import { HitResolver } from '../combat/HitResolver.js';
 import { MatchSim } from './MatchSim.js';
 import {
@@ -59,6 +60,7 @@ function classifyKillSetup(trace) {
 export const DEFAULT_TOURNAMENT_CONFIG = Object.freeze({
   profiles: ['baseline', 'aggressor', 'turtler', 'duelist', 'evasive', 'punisher'],
   characters: Object.keys(CHARACTER_DEFS),
+  classProfileSets: null,
   roundsToWin: ROUNDS_TO_WIN,
   repeats: 1,
   maxRoundFrames: 60 * 25,
@@ -92,13 +94,19 @@ export class SelfPlayRunner {
     await this.preloadCharacters(config.characters);
     console.log('[selfplay] preload done');
 
+    const classProfileSets = config.classProfileSets === 'default'
+      ? AI_CLASS_PROFILE_SETS
+      : config.classProfileSets;
+
     const matches = [];
     let seed = config.seedBase;
 
-    for (const p1Profile of config.profiles) {
-      for (const p2Profile of config.profiles) {
-        for (const p1Char of config.characters) {
-          for (const p2Char of config.characters) {
+    for (const p1Char of config.characters) {
+      const p1Profiles = classProfileSets?.[p1Char] || config.profiles;
+      for (const p2Char of config.characters) {
+        const p2Profiles = classProfileSets?.[p2Char] || config.profiles;
+        for (const p1Profile of p1Profiles) {
+          for (const p2Profile of p2Profiles) {
             for (let repeat = 0; repeat < config.repeats; repeat++) {
               const match = await this.runMatch({
                 p1Profile,

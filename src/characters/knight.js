@@ -38,6 +38,10 @@ export const knight = defineCharacter('knight', {
       lungeEnd: 0.82,
       contactStart: 15 / 56,
       contactEnd: 33 / 56,
+      clashAdvantage: {
+        selfStunMult: 0.6,
+        targetStunMult: 1.35,
+      },
       name: 'Heavy Cut',
     },
     [AttackType.THRUST]: {

@@ -919,17 +919,17 @@ export class Game {
 
     switch (event.result) {
       case HitResult.CLASH:
-        this.particles.emitClashSparks(contactPoint, impactDirection);
+        this._emitWeaponImpact(event, 'clash', impactDirection, contactPoint);
         this.cameraController.shake(0.2);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
       case HitResult.PARRIED:
-        this.particles.emitWhiteImpact(contactPoint, impactDirection, 16);
+        this._emitWeaponImpact(event, 'parry', impactDirection, contactPoint);
         this.cameraController.shake(0.15);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
       case HitResult.BLOCKED:
-        this.particles.emitWhiteImpact(contactPoint, impactDirection, 12);
+        this._emitWeaponImpact(event, 'block', impactDirection, contactPoint);
         this.cameraController.shake(0.1);
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
@@ -941,6 +941,44 @@ export class Game {
         this.screenEffects.startHitstop(event.hitstopFrames);
         break;
     }
+  }
+
+  _emitWeaponImpact(event, kind, impactDirection, fallbackPoint) {
+    const attacker = event.attackerIndex === 0 ? this.fighter1 : this.fighter2;
+    const defender = event.defenderIndex === 0 ? this.fighter1 : this.fighter2;
+    const points = [
+      this._getWeaponImpactPoint(attacker),
+      this._getWeaponImpactPoint(defender),
+    ].filter(Boolean);
+
+    if (!points.length) points.push(fallbackPoint.clone());
+
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      if (kind === 'clash') {
+        const direction = i === 0
+          ? impactDirection
+          : (impactDirection ? impactDirection.clone().multiplyScalar(-1) : null);
+        this.particles.emitClashSparks(point, direction);
+      } else if (kind === 'parry') {
+        const direction = i === 0
+          ? impactDirection
+          : (impactDirection ? impactDirection.clone().multiplyScalar(-1) : null);
+        this.particles.emitWhiteImpact(point, direction, 18);
+      } else if (kind === 'block') {
+        const direction = i === 0
+          ? impactDirection
+          : (impactDirection ? impactDirection.clone().multiplyScalar(-1) : null);
+        this.particles.emitWhiteImpact(point, direction, 14);
+      }
+    }
+  }
+
+  _getWeaponImpactPoint(fighter) {
+    if (!fighter) return null;
+    const base = fighter.getWeaponBaseWorldPosition(new THREE.Vector3());
+    const tip = fighter.getWeaponTipWorldPosition(new THREE.Vector3());
+    return base.lerp(tip, 0.72);
   }
 
   _getCombatImpactDirection(event) {

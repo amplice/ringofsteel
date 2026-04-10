@@ -11,12 +11,13 @@ export class ParticleSystem {
     this.bloodParticles = [];
     this.activeCount = 0;
 
-    const geo = new THREE.SphereGeometry(0.02, 4, 3);
+    const geo = new THREE.SphereGeometry(0.035, 5, 4);
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xffaa44,
+      color: 0xffffff,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      toneMapped: false,
     });
 
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX_PARTICLES);
@@ -142,44 +143,44 @@ export class ParticleSystem {
     });
   }
 
-  emitWhiteImpact(position, direction = null, count = 18) {
+  emitWhiteImpact(position, direction = null, count = 22) {
     this.emit(position, count, {
       color: new THREE.Color(1, 1, 1),
-      speed: 9,
-      spread: 3.2,
-      life: 0.28,
-      size: 2.1,
+      speed: 11,
+      spread: 4.0,
+      life: 0.42,
+      size: 4.2,
       gravity: -5,
-      stretch: 3.2,
+      stretch: 4.6,
       direction,
-      directionalBias: 0.5,
-      upwardBias: 0.6,
+      directionalBias: 0.6,
+      upwardBias: 0.8,
     });
     this.emit(position, Math.floor(count * 0.65), {
-      color: new THREE.Color(0.85, 0.92, 1.0),
-      speed: 6.5,
-      spread: 2.2,
-      life: 0.4,
-      size: 1.4,
+      color: new THREE.Color(0.92, 0.96, 1.0),
+      speed: 8.0,
+      spread: 2.8,
+      life: 0.55,
+      size: 2.9,
       gravity: -9,
-      stretch: 2.4,
+      stretch: 3.4,
       direction,
-      directionalBias: 0.35,
+      directionalBias: 0.45,
     });
   }
 
   emitClashSparks(position, direction = null) {
     this.emitWhiteImpact(position, direction, 28);
-    this.emit(position, 10, {
+    this.emit(position, 12, {
       color: new THREE.Color(1, 1, 1),
-      speed: 11,
-      spread: 5,
-      life: 0.2,
-      size: 2.6,
+      speed: 13,
+      spread: 6.0,
+      life: 0.3,
+      size: 4.8,
       gravity: -4,
-      stretch: 3.6,
+      stretch: 5.2,
       direction,
-      directionalBias: 0.6,
+      directionalBias: 0.7,
     });
   }
 

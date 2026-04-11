@@ -20,6 +20,12 @@ function sampleIndex(probabilities) {
   return probabilities.length - 1;
 }
 
+function normalizeActionMask(actionMask, size) {
+  if (!Array.isArray(actionMask) || actionMask.length !== size) return null;
+  const normalized = actionMask.map(Boolean);
+  return normalized.some(Boolean) ? normalized : null;
+}
+
 export class NeuralPolicy {
   constructor({ layerSizes, weights, biases, metadata = {} }) {
     this.layerSizes = [...layerSizes];
@@ -75,19 +81,41 @@ export class NeuralPolicy {
     return activations;
   }
 
-  act(input, { temperature = 0.7, stochastic = true } = {}) {
+  act(input, { temperature = 0.7, stochastic = true, actionMask = null } = {}) {
     const logits = Array.from(this.forward(input));
+    const mask = normalizeActionMask(actionMask, logits.length);
+    const maskedLogits = mask
+      ? logits.map((value, index) => (mask[index] ? value : Number.NEGATIVE_INFINITY))
+      : logits;
+
     if (!stochastic) {
       let bestIndex = 0;
-      for (let i = 1; i < logits.length; i++) {
-        if (logits[i] > logits[bestIndex]) bestIndex = i;
+      let bestValue = maskedLogits[0];
+      for (let i = 1; i < maskedLogits.length; i++) {
+        if (maskedLogits[i] > bestValue) {
+          bestValue = maskedLogits[i];
+          bestIndex = i;
+        }
       }
-      return { actionIndex: bestIndex, logits };
+      return { actionIndex: bestIndex, logits: maskedLogits };
     }
 
-    const probabilities = softmax(logits, temperature);
+    const legalIndices = mask
+      ? maskedLogits.map((_, index) => index).filter((index) => mask[index])
+      : null;
+    const probabilities = mask
+      ? (() => {
+          const legalLogits = legalIndices.map((index) => maskedLogits[index]);
+          const legalProbabilities = softmax(legalLogits, temperature);
+          const output = new Array(maskedLogits.length).fill(0);
+          for (let i = 0; i < legalIndices.length; i++) {
+            output[legalIndices[i]] = legalProbabilities[i];
+          }
+          return output;
+        })()
+      : softmax(maskedLogits, temperature);
     const actionIndex = sampleIndex(probabilities);
-    return { actionIndex, logits, probabilities };
+    return { actionIndex, logits: maskedLogits, probabilities };
   }
 
   mutate({ rate = 0.12, scale = 0.18 } = {}) {

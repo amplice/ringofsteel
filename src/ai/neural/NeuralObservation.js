@@ -1,5 +1,6 @@
 import { AttackType, FighterState, ARENA_RADIUS } from '../../core/Constants.js';
 
+const CHARACTER_ORDER = ['spearman', 'ronin', 'knight'];
 const STATE_ORDER = [
   FighterState.IDLE,
   FighterState.WALK_FORWARD,
@@ -19,6 +20,7 @@ const STATE_ORDER = [
 ];
 
 const ATTACK_ORDER = [null, AttackType.QUICK, AttackType.HEAVY, AttackType.THRUST];
+const TEMPORAL_WINDOW_FRAMES = 45;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -30,7 +32,31 @@ function pushOneHot(target, value, order) {
   }
 }
 
-function pushFighterEncoding(target, self, other) {
+function normalizeRecentFrame(currentFrame, lastFrame) {
+  if (lastFrame == null || !Number.isFinite(lastFrame)) return 0;
+  const framesAgo = currentFrame - lastFrame;
+  if (framesAgo < 0 || framesAgo > TEMPORAL_WINDOW_FRAMES) return 0;
+  return 1 - (framesAgo / TEMPORAL_WINDOW_FRAMES);
+}
+
+function getLocalAxes(rotationY) {
+  const forwardX = Math.sin(rotationY);
+  const forwardZ = Math.cos(rotationY);
+  const rightX = Math.cos(rotationY);
+  const rightZ = -Math.sin(rotationY);
+  return { forwardX, forwardZ, rightX, rightZ };
+}
+
+function projectToLocal(dx, dz, rotationY) {
+  const { forwardX, forwardZ, rightX, rightZ } = getLocalAxes(rotationY);
+  return {
+    localRight: (dx * rightX) + (dz * rightZ),
+    localForward: (dx * forwardX) + (dz * forwardZ),
+  };
+}
+
+function pushFighterEncoding(target, self, other, simFrame) {
+  pushOneHot(target, self.charId ?? null, CHARACTER_ORDER);
   pushOneHot(target, self.state, STATE_ORDER);
   pushOneHot(target, self.currentAttackType ?? null, ATTACK_ORDER);
 
@@ -38,14 +64,15 @@ function pushFighterEncoding(target, self, other) {
   const dx = other.position.x - self.position.x;
   const dz = other.position.z - self.position.z;
   const dist = Math.sqrt((dx * dx) + (dz * dz)) || 0.0001;
-  const forwardX = Math.sin(self.group.rotation.y);
-  const forwardZ = Math.cos(self.group.rotation.y);
+  const { forwardX, forwardZ } = getLocalAxes(self.group.rotation.y);
   const dot = ((dx / dist) * forwardX) + ((dz / dist) * forwardZ);
   const arenaDist = Math.sqrt((self.position.x * self.position.x) + (self.position.z * self.position.z));
+  const toCenter = projectToLocal(-self.position.x, -self.position.z, self.group.rotation.y);
+  const temporal = self.neuralTemporal || {};
 
   target.push(
-    clamp(self.position.x / ARENA_RADIUS, -1, 1),
-    clamp(self.position.z / ARENA_RADIUS, -1, 1),
+    clamp(toCenter.localRight / ARENA_RADIUS, -1, 1),
+    clamp(toCenter.localForward / ARENA_RADIUS, -1, 1),
     clamp(arenaDist / ARENA_RADIUS, 0, 1),
     clamp(self.stateFrames / stateDuration, 0, 1),
     clamp(dot, -1, 1),
@@ -56,38 +83,53 @@ function pushFighterEncoding(target, self, other) {
     clamp(self.fsm?.sidestepDirection ?? 0, -1, 1),
     self.fsm?.sidestepPhase === 'dash' ? 1 : 0,
     self.fsm?.sidestepPhase === 'recovery' ? 1 : 0,
+    clamp((temporal.distDelta ?? 0) / 0.35, -1, 1),
+    clamp((temporal.angleDelta ?? 0) / 0.35, -1, 1),
+    normalizeRecentFrame(simFrame, temporal.lastAttackFrame),
+    normalizeRecentFrame(simFrame, temporal.lastAttackEndFrame),
+    normalizeRecentFrame(simFrame, temporal.lastSidestepFrame),
+    normalizeRecentFrame(simFrame, temporal.lastBackstepFrame),
+    normalizeRecentFrame(simFrame, temporal.lastClashFrame),
+    normalizeRecentFrame(simFrame, temporal.lastParrySuccessFrame),
   );
 }
 
 export function encodeObservation(fighter, opponent, sim) {
   const values = [];
+  const simFrame = sim?.frameCount ?? 0;
   const dx = opponent.position.x - fighter.position.x;
   const dz = opponent.position.z - fighter.position.z;
   const dist = Math.sqrt((dx * dx) + (dz * dz)) || 0.0001;
-  const fighterForwardX = Math.sin(fighter.group.rotation.y);
-  const fighterForwardZ = Math.cos(fighter.group.rotation.y);
-  const opponentForwardX = Math.sin(opponent.group.rotation.y);
-  const opponentForwardZ = Math.cos(opponent.group.rotation.y);
+  const { forwardX: fighterForwardX, forwardZ: fighterForwardZ } = getLocalAxes(fighter.group.rotation.y);
+  const { forwardX: opponentForwardX, forwardZ: opponentForwardZ } = getLocalAxes(opponent.group.rotation.y);
   const fighterDot = ((dx / dist) * fighterForwardX) + ((dz / dist) * fighterForwardZ);
   const opponentDot = (((-dx) / dist) * opponentForwardX) + (((-dz) / dist) * opponentForwardZ);
+  const localOpponent = projectToLocal(dx, dz, fighter.group.rotation.y);
+  const fighterTemporal = fighter.neuralTemporal || {};
+  const opponentTemporal = opponent.neuralTemporal || {};
 
   values.push(
-    clamp(dx / ARENA_RADIUS, -1, 1),
-    clamp(dz / ARENA_RADIUS, -1, 1),
+    clamp(localOpponent.localRight / ARENA_RADIUS, -1, 1),
+    clamp(localOpponent.localForward / ARENA_RADIUS, -1, 1),
     clamp(dist / ARENA_RADIUS, 0, 1),
     clamp(fighterDot, -1, 1),
     clamp(opponentDot, -1, 1),
     clamp((sim?.frameCount ?? 0) / 3600, 0, 1),
+    clamp((fighterTemporal.distDelta ?? 0) / 0.35, -1, 1),
+    clamp((opponentTemporal.distDelta ?? 0) / 0.35, -1, 1),
+    normalizeRecentFrame(simFrame, fighterTemporal.lastSuccessfulEvadeFrame),
+    normalizeRecentFrame(simFrame, opponentTemporal.lastAttackFrame),
   );
 
-  pushFighterEncoding(values, fighter, opponent);
-  pushFighterEncoding(values, opponent, fighter);
+  pushFighterEncoding(values, fighter, opponent, simFrame);
+  pushFighterEncoding(values, opponent, fighter, simFrame);
 
   return Float32Array.from(values);
 }
 
 export const NEURAL_OBSERVATION_SIZE = encodeObservation(
   {
+    charId: 'ronin',
     position: { x: 0, z: 0 },
     group: { rotation: { y: 0 } },
     state: FighterState.IDLE,
@@ -96,8 +138,10 @@ export const NEURAL_OBSERVATION_SIZE = encodeObservation(
     facingRight: true,
     hitApplied: false,
     fsm: { stateDuration: 1, isActionable: true, isAttacking: false, sidestepDirection: 0, sidestepPhase: null },
+    neuralTemporal: {},
   },
   {
+    charId: 'spearman',
     position: { x: 1, z: 0 },
     group: { rotation: { y: Math.PI } },
     state: FighterState.IDLE,
@@ -106,6 +150,7 @@ export const NEURAL_OBSERVATION_SIZE = encodeObservation(
     facingRight: false,
     hitApplied: false,
     fsm: { stateDuration: 1, isActionable: true, isAttacking: false, sidestepDirection: 0, sidestepPhase: null },
+    neuralTemporal: {},
   },
   { frameCount: 0 },
 ).length;

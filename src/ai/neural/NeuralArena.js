@@ -31,6 +31,10 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function clampStartDistance(value) {
+  return clamp(value, 1.4, FIGHT_START_DISTANCE + 1.5);
+}
+
 function isStronglyNegativeState(state) {
   return state === FighterState.HIT_STUN ||
     state === FighterState.PARRIED_STUN ||
@@ -62,6 +66,7 @@ export class NeuralArena {
     maxMatchRounds = 9,
     temperature = 0.7,
     stochastic = true,
+    roundSetup = null,
   }) {
     const policyOnP1 = policySide !== 2;
     const fighter1 = this.createFighter(0, policyOnP1 ? policyChar : opponentChar);
@@ -84,6 +89,7 @@ export class NeuralArena {
 
     for (let roundIndex = 0; roundIndex < maxMatchRounds; roundIndex++) {
       if (match.p1Score >= roundsToWin || match.p2Score >= roundsToWin) break;
+      const resolvedRoundSetup = typeof roundSetup === 'function' ? roundSetup(roundIndex) : roundSetup;
       const round = this.runRound({
         sim,
         policyController,
@@ -91,7 +97,12 @@ export class NeuralArena {
         maxRoundFrames,
         policyOnP1,
         perspectiveIndex,
+        roundSetup: resolvedRoundSetup,
       });
+      if (resolvedRoundSetup) {
+        round.startDistance = resolvedRoundSetup.startDistance;
+        round.lateralOffset = resolvedRoundSetup.lateralOffset;
+      }
       match.rounds.push(round);
       match.reward += round.reward;
       if (round.winner === 1) match.p1Score++;
@@ -125,6 +136,7 @@ export class NeuralArena {
     maxMatchRounds = 9,
     temperature = 0.7,
     stochastic = true,
+    roundSetup = null,
   }) {
     const fighter1 = this.createFighter(0, charA);
     const fighter2 = this.createFighter(1, charB);
@@ -138,7 +150,19 @@ export class NeuralArena {
     const match = { p1Score: 0, p2Score: 0, winner: null, policyWinner: null, rounds: [], reward: 0, policySide: perspectiveIndex };
     for (let roundIndex = 0; roundIndex < maxMatchRounds; roundIndex++) {
       if (match.p1Score >= roundsToWin || match.p2Score >= roundsToWin) break;
-      const round = this.runSelfPlayRound({ sim, controllerA, controllerB, maxRoundFrames, perspectiveIndex });
+      const resolvedRoundSetup = typeof roundSetup === 'function' ? roundSetup(roundIndex) : roundSetup;
+      const round = this.runSelfPlayRound({
+        sim,
+        controllerA,
+        controllerB,
+        maxRoundFrames,
+        perspectiveIndex,
+        roundSetup: resolvedRoundSetup,
+      });
+      if (resolvedRoundSetup) {
+        round.startDistance = resolvedRoundSetup.startDistance;
+        round.lateralOffset = resolvedRoundSetup.lateralOffset;
+      }
       match.rounds.push(round);
       match.reward += round.reward;
       if (round.winner === 1) match.p1Score++;
@@ -154,8 +178,8 @@ export class NeuralArena {
     return match;
   }
 
-  runRound({ sim, policyController, scriptedController, maxRoundFrames, policyOnP1 = true, perspectiveIndex = 1 }) {
-    sim.startRound(FIGHT_START_DISTANCE);
+  runRound({ sim, policyController, scriptedController, maxRoundFrames, policyOnP1 = true, perspectiveIndex = 1, roundSetup = null }) {
+    this._startRound(sim, roundSetup);
     policyController.reset();
     scriptedController.reset();
 
@@ -172,8 +196,8 @@ export class NeuralArena {
     });
   }
 
-  runSelfPlayRound({ sim, controllerA, controllerB, maxRoundFrames, perspectiveIndex = 1 }) {
-    sim.startRound(FIGHT_START_DISTANCE);
+  runSelfPlayRound({ sim, controllerA, controllerB, maxRoundFrames, perspectiveIndex = 1, roundSetup = null }) {
+    this._startRound(sim, roundSetup);
     controllerA.reset();
     controllerB.reset();
 
@@ -208,6 +232,16 @@ export class NeuralArena {
       reward,
       rewardBreakdown: tracker,
     };
+  }
+
+  _startRound(sim, roundSetup = null) {
+    const requestedDistance = roundSetup?.startDistance ?? FIGHT_START_DISTANCE;
+    const startDistance = clampStartDistance(requestedDistance);
+    const lateralOffset = clamp(roundSetup?.lateralOffset ?? 0, -1.2, 1.2);
+
+    sim.startRound(startDistance);
+    sim.fighter1.position.z = -lateralOffset * 0.5;
+    sim.fighter2.position.z = lateralOffset * 0.5;
   }
 
   _createRewardTracker() {

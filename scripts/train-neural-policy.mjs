@@ -127,6 +127,23 @@ function parseOpponentSchedule(raw, policyChar) {
   }).filter((entry) => entry.opponentChar && entry.opponentProfile);
 }
 
+function parseNeuralOpponents(raw) {
+  if (!raw) return [];
+  return raw.split(',').map((entry) => {
+    const [opponentChar, modelPath, rawWeight, rawLabel] = entry.split('|');
+    const weight = Number(rawWeight);
+    if (!opponentChar || !modelPath) return null;
+    const payload = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+    return {
+      opponentChar,
+      modelPath,
+      label: rawLabel || `${opponentChar}_neural`,
+      weight: Number.isFinite(weight) && weight > 0 ? weight : 1,
+      policy: NeuralPolicy.fromJSON(payload),
+    };
+  }).filter(Boolean);
+}
+
 function getScriptedPhaseWeight(generation, config) {
   if (generation < config.selfPlayWarmupGenerations) return 0;
   const rampProgress = clamp(
@@ -228,6 +245,36 @@ function evaluateSelfPlayMatch(arena, candidate, config, championPolicy, perspec
       });
 }
 
+function evaluateNeuralOpponentMatch(arena, candidate, config, opponent, perspectiveSide, stochastic, seedKey) {
+  return perspectiveSide === 1
+    ? arena.runSelfPlay({
+        policyA: candidate,
+        charA: config.char,
+        policyB: opponent.policy,
+        charB: opponent.opponentChar,
+        perspectiveSide,
+        roundsToWin: config.roundsToWin,
+        maxRoundFrames: config.maxRoundFrames,
+        maxMatchRounds: config.maxMatchRounds,
+        temperature: stochastic ? config.temperature : config.validationTemperature,
+        stochastic,
+        roundSetup: createRoundSetupFactory(config, seedKey, stochastic),
+      })
+    : arena.runSelfPlay({
+        policyA: opponent.policy,
+        charA: opponent.opponentChar,
+        policyB: candidate,
+        charB: config.char,
+        perspectiveSide,
+        roundsToWin: config.roundsToWin,
+        maxRoundFrames: config.maxRoundFrames,
+        maxMatchRounds: config.maxMatchRounds,
+        temperature: stochastic ? config.temperature : config.validationTemperature,
+        stochastic,
+        roundSetup: createRoundSetupFactory(config, seedKey, stochastic),
+      });
+}
+
 function evaluateCandidate(arena, candidate, config, hallOfFame, generation) {
   let score = 0;
   let wins = 0;
@@ -265,6 +312,40 @@ function evaluateCandidate(arena, candidate, config, hallOfFame, generation) {
             winner: match.policyWinner,
             policyScore: policySide === 1 ? match.p1Score : match.p2Score,
             opponentScore: policySide === 1 ? match.p2Score : match.p1Score,
+          });
+        }
+      }
+    }
+
+    for (const opponent of config.neuralOpponents) {
+      const opponentWeight = getOpponentWeight(opponent);
+      for (let repeat = 0; repeat < config.repeatsPerOpponent; repeat++) {
+        for (const perspectiveSide of [1, 2]) {
+          const match = evaluateNeuralOpponentMatch(
+            arena,
+            candidate,
+            config,
+            opponent,
+            perspectiveSide,
+            true,
+            `${opponent.label}:neural-stochastic:${perspectiveSide}:${repeat}:${generation}`,
+          );
+          const matchScore = match.reward ?? 0;
+          ingestPolicyStats(actionStats, match.policyStats);
+          score += matchScore * scriptedPhaseWeight * opponentWeight;
+          if (match.policyWinner === 1) wins++;
+          else if (match.policyWinner === 2) losses++;
+          else draws++;
+          details.push({
+            opponentChar: opponent.opponentChar,
+            opponentProfile: opponent.label,
+            perspectiveSide,
+            matchScore,
+            weightedMatchScore: matchScore * scriptedPhaseWeight * opponentWeight,
+            winner: match.policyWinner,
+            policyScore: perspectiveSide === 1 ? match.p1Score : match.p2Score,
+            opponentScore: perspectiveSide === 1 ? match.p2Score : match.p1Score,
+            neuralOpponent: true,
           });
         }
       }
@@ -331,6 +412,36 @@ function evaluateCandidate(arena, candidate, config, hallOfFame, generation) {
       }
     }
 
+    for (const opponent of config.neuralOpponents) {
+      const opponentWeight = getOpponentWeight(opponent);
+      for (const perspectiveSide of [1, 2]) {
+        const match = evaluateNeuralOpponentMatch(
+          arena,
+          candidate,
+          config,
+          opponent,
+          perspectiveSide,
+          false,
+          `${opponent.label}:neural-deterministic:${perspectiveSide}`,
+        );
+        const matchScore = match.reward ?? 0;
+        ingestPolicyStats(actionStats, match.policyStats);
+        score += matchScore * scriptedPhaseWeight * opponentWeight * config.deterministicEvalWeight;
+        details.push({
+          opponentChar: opponent.opponentChar,
+          opponentProfile: opponent.label,
+          perspectiveSide,
+          matchScore,
+          weightedMatchScore: matchScore * scriptedPhaseWeight * opponentWeight * config.deterministicEvalWeight,
+          winner: match.policyWinner,
+          policyScore: perspectiveSide === 1 ? match.p1Score : match.p2Score,
+          opponentScore: perspectiveSide === 1 ? match.p2Score : match.p1Score,
+          neuralOpponent: true,
+          deterministicValidation: true,
+        });
+      }
+    }
+
     for (const champion of selfPlayOpponents) {
       for (const perspectiveSide of [1, 2]) {
         const match = evaluateSelfPlayMatch(
@@ -391,6 +502,7 @@ const config = {
   scriptedRampGenerations: 0,
   output: args.output || `.local/neural/${Date.now()}-${args.char || 'ronin'}-policy.json`,
   opponents: parseOpponentSchedule(args.opponents, args.char || 'ronin'),
+  neuralOpponents: parseNeuralOpponents(args.neuralOpponents),
 };
 const regularizerDefaults = defaultRegularizerConfig(config.char);
 config.actionDiversityWeight = numberOption(args.actionDiversityWeight, regularizerDefaults.actionDiversityWeight);

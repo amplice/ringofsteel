@@ -65,6 +65,7 @@ function buildTrainArgs(scriptPath, charId, config, outputPath) {
     `--startDistanceJitter=${config.startDistanceJitter}`,
     `--startLateralJitter=${config.startLateralJitter}`,
     `--hidden=${config.hidden}`,
+    ...(config.neuralOpponents ? [`--neuralOpponents=${config.neuralOpponents}`] : []),
     `--output=${outputPath}`,
   ];
 }
@@ -90,6 +91,7 @@ const config = {
   startDistanceJitter: numberOption(args.startDistanceJitter, 0.45),
   startLateralJitter: numberOption(args.startLateralJitter, 0.55),
   hidden: args.hidden || '48,32',
+  neuralOpponents: args.neuralOpponents || '',
   outputDir: args.outputDir || '.local/neural',
   parallel: args.parallel === true || args.parallel === 'true',
 };

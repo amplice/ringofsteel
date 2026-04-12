@@ -35,6 +35,20 @@ const opponents = (args.opponents || 'spearman:spearman_heavy_bully,ronin:ronin_
   })
   .filter((entry) => entry.opponentChar && entry.opponentProfile);
 
+const neuralOpponents = (args.neuralOpponents || '')
+  .split(',')
+  .map((entry) => {
+    const [opponentChar, modelPath, rawLabel] = entry.split('|');
+    if (!opponentChar || !modelPath) return null;
+    const opponentPayload = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+    return {
+      opponentChar,
+      label: rawLabel || `${opponentChar}_neural`,
+      policy: NeuralPolicy.fromJSON(opponentPayload),
+    };
+  })
+  .filter(Boolean);
+
 const repeats = numberOption(args.repeats, 3);
 const stochastic = args.stochastic === true || args.stochastic === 'true';
 const results = [];
@@ -78,6 +92,52 @@ for (const opponent of opponents) {
         winner: match.policyWinner,
         policyScore: policySide === 1 ? match.p1Score : match.p2Score,
         opponentScore: policySide === 1 ? match.p2Score : match.p1Score,
+      });
+    }
+  }
+}
+
+for (const opponent of neuralOpponents) {
+  for (let i = 0; i < repeats; i++) {
+    for (const perspectiveSide of [1, 2]) {
+      const match = perspectiveSide === 1
+        ? arena.runSelfPlay({
+            policyA: policy,
+            charA: char,
+            policyB: opponent.policy,
+            charB: opponent.opponentChar,
+            perspectiveSide,
+            roundsToWin: numberOption(args.rounds, 3),
+            maxRoundFrames: numberOption(args.maxRoundFrames, 60 * 18),
+            maxMatchRounds: numberOption(args.maxMatchRounds, 7),
+            temperature: numberOption(args.temperature, 0.2),
+            stochastic,
+          })
+        : arena.runSelfPlay({
+            policyA: opponent.policy,
+            charA: opponent.opponentChar,
+            policyB: policy,
+            charB: char,
+            perspectiveSide,
+            roundsToWin: numberOption(args.rounds, 3),
+            maxRoundFrames: numberOption(args.maxRoundFrames, 60 * 18),
+            maxMatchRounds: numberOption(args.maxMatchRounds, 7),
+            temperature: numberOption(args.temperature, 0.2),
+            stochastic,
+          });
+      aggregatePolicyStats.decisionCount += match.policyStats?.decisionCount || 0;
+      aggregatePolicyStats.committedActionCount += match.policyStats?.committedActionCount || 0;
+      mergeCounts(aggregatePolicyStats.actionSelections, match.policyStats?.actionSelections);
+      mergeCounts(aggregatePolicyStats.actionFrames, match.policyStats?.actionFrames);
+      mergeCounts(aggregatePolicyStats.stateFrames, match.policyStats?.stateFrames);
+      results.push({
+        opponentChar: opponent.opponentChar,
+        opponentProfile: opponent.label,
+        policySide: perspectiveSide,
+        winner: match.policyWinner,
+        policyScore: perspectiveSide === 1 ? match.p1Score : match.p2Score,
+        opponentScore: perspectiveSide === 1 ? match.p2Score : match.p1Score,
+        neuralOpponent: true,
       });
     }
   }

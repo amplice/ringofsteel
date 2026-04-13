@@ -60,6 +60,9 @@ export const PARRY_WINDOW_FRAMES = 9;
 export const BLOCK_STUN_FRAMES = 16;
 export const HIT_STUN_FRAMES = 16;
 export const PARRIED_STUN_FRAMES = 24;
+export const QUICK_PARRIED_STUN_MULT = 1.1;
+export const HEAVY_PARRIED_STUN_MULT = 0.9;
+export const THRUST_PARRIED_STUN_MULT = 1.35;
 export const PARRY_SUCCESS_FRAMES_BY_ATTACK = Object.freeze({
   quick: 34,
   heavy: 22,
@@ -76,6 +79,7 @@ export const HEAVY_ADVANTAGE_STUN_MULT = 1.5;
 export const HEAVY_ADVANTAGE_SLIDE_MULT = 1.5;
 export const HEAVY_CLASH_STUN_MULT = 1.5;
 export const HEAVY_CLASH_WINNER_STUN_MULT = 0.5;
+export const THRUST_CLASH_SELF_STUN_MULT = 1.0;
 export const CLASH_SLIDE_MULT = 0.35;
 
 
@@ -90,6 +94,13 @@ export const BACKSTEP_DISTANCE = 1.5;
 export const BACKSTEP_INVULN_FRAMES = 6;
 export const BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES = 18;
 export const BACKSTEP_ATTACK_LUNGE_BONUS = 0.28;
+export const BACKSTEP_THRUST_ATTACK_FRAME_MULT = 0.88;
+export const PARRY_SUCCESS_QUICK_ATTACK_LUNGE_BONUS = 0.22;
+export const PARRY_SUCCESS_QUICK_ATTACK_FRAME_MULT = 0.8;
+export const QUICK_INTERCEPT_ATTACK_LUNGE_BONUS = 0.18;
+export const QUICK_INTERCEPT_ATTACK_FRAME_MULT = 0.84;
+export const HEAVY_GUARD_BREAK_LUNGE_BONUS = 0.22;
+export const HEAVY_GUARD_BREAK_ATTACK_FRAME_MULT = 0.82;
 
 // Block pushback
 export const BLOCK_PUSHBACK_SPEED = 2.0;

@@ -116,6 +116,8 @@ export class NeuralPolicyController {
     this.actionHoldUntilFrame = -9999;
     this.lastActionable = false;
     this.lastState = FighterState.IDLE;
+    this.lastDecisionActionName = null;
+    this.recurrentState = null;
     this.stats = this._createStats();
   }
 
@@ -126,6 +128,8 @@ export class NeuralPolicyController {
     this.actionHoldUntilFrame = -9999;
     this.lastActionable = false;
     this.lastState = FighterState.IDLE;
+    this.lastDecisionActionName = null;
+    this.recurrentState = this.policy?.createInitialRecurrentState?.() ?? null;
   }
 
   resetMatchStats() {
@@ -144,6 +148,7 @@ export class NeuralPolicyController {
 
   step(fighter, opponent, sim, dt) {
     if (!fighter || !opponent || !sim) return;
+    this.lastDecisionActionName = null;
 
     const actionable = Boolean(fighter.fsm?.isActionable);
     const regainedActionable = actionable && (!this.lastActionable || fighter.state !== this.lastState);
@@ -156,16 +161,19 @@ export class NeuralPolicyController {
     if (shouldDecide) {
       const observation = encodeObservation(fighter, opponent, sim);
       const actionMask = createLegalActionMask(fighter);
-      const { actionIndex } = this.policy.act(observation, {
+      const actionResult = this.policy.act(observation, {
         temperature: this.temperature,
         stochastic: this.stochastic,
         actionMask,
+        recurrentState: this.recurrentState,
       });
-      this.currentActionIndex = actionIndex;
+      this.recurrentState = actionResult.recurrentState ?? this.recurrentState;
+      this.currentActionIndex = actionResult.actionIndex;
       this.currentActionIssued = false;
       this.lastDecisionFrame = sim.frameCount;
-      this.actionHoldUntilFrame = sim.frameCount + this._getHoldFrames(actionIndex);
-      const actionName = NEURAL_ACTIONS[actionIndex] ?? 'idle';
+      this.actionHoldUntilFrame = sim.frameCount + this._getHoldFrames(actionResult.actionIndex);
+      const actionName = NEURAL_ACTIONS[actionResult.actionIndex] ?? 'idle';
+      this.lastDecisionActionName = actionName;
       this.stats.decisionCount++;
       this.stats.actionSelections[actionName] = (this.stats.actionSelections[actionName] || 0) + 1;
       if (isSingleCommitAction(actionName)) {

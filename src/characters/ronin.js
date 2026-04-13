@@ -22,7 +22,7 @@ export const ronin = defineCharacter('ronin', {
   attackData: {
     [AttackType.QUICK]: {
       aiRange: 1.5,
-      lunge: 0.46,
+      lunge: 0.6,
       blockPush: 0.5,
       lungeStart: 1 / 3,
       lungeEnd: 2 / 3,
@@ -32,7 +32,7 @@ export const ronin = defineCharacter('ronin', {
     },
     [AttackType.HEAVY]: {
       aiRange: 1.8,
-      lunge: 1.05,
+      lunge: 0.98,
       blockPush: 1.2,
       lungeStart: 1 / 5,
       lungeEnd: 4 / 5,
@@ -42,7 +42,7 @@ export const ronin = defineCharacter('ronin', {
     },
     [AttackType.THRUST]: {
       aiRange: 2.0,
-      lunge: 0.58,
+      lunge: 0.44,
       blockPush: 0.8,
       lungeStart: 0.25,
       lungeEnd: 0.75,
@@ -54,8 +54,8 @@ export const ronin = defineCharacter('ronin', {
   sim: {
     attackFrames: {
       [AttackType.QUICK]: 37,
-      [AttackType.HEAVY]: 47,
-      [AttackType.THRUST]: 27,
+      [AttackType.HEAVY]: 50,
+      [AttackType.THRUST]: 41,
     },
     poseProfile: {
       idle: {
@@ -99,7 +99,7 @@ export const ronin = defineCharacter('ronin', {
   },
   clipSpeedFactor: { walk: 2, strafe: 2, attack: 2, backstep: 3, knockback: 2 },
   clipSpeedOverrides: {
-    attack_quick: 1.12,
+    attack_quick: 1.22,
     attack_heavy: 1.15,
     attack_thrust: 0.8125,
     backstep: 0.8333333333333334,
@@ -111,7 +111,9 @@ export const ronin = defineCharacter('ronin', {
   aiRanges: { engage: 2.8, close: 1.8 },
   attackStrength: 1.1,
   defenseStoutness: 1.05,
-  sidestepDistance: 1.2,
+  quickInterceptAttackLungeBonus: 0.36,
+  quickInterceptAttackFrameMult: 0.62,
+  sidestepDistance: 1.28,
   sidestepFrames: 24,
   sidestepRecoveryFrames: 5,
   bodySeparation: 1.6,

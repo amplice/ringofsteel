@@ -17,6 +17,13 @@ import {
   BACKSTEP_DISTANCE,
   BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES,
   BACKSTEP_ATTACK_LUNGE_BONUS,
+  BACKSTEP_THRUST_ATTACK_FRAME_MULT,
+  PARRY_SUCCESS_QUICK_ATTACK_LUNGE_BONUS,
+  PARRY_SUCCESS_QUICK_ATTACK_FRAME_MULT,
+  QUICK_INTERCEPT_ATTACK_LUNGE_BONUS,
+  QUICK_INTERCEPT_ATTACK_FRAME_MULT,
+  HEAVY_GUARD_BREAK_LUNGE_BONUS,
+  HEAVY_GUARD_BREAK_ATTACK_FRAME_MULT,
   STEP_DISTANCE,
   STEP_FRAMES,
   STEP_COOLDOWN_FRAMES,
@@ -30,6 +37,12 @@ const _selfBodyPosition = new THREE.Vector3();
 const _opponentBodyPosition = new THREE.Vector3();
 const _weaponBase = new THREE.Vector3();
 const _weaponTip = new THREE.Vector3();
+
+function isGuardingState(state) {
+  return state === FighterState.BLOCK ||
+    state === FighterState.BLOCK_STUN ||
+    state === FighterState.PARRY;
+}
 
 export class FighterCore {
   constructor(playerIndex, charId, charDef) {
@@ -239,9 +252,15 @@ export class FighterCore {
     }
   }
 
-  attack(type) {
-    const frames = this._getAttackFrameCount(type);
-    return this.fsm.startAttack(type, frames);
+  attack(type, opponent = null) {
+    const attackContext = this._getAttackContext(type, opponent);
+    let frames = this._getAttackFrameCount(type);
+    frames = Math.max(1, Math.round(
+      frames *
+      this._getBackstepAttackFrameMult(type) *
+      attackContext.frameMult,
+    ));
+    return this.fsm.startAttack(type, frames, attackContext);
   }
 
   block() {
@@ -455,6 +474,11 @@ export class FighterCore {
     return this.charDef.backstepAttackLungeBonus ?? BACKSTEP_ATTACK_LUNGE_BONUS;
   }
 
+  _getBackstepAttackFrameMult(attackType) {
+    if (attackType !== AttackType.THRUST || this._backstepAttackBonusFrames <= 0) return 1;
+    return this.charDef.backstepAttackFrameMult ?? BACKSTEP_THRUST_ATTACK_FRAME_MULT;
+  }
+
   _getBackstepAttackBonusWindowFrames() {
     return this.charDef.backstepAttackBonusWindowFrames ?? BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES;
   }
@@ -465,6 +489,32 @@ export class FighterCore {
 
   _grantBackstepAttackBonus() {
     this._backstepAttackBonusFrames = this._getBackstepAttackBonusWindowFrames();
+  }
+
+  _getAttackContext(attackType, opponent) {
+    const context = { lungeBonus: 0, frameMult: 1 };
+    if (!opponent) return context;
+
+    const distance = this.distanceTo(opponent);
+    const closeRange = (this.charDef?.aiRanges?.close ?? 1.8) + 0.35;
+    const engageRange = (this.charDef?.aiRanges?.engage ?? 2.8) + 0.35;
+
+    if (attackType === AttackType.QUICK && this.state === FighterState.PARRY_SUCCESS) {
+      context.lungeBonus += this.charDef.parrySuccessQuickAttackLungeBonus ?? PARRY_SUCCESS_QUICK_ATTACK_LUNGE_BONUS;
+      context.frameMult *= this.charDef.parrySuccessQuickAttackFrameMult ?? PARRY_SUCCESS_QUICK_ATTACK_FRAME_MULT;
+    }
+
+    if (attackType === AttackType.QUICK && opponent.state === FighterState.ATTACK_ACTIVE && distance <= closeRange) {
+      context.lungeBonus += this.charDef.quickInterceptAttackLungeBonus ?? QUICK_INTERCEPT_ATTACK_LUNGE_BONUS;
+      context.frameMult *= this.charDef.quickInterceptAttackFrameMult ?? QUICK_INTERCEPT_ATTACK_FRAME_MULT;
+    }
+
+    if (attackType === AttackType.HEAVY && isGuardingState(opponent.state) && distance <= engageRange) {
+      context.lungeBonus += this.charDef.heavyGuardBreakLungeBonus ?? HEAVY_GUARD_BREAK_LUNGE_BONUS;
+      context.frameMult *= this.charDef.heavyGuardBreakAttackFrameMult ?? HEAVY_GUARD_BREAK_ATTACK_FRAME_MULT;
+    }
+
+    return context;
   }
 
   _getPresentationClip(resolveClipName) {

@@ -3,6 +3,7 @@ import { ModelLoader } from './ModelLoader.js';
 import { Weapon } from './Weapon.js';
 import { getAttackData } from '../combat/AttackData.js';
 import { FighterCore } from '../combat/FighterCore.js';
+import { AUTHORITATIVE_TRACKS } from '../data/authoritativeTracks.js';
 import {
   BODY_COLLISION,
   REMOTE_VIEW_TUNING,
@@ -337,6 +338,11 @@ export class Fighter extends FighterCore {
       clipName = this.clipActions.attack_heavy ? 'attack_heavy' : 'attack';
     } else {
       clipName = this.clipActions.attack_quick ? 'attack_quick' : 'attack';
+    }
+
+    const authoritativeFrames = AUTHORITATIVE_TRACKS.characters?.[this.charDef.id]?.clips?.[clipName]?.frameCount;
+    if (Number.isFinite(authoritativeFrames) && authoritativeFrames > 0) {
+      return authoritativeFrames;
     }
 
     const action = this.clipActions[clipName];

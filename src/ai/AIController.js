@@ -36,6 +36,7 @@ export class AIController {
     this._selfLastBackstepFrame = -9999;
     this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
+    this.lastDecisionAction = null;
   }
 
   setDifficulty(profile) {
@@ -46,6 +47,7 @@ export class AIController {
   }
 
   update(fighter, opponent, frameCount, dt) {
+    this.lastDecisionAction = null;
     this._opponent = opponent;
     this._mobilityFatigue = Math.max(0, this._mobilityFatigue - dt * 3.2);
 
@@ -190,8 +192,8 @@ export class AIController {
 
     if (fighter.state === FighterState.PARRY_SUCCESS) {
       if (Math.random() < p.counterRate) {
-        scores.quickAttack = this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 2.0 + (p.quickBias || 0));
-        scores.thrustAttack = this._scoreAttackOpportunity(fighter, AttackType.THRUST, engagement, 1.5 + (p.thrustBias || 0));
+        scores.quickAttack = this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 2.35 + (p.quickBias || 0));
+        scores.thrustAttack = this._scoreAttackOpportunity(fighter, AttackType.THRUST, engagement, 1.1 + (p.thrustBias || 0));
       }
     }
 
@@ -220,7 +222,6 @@ export class AIController {
       const heavyBonus = blockRatio * p.heavyMixup;
       const heavyContextBonus =
         (opponentVulnerable ? 0.35 : 0) +
-        (recentSelfClash ? 0.45 : 0) +
         ((opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN || recentOpponentBlock) ? 0.28 : 0) +
         (heavySpecialist ? 0.18 : 0);
       scores.heavyAttack = (scores.heavyAttack || 0) +
@@ -314,7 +315,6 @@ export class AIController {
       scores.sidestep = (scores.sidestep || 0) - 0.9;
       scores.moveForward = (scores.moveForward || 0) + 0.12;
       scores.moveBack = (scores.moveBack || 0) + 0.08;
-      scores.quickAttack = (scores.quickAttack || 0) + 0.06;
     }
 
     if (repeatedBackstep) {
@@ -350,7 +350,8 @@ export class AIController {
     }
 
     this.pendingAction = bestAction;
-    this._executePending(fighter, dt);
+    this.lastDecisionAction = bestAction;
+    this._executePending(fighter, opponent, dt);
   }
 
   _getOpponentBlockRatio() {
@@ -404,7 +405,7 @@ export class AIController {
     }
   }
 
-  _executePending(fighter, dt) {
+  _executePending(fighter, opponent, dt) {
     if (!this.pendingAction) return;
     if (!fighter.fsm.isActionable) {
       this.pendingAction = null;
@@ -417,15 +418,15 @@ export class AIController {
 
     switch (action) {
       case 'quickAttack':
-        fighter.attack(AttackType.QUICK);
+        fighter.attack(AttackType.QUICK, opponent);
         this.currentAction = null;
         break;
       case 'heavyAttack':
-        fighter.attack(AttackType.HEAVY);
+        fighter.attack(AttackType.HEAVY, opponent);
         this.currentAction = null;
         break;
       case 'thrustAttack':
-        fighter.attack(AttackType.THRUST);
+        fighter.attack(AttackType.THRUST, opponent);
         this.currentAction = null;
         break;
       case 'block':
@@ -501,5 +502,6 @@ export class AIController {
     this._selfLastBackstepFrame = -9999;
     this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
+    this.lastDecisionAction = null;
   }
 }

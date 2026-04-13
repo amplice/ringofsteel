@@ -11,6 +11,8 @@ import { CHARACTER_DEFS, DEFAULT_CHAR } from './entities/CharacterDefs.js';
 import { ParticleSystem } from './vfx/ParticleSystem.js';
 import { ScreenEffects } from './vfx/ScreenEffects.js';
 import { AIController } from './ai/AIController.js';
+import { NeuralPolicyController } from './ai/neural/NeuralPolicyController.js';
+import { getHardNeuralPolicy } from './ai/neural/HardNeuralPolicies.js';
 import { DebugOverlay } from './debug/DebugOverlay.js';
 import { UIManager } from './ui/UIManager.js';
 import { MatchSim } from './sim/MatchSim.js';
@@ -217,7 +219,7 @@ export class Game {
 
     // AI
     if (this.mode === 'ai') {
-      this.aiController = new AIController(this._getAIDifficultyProfile(p2.charDef.id, this.difficulty));
+      this.aiController = this._createAIController(p2.charDef.id, this.difficulty);
     } else {
       this.aiController = null;
     }
@@ -282,6 +284,19 @@ export class Game {
     const charProfiles = AI_DIFFICULTY_PROFILE_MAP[charId];
     if (charProfiles && charProfiles[difficulty]) return charProfiles[difficulty];
     return difficulty;
+  }
+
+  _createAIController(charId, difficulty) {
+    if (difficulty === 'hard') {
+      const hardPolicy = getHardNeuralPolicy(charId);
+      if (hardPolicy) {
+        return new NeuralPolicyController(hardPolicy, {
+          stochastic: false,
+          temperature: 0.2,
+        });
+      }
+    }
+    return new AIController(this._getAIDifficultyProfile(charId, difficulty));
   }
 
   _cleanupFighters() {
@@ -853,6 +868,10 @@ export class Game {
     const input2 = this.aiController ? null : captureInputFrame(this.input, 1, frame);
     const controller2 = this.aiController
       ? ((fighter, opponent, sim, simDt) => {
+          if (typeof this.aiController.step === 'function') {
+            this.aiController.step(fighter, opponent, sim, simDt);
+            return;
+          }
           this.aiController.update(fighter, opponent, sim.frameCount, simDt);
         })
       : null;

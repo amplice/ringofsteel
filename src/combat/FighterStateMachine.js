@@ -49,14 +49,19 @@ export class FighterStateMachine {
     this.stateDuration = duration;
   }
 
-  startAttack(attackType, durationFrames) {
+  startAttack(attackType, durationFrames, context = null) {
     if (!this.isActionable) return false;
 
     const data = { ...getAttackData(attackType, this.fighter.charDef) };
-    const backstepBonus = this.fighter._getBackstepAttackLungeBonus?.() ?? 0;
+    const backstepBonus = attackType === AttackType.THRUST
+      ? (this.fighter._getBackstepAttackLungeBonus?.() ?? 0)
+      : 0;
     if (backstepBonus > 0) {
       data.lunge += backstepBonus;
       this.fighter._consumeBackstepAttackBonus?.();
+    }
+    if ((context?.lungeBonus ?? 0) > 0) {
+      data.lunge += context.lungeBonus;
     }
 
     this.currentAttackData = data;

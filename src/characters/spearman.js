@@ -56,9 +56,9 @@ export const spearman = defineCharacter('spearman', {
   },
   sim: {
     attackFrames: {
-      [AttackType.QUICK]: 37,
-      [AttackType.HEAVY]: 43,
-      [AttackType.THRUST]: 34,
+      [AttackType.QUICK]: 45,
+      [AttackType.HEAVY]: 59,
+      [AttackType.THRUST]: 58,
     },
     poseProfile: {
       idle: {

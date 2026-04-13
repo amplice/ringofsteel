@@ -651,6 +651,30 @@
     .online-hud-strip .value {
       color: #ffffff;
     }
+    .ai-hud-strip {
+      position: absolute;
+      top: 58px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: linear-gradient(180deg, rgba(20, 18, 26, 0.88), rgba(9, 10, 16, 0.92));
+      border: 1px solid rgba(231, 200, 137, 0.22);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+      color: #f1e3bf;
+      font-family: 'MS UI Gothic', 'Yu Gothic', sans-serif;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .ai-hud-strip .label {
+      color: var(--ui-gold-dim);
+    }
+    .ai-hud-strip .value {
+      color: #ffffff;
+    }
     .fighter-hud {
       position: absolute;
       top: 20px;
@@ -1126,6 +1150,12 @@
         <span class="value" id="online-hud-code">------</span>
         <span class="label">Ping</span>
         <span class="value" id="online-hud-ping">--</span>
+      </div>
+      <div class="ai-hud-strip" id="ai-hud-strip">
+        <span class="label">AI</span>
+        <span class="value" id="ai-hud-kind">Scripted</span>
+        <span class="label">Profile</span>
+        <span class="value" id="ai-hud-profile">Medium</span>
       </div>
       <div class="fighter-hud p1">
         <div class="fighter-name">PLAYER 1</div>

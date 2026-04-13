@@ -146,6 +146,26 @@ export class NeuralPolicyController {
     };
   }
 
+  getDebugSnapshot() {
+    return {
+      controllerKind: 'neural',
+      profileName: this.policy?.metadata?.label || this.policy?.metadata?.char || 'neural',
+      baseProfileName: this.policy?.metadata?.char || 'neural',
+      currentAction: NEURAL_ACTIONS[this.currentActionIndex] ?? 'idle',
+      pendingAction: null,
+      reactionFrames: this.decisionIntervalFrames,
+      decisionNoise: this.temperature,
+      aggression: 0,
+      parryRate: 0,
+      counterRate: 0,
+      punishRate: 0,
+      blockHeldFrames: 0,
+      sideDir: 1,
+      opponentBlockCount: 0,
+      opponentAttackCount: 0,
+    };
+  }
+
   step(fighter, opponent, sim, dt) {
     if (!fighter || !opponent || !sim) return;
     this.lastDecisionActionName = null;

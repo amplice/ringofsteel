@@ -91,7 +91,9 @@ export class DebugOverlay {
     lines.push(`distance=${data.distance.toFixed(3)} animSandbox=${data.animSandbox}`);
 
     if (data.ai) {
-      lines.push(`ai current=${data.ai.currentAction ?? '-'} pending=${data.ai.pendingAction ?? '-'} react=${data.ai.reactionFrames} noise=${data.ai.decisionNoise.toFixed(2)} aggro=${data.ai.aggression.toFixed(2)} parry=${data.ai.parryRate.toFixed(2)}`);
+      const aiKind = data.ai.controllerKind ?? 'scripted';
+      const aiProfile = data.ai.profileName ?? '-';
+      lines.push(`ai kind=${aiKind} profile=${aiProfile} current=${data.ai.currentAction ?? '-'} pending=${data.ai.pendingAction ?? '-'} react=${data.ai.reactionFrames} noise=${data.ai.decisionNoise.toFixed(2)} aggro=${data.ai.aggression.toFixed(2)} parry=${data.ai.parryRate.toFixed(2)}`);
       lines.push(`ai sideDir=${data.ai.sideDir} blockHeld=${data.ai.blockHeldFrames}`);
     } else {
       lines.push('ai current=- pending=-');

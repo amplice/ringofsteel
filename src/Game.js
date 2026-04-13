@@ -231,6 +231,7 @@ export class Game {
     this.ui.showHUD();
     this.ui.hud.updateRoundPips(0, 0);
     this.ui.hud.setOnlineMeta({ visible: false });
+    this._updateAIMeta();
     this._startRound();
   }
 
@@ -276,6 +277,7 @@ export class Game {
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
     this.ui.hud.showRoundAnnounce(this.currentRound);
+    this._updateAIMeta();
 
     this.input.clearBuffers();
   }
@@ -606,6 +608,7 @@ export class Game {
       code: this.onlineSession?.lobbyCode ?? '------',
       pingMs: this.onlinePingMs,
     });
+    this.ui.hud.setAIMeta({ visible: false });
     this.ui.hud.showRoundAnnounce(this.currentRound);
     this.input.clearBuffers();
 
@@ -662,6 +665,7 @@ export class Game {
     this.ui.select.setOnlineLocked(false);
     this.ui.select.clearOnlineLobbyInfo();
     this.ui.hud.setOnlineMeta({ visible: false });
+    this.ui.hud.setAIMeta({ visible: false });
   }
 
   _handleOnlineDisconnect(message) {
@@ -683,6 +687,7 @@ export class Game {
     this.ui.select.clearOnlineLobbyInfo();
     this.ui.select.setOnlineStatus(message);
     this.ui.hud.setOnlineMeta({ visible: false });
+    this.ui.hud.setAIMeta({ visible: false });
     this.onlineSession = null;
     this.onlineLocalSlot = null;
     this.onlineMatchPlayers = null;
@@ -1135,6 +1140,25 @@ export class Game {
         pingMs: this.onlinePingMs,
       });
     }
+    this._updateAIMeta();
+  }
+
+  _updateAIMeta() {
+    if (!this.ui?.hud) return;
+    if (this.mode !== 'ai' || !this.aiController) {
+      this.ui.hud.setAIMeta({ visible: false });
+      return;
+    }
+
+    const snapshot = this.aiController.getDebugSnapshot?.() ?? null;
+    const isNeural = typeof this.aiController.step === 'function';
+    const profile = snapshot?.profileName || this._getAIDifficultyProfile(this.fighter2?.charDef?.id, this.difficulty);
+
+    this.ui.hud.setAIMeta({
+      visible: true,
+      kind: isNeural ? 'Neural' : 'Scripted',
+      profile,
+    });
   }
 
 }

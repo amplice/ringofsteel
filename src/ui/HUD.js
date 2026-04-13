@@ -10,6 +10,9 @@ export class HUD {
     this.onlineStatus = document.getElementById('online-hud-status');
     this.onlineCode = document.getElementById('online-hud-code');
     this.onlinePing = document.getElementById('online-hud-ping');
+    this.aiStrip = document.getElementById('ai-hud-strip');
+    this.aiKind = document.getElementById('ai-hud-kind');
+    this.aiProfile = document.getElementById('ai-hud-profile');
   }
 
   show() {
@@ -32,6 +35,13 @@ export class HUD {
     this.onlineStatus.textContent = status;
     this.onlineCode.textContent = code || '------';
     this.onlinePing.textContent = Number.isFinite(pingMs) ? `${Math.round(pingMs)} ms` : '--';
+  }
+
+  setAIMeta({ visible = false, kind = 'Scripted', profile = '--' } = {}) {
+    if (!this.aiStrip || !this.aiKind || !this.aiProfile) return;
+    this.aiStrip.style.display = visible ? 'flex' : 'none';
+    this.aiKind.textContent = kind;
+    this.aiProfile.textContent = profile;
   }
 
   updateRoundPips(p1Wins, p2Wins) {
@@ -67,5 +77,6 @@ export class HUD {
   reset() {
     this.hideRoundAnnounce();
     this.setOnlineMeta({ visible: false });
+    this.setAIMeta({ visible: false });
   }
 }

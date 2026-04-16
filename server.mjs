@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { createServer } from 'node:http';
+import { writeHumanAiMatchLog } from './server/ai-log-store.mjs';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
@@ -42,7 +43,48 @@ function sendFile(res, filePath) {
   createReadStream(filePath).pipe(res);
 }
 
-const server = createServer((req, res) => {
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 5 * 1024 * 1024) {
+        reject(new Error('Request body too large'));
+      }
+    });
+    req.on('end', () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : null);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/__ai_match_logs') {
+    try {
+      const payload = await readJsonBody(req);
+      if (!payload || typeof payload !== 'object') {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: 'Invalid payload' }));
+        return;
+      }
+
+      const stored = writeHumanAiMatchLog(payload);
+      console.log('[ai-log] stored', stored.relativePath);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, ...stored }));
+    } catch (error) {
+      console.error('[ai-log] failed', error);
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: error?.message || 'Failed to store match log' }));
+    }
+    return;
+  }
+
   const requested = safeResolve(req.url);
   const indexPath = join(DIST_DIR, 'index.html');
 

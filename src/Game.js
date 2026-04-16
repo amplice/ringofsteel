@@ -11,6 +11,8 @@ import { CHARACTER_DEFS, DEFAULT_CHAR } from './entities/CharacterDefs.js';
 import { ParticleSystem } from './vfx/ParticleSystem.js';
 import { ScreenEffects } from './vfx/ScreenEffects.js';
 import { AIController } from './ai/AIController.js';
+import { PlannerAIController } from './ai/PlannerAIController.js';
+import { HumanAIMatchRecorder } from './ai/HumanAIMatchRecorder.js';
 import { DebugOverlay } from './debug/DebugOverlay.js';
 import { UIManager } from './ui/UIManager.js';
 import { MatchSim } from './sim/MatchSim.js';
@@ -26,17 +28,17 @@ const AI_DIFFICULTY_PROFILE_MAP = Object.freeze({
   spearman: Object.freeze({
     easy: 'spearman_heavy_bully',
     medium: 'spearman_evasive',
-    hard: 'spearman_aggressor',
+    hard: 'spearman_hard_line',
   }),
   ronin: Object.freeze({
     easy: 'ronin_lancer',
     medium: 'ronin_duelist',
-    hard: 'ronin_evasive',
+    hard: 'ronin_hard_duelist',
   }),
   knight: Object.freeze({
     easy: 'knight_bulwark',
     medium: 'knight_duelist',
-    hard: 'knight_sentinel',
+    hard: 'knight_duelist',
   }),
 });
 
@@ -58,6 +60,7 @@ export class Game {
     this.fighter1 = null;
     this.fighter2 = null;
     this.aiController = null;
+    this.aiMatchRecorder = new HumanAIMatchRecorder();
     this.matchSim = null;
     this.onlineSession = null;
     this.onlineDiscoverySession = null;
@@ -113,6 +116,7 @@ export class Game {
       this.ui.showLoading(progressDone, `Loaded ${def.displayName}`);
     }
     this.ui.showLoading(0.95, 'Finalizing interface...');
+    HumanAIMatchRecorder.installWindowApi();
 
     // UI
     this.ui.showTitle();
@@ -217,9 +221,22 @@ export class Game {
 
     // AI
     if (this.mode === 'ai') {
-      this.aiController = new AIController(this._getAIDifficultyProfile(p2.charDef.id, this.difficulty));
+      const aiProfile = this._getAIDifficultyProfile(p2.charDef.id, this.difficulty);
+      this.aiController = this.difficulty === 'hard'
+        ? new PlannerAIController(aiProfile)
+        : new AIController(aiProfile);
+      this.aiMatchRecorder.startMatch({
+        mode: 'ai',
+        fighter1Char: p1.charDef.id,
+        fighter2Char: p2.charDef.id,
+        playerChar: p1.charDef.id,
+        aiChar: p2.charDef.id,
+        difficulty: this.difficulty,
+        aiMeta: this.aiController.getDebugSnapshot?.() ?? null,
+      });
     } else {
       this.aiController = null;
+      this.aiMatchRecorder.discard();
     }
     this.matchSim = new MatchSim({
       fighter1: this.fighter1,
@@ -274,6 +291,15 @@ export class Game {
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
     this.ui.hud.showRoundAnnounce(this.currentRound);
+    if (this.mode === 'ai' && this.fighter1 && this.fighter2) {
+      this.aiMatchRecorder.startRound({
+        roundNumber: this.currentRound,
+        fighter1: this.fighter1,
+        fighter2: this.fighter2,
+        aiMeta: this.aiController?.getDebugSnapshot?.() ?? null,
+        frameCount: this.matchSim?.frameCount ?? 0,
+      });
+    }
 
     this.input.clearBuffers();
   }
@@ -818,6 +844,18 @@ export class Game {
           if (this.fighter1 && this.fighter1.damageSystem.isDead()) {
             this.p2Score++;
           }
+          if (this.mode === 'ai') {
+            const roundSummary = this.aiMatchRecorder.completeRound({
+              frameCount: this.matchSim?.frameCount ?? 0,
+              winner: this.fighter2?.damageSystem.isDead()
+                ? 1
+                : (this.fighter1?.damageSystem.isDead() ? 2 : null),
+              killReason: this.matchSim?.killReason ?? null,
+              p1Score: this.p1Score,
+              p2Score: this.p2Score,
+            });
+            this.aiController?.observeRoundResult?.(roundSummary);
+          }
         }
 
         this.gameState = GameState.ROUND_END;
@@ -861,6 +899,17 @@ export class Game {
       input2,
       controller2,
     });
+    if (this.mode === 'ai') {
+      this.aiMatchRecorder.recordStep({
+        frameCount: step.frameCount,
+        input1,
+        input2,
+        fighter1: this.fighter1,
+        fighter2: this.fighter2,
+        aiMeta: this.aiController?.getDebugSnapshot?.() ?? null,
+        events: step.events,
+      });
+    }
     this._handleSimStep(step);
 
     // Update HUD
@@ -1059,6 +1108,13 @@ export class Game {
 
   _showVictory(winnerName) {
     this.gameState = GameState.VICTORY;
+    if (this.mode === 'ai') {
+      this.aiMatchRecorder.finishMatch({
+        winnerName,
+        p1Score: this.p1Score,
+        p2Score: this.p2Score,
+      });
+    }
     this.ui.showVictory(winnerName, this.p1Score, this.p2Score);
   }
 

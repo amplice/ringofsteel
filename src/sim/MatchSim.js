@@ -116,7 +116,7 @@ export class MatchSim {
     }
 
     if (input.pressed.block) {
-      fighter.parry();
+      fighter.guard();
     } else if (input.held.block) {
       if (fighter.fsm.isActionable) {
         fighter.block();

@@ -1,6 +1,7 @@
 import { resolveAIPersonality } from './AIPersonality.js';
 import { FighterState, AttackType } from '../core/Constants.js';
 import { getAttackData } from '../combat/AttackData.js';
+import { getDefensiveTimingWindow } from './TimingRead.js';
 
 const MAX_BLOCK_FRAMES = 40; // ~0.67s max block hold
 const ATTACK_FRONT_DOT_MIN = 0.55;
@@ -10,6 +11,16 @@ const FLANKED_FRONT_DOT = 0.35;
 const RECENT_WHIFF_FRAMES = 48;
 const RECENT_OPPONENT_SIDESTEP_FRAMES = 36;
 const REPEAT_MOBILITY_FRAMES = 32;
+const SPEARMAN_HEAVY_CONFIRM_FRAMES = 5;
+const SPEARMAN_THRUST_CONFIRM_FRAMES = 3;
+const SIDESTEP_PUNISH_MEMORY_FRAMES = 240;
+const ACTION_SCORE_MIN = 0.02;
+const ATTACK_SCORE_MIN = 0.06;
+const SPEARMAN_HEAVY_SCORE_MIN = 0.2;
+
+function getFighterClassId(fighter) {
+  return fighter?.charDef?.id ?? fighter?.charId ?? null;
+}
 
 export class AIController {
   constructor(profile = 'medium') {
@@ -36,6 +47,17 @@ export class AIController {
     this._selfLastBackstepFrame = -9999;
     this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
+    this._lastObservedDist = null;
+    this._lastObservedSideDot = 0;
+    this._recentApproachFrame = -9999;
+    this._recentLateralThreatFrame = -9999;
+    this._sidestepPunishCount = 0;
+    this._lastSidestepPunishFrame = -9999;
+    this._recentAttackCommitFrame = -9999;
+    this._recentAttackCommitType = null;
+    this._intent = 'neutral';
+    this._intentLockUntil = 0;
+    this._plannedAttack = null;
   }
 
   setDifficulty(profile) {
@@ -51,6 +73,12 @@ export class AIController {
 
     this._trackOpponent(opponent, frameCount);
     this._trackSelf(fighter, frameCount);
+    this._trackReactiveRead(fighter, opponent, frameCount);
+
+    if (this._processPlannedAttack(fighter, opponent, frameCount, dt)) {
+      this._applyMovement(fighter, dt);
+      return;
+    }
 
     if (this.currentAction === 'block') {
       this.blockHeldFrames++;
@@ -115,6 +143,15 @@ export class AIController {
   _trackSelf(fighter, frameCount) {
     const state = fighter.state;
     if (state !== this._selfLastState) {
+      if (state === FighterState.DYING) {
+        const punishedBySidestep =
+          frameCount - this._recentAttackCommitFrame <= 80 &&
+          frameCount - this._opponentLastSidestepFrame <= 45;
+        if (punishedBySidestep) {
+          this._sidestepPunishCount = Math.min(3, this._sidestepPunishCount + 1);
+          this._lastSidestepPunishFrame = frameCount;
+        }
+      }
       if (state === FighterState.SIDESTEP) {
         this._selfLastSidestepFrame = frameCount;
         this._mobilityFatigue += 1.0;
@@ -135,6 +172,36 @@ export class AIController {
     this._selfWasAttacking = fighter.fsm.isAttacking;
   }
 
+  _trackReactiveRead(fighter, opponent, frameCount) {
+    const dist = fighter.distanceTo(opponent);
+    const engagement = this._getEngagementContext(fighter, opponent, dist);
+    const lastDist = this._lastObservedDist;
+    const lastSideAbs = Math.abs(this._lastObservedSideDot || 0);
+    const sideAbs = Math.abs(engagement.sideDot);
+
+    if (lastDist != null) {
+      const distClosing = lastDist - dist;
+      const lateralGrowth = sideAbs - lastSideAbs;
+      const frontalApproach =
+        engagement.forwardDot >= 0.84 &&
+        (opponent.state === FighterState.WALK_FORWARD || distClosing >= 0.035);
+      const lateralThreat =
+        opponent.state === FighterState.SIDESTEP ||
+        (sideAbs >= 0.22 && lateralGrowth >= 0.035) ||
+        (sideAbs >= 0.3 && distClosing >= 0);
+
+      if (frontalApproach) this._recentApproachFrame = frameCount;
+      if (lateralThreat) this._recentLateralThreatFrame = frameCount;
+    }
+
+    if (frameCount - this._lastSidestepPunishFrame > SIDESTEP_PUNISH_MEMORY_FRAMES) {
+      this._sidestepPunishCount = 0;
+    }
+
+    this._lastObservedDist = dist;
+    this._lastObservedSideDot = engagement.sideDot;
+  }
+
   _checkReactiveInterrupt(fighter, opponent, p) {
     if (!fighter.fsm.isActionable) return false;
 
@@ -147,6 +214,55 @@ export class AIController {
     }
 
     return false;
+  }
+
+  _processPlannedAttack(fighter, opponent, frameCount, dt) {
+    if (!this._plannedAttack) return false;
+    if (!fighter.fsm.isActionable) return true;
+
+    const plan = this._plannedAttack;
+    const dist = fighter.distanceTo(opponent);
+    const engagement = this._getEngagementContext(fighter, opponent, dist);
+    const motionRead = this._getOpponentMotionRead(frameCount);
+    const defensiveWindow = getDefensiveTimingWindow(fighter, opponent);
+
+    if (!this._isPlannedAttackStillValid(fighter, opponent, plan, engagement, dist, motionRead, defensiveWindow)) {
+      this._plannedAttack = null;
+      this._intent = 'hold_line';
+      this._intentLockUntil = frameCount + 8;
+      return false;
+    }
+
+    if (frameCount >= plan.confirmUntil) {
+      fighter.attack(plan.attackType);
+      this._recentAttackCommitFrame = frameCount;
+      this._recentAttackCommitType = plan.attackType;
+      this._plannedAttack = null;
+    }
+
+    return true;
+  }
+
+  _isPlannedAttackStillValid(fighter, opponent, plan, engagement, dist, motionRead, defensiveWindow) {
+    const decisionReach = this._getAttackDecisionReach(fighter, plan.attackType);
+    const recentLateralThreat = motionRead.recentLateralThreat;
+    const stableFront = engagement.forwardDot >= (plan.attackType === AttackType.HEAVY ? 0.92 : 0.86);
+    const withinReach = dist <= decisionReach - (plan.attackType === AttackType.HEAVY ? 0.06 : 0.03);
+
+    if (!stableFront || !withinReach) return false;
+    if (recentLateralThreat || opponent.state === FighterState.SIDESTEP) return false;
+    if (defensiveWindow.opponentAttack.phase === 'active' && plan.attackType === AttackType.HEAVY) return false;
+
+    if (plan.attackType === AttackType.HEAVY) {
+      const heavyLegal =
+        defensiveWindow.canImmediatePunish ||
+        opponent.state === FighterState.BLOCK ||
+        opponent.state === FighterState.BLOCK_STUN ||
+        (dist < (fighter.charDef?.aiRanges?.close || 1.8) && opponent.state !== FighterState.WALK_FORWARD && opponent.state !== FighterState.WALK_BACK);
+      if (!heavyLegal) return false;
+    }
+
+    return true;
   }
 
   _makeDecision(fighter, opponent, dt, frameCount, p) {
@@ -179,14 +295,49 @@ export class AIController {
     const recentOpponentBlock = frameCount - this._opponentLastBlockFrame <= 42;
     const recentSelfClash = frameCount - this._selfLastClashFrame <= 45;
     const heavySpecialist = (p.heavyBias || 0) >= 0.3 || p.heavyMixup >= 0.7;
+    const motionRead = this._getOpponentMotionRead(frameCount);
+    const defensiveWindow = getDefensiveTimingWindow(fighter, opponent);
 
     const opponentAttacking = opponent.fsm.isAttacking;
-    const opponentRecovering = false;
+    const opponentRecovering = defensiveWindow.opponentAttack.phase === 'recovery' || defensiveWindow.opponentAttack.lateRecovery;
     const opponentStunned = opponent.state === FighterState.HIT_STUN ||
       opponent.state === FighterState.PARRIED_STUN ||
       opponent.state === FighterState.BLOCK_STUN ||
       opponent.state === FighterState.CLASH;
     const opponentVulnerable = opponentRecovering || opponentStunned;
+    const spearmanSafeHeavyWindow =
+      getFighterClassId(fighter) === 'spearman' &&
+      !opponentAttacking &&
+      !opponentVulnerable &&
+      !motionRead.recentApproach &&
+      !motionRead.recentLateralThreat &&
+      !motionRead.recentlyPunishedBySidestep &&
+      engagement.forwardDot >= 0.97 &&
+      (
+        opponent.state === FighterState.IDLE ||
+        opponent.state === FighterState.BLOCK ||
+        opponent.state === FighterState.BLOCK_STUN
+      ) &&
+      dist >= 2.18 &&
+      dist <= 2.38;
+    const spearmanHeavyCommitAllowed =
+      getFighterClassId(fighter) !== 'spearman' ||
+      opponentVulnerable ||
+      recentSelfClash ||
+      opponent.state === FighterState.BLOCK ||
+      opponent.state === FighterState.BLOCK_STUN ||
+      recentOpponentBlock ||
+      spearmanSafeHeavyWindow ||
+      (
+        closeRange &&
+        engagement.forwardDot >= ATTACK_FRONT_DOT_STRONG &&
+        opponent.state !== FighterState.WALK_FORWARD &&
+        opponent.state !== FighterState.WALK_BACK &&
+        opponent.state !== FighterState.SIDESTEP &&
+        !recentOpponentSidestep &&
+        !motionRead.recentLateralThreat &&
+        !motionRead.recentlyPunishedBySidestep
+      );
 
     if (fighter.state === FighterState.PARRY_SUCCESS) {
       if (Math.random() < p.counterRate) {
@@ -201,6 +352,8 @@ export class AIController {
           this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 1.5 + (p.quickBias || 0) + noise());
         scores.thrustAttack = (scores.thrustAttack || 0) +
           this._scoreAttackOpportunity(fighter, AttackType.THRUST, engagement, 1.0 + (p.thrustBias || 0) + noise());
+        scores.heavyAttack = (scores.heavyAttack || 0) +
+          this._scoreAttackOpportunity(fighter, AttackType.HEAVY, engagement, 0.9 + (p.heavyBias || 0) + noise());
       }
     }
 
@@ -210,29 +363,87 @@ export class AIController {
       }
     }
 
+    const quickDecisionReach = this._getAttackDecisionReach(fighter, AttackType.QUICK);
+    const heavyDecisionReach = this._getAttackDecisionReach(fighter, AttackType.HEAVY);
+    const thrustDecisionReach = this._getAttackDecisionReach(fighter, AttackType.THRUST);
+    const anyAttackReady = dist <= Math.max(quickDecisionReach, heavyDecisionReach, thrustDecisionReach);
+    const spearmanApproachLaneThreat =
+      getFighterClassId(fighter) === 'spearman' &&
+      !opponentAttacking &&
+      !opponentVulnerable &&
+      !nearEdge &&
+      engagement.forwardDot >= 0.88 &&
+      opponent.state === FighterState.WALK_FORWARD &&
+      dist >= quickDecisionReach + 0.12 &&
+      dist <= thrustDecisionReach + 0.12;
+    const spearmanMobileApproachBand =
+      getFighterClassId(fighter) === 'spearman' &&
+      !opponentAttacking &&
+      !opponentVulnerable &&
+      !nearEdge &&
+      engagement.forwardDot >= 0.82 &&
+      (
+        opponent.state === FighterState.WALK_FORWARD ||
+        opponent.state === FighterState.WALK_BACK ||
+        opponent.state === FighterState.SIDESTEP
+      ) &&
+      dist > quickDecisionReach + 0.04 &&
+      dist <= thrustDecisionReach + 0.18;
+    const spearmanNoCommitStepBand =
+      getFighterClassId(fighter) === 'spearman' &&
+      !opponentAttacking &&
+      !opponentVulnerable &&
+      !nearEdge &&
+      engagement.forwardDot >= 0.78 &&
+      (
+        opponent.state === FighterState.WALK_FORWARD ||
+        opponent.state === FighterState.WALK_BACK ||
+        opponent.state === FighterState.SIDESTEP ||
+        recentOpponentSidestep
+      ) &&
+      dist > quickDecisionReach - 0.06 &&
+      dist <= Math.max(heavyDecisionReach, thrustDecisionReach) + 0.12;
+
     if (inRange) {
       scores.quickAttack = (scores.quickAttack || 0) +
         this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 0.4 + p.aggression * 0.3 + (p.quickBias || 0) + noise());
       scores.thrustAttack = (scores.thrustAttack || 0) +
         this._scoreAttackOpportunity(fighter, AttackType.THRUST, engagement, 0.2 + p.aggression * 0.2 + (p.thrustBias || 0) + noise());
 
-      const blockRatio = this._getOpponentBlockRatio();
-      const heavyBonus = blockRatio * p.heavyMixup;
-      const heavyContextBonus =
-        (opponentVulnerable ? 0.35 : 0) +
-        (recentSelfClash ? 0.45 : 0) +
-        ((opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN || recentOpponentBlock) ? 0.28 : 0) +
-        (heavySpecialist ? 0.18 : 0);
-      scores.heavyAttack = (scores.heavyAttack || 0) +
-        this._scoreAttackOpportunity(
-          fighter,
-          AttackType.HEAVY,
-          engagement,
-          0.15 + p.aggression * 0.2 + heavyBonus + heavyContextBonus + (p.heavyBias || 0) + noise(),
-        );
+      if (spearmanHeavyCommitAllowed) {
+        const blockRatio = this._getOpponentBlockRatio();
+        const heavyBonus = blockRatio * p.heavyMixup;
+        const heavyContextBonus =
+          (opponentVulnerable ? 0.35 : 0) +
+          (recentSelfClash ? 0.45 : 0) +
+          ((opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN || recentOpponentBlock) ? 0.28 : 0) +
+          (heavySpecialist ? 0.18 : 0);
+        scores.heavyAttack = (scores.heavyAttack || 0) +
+          this._scoreAttackOpportunity(
+            fighter,
+            AttackType.HEAVY,
+            engagement,
+            0.15 + p.aggression * 0.2 + heavyBonus + heavyContextBonus + (p.heavyBias || 0) + noise(),
+          );
+      } else if (getFighterClassId(fighter) === 'spearman') {
+        scores.block = (scores.block || 0) + 0.1;
+        scores.moveForward = (scores.moveForward || 0) + 0.12;
+        scores.idle = (scores.idle || 0) + 0.08;
+      }
 
       if (closeRange) {
         scores.quickAttack += this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 0.2 + (p.quickBias || 0));
+      }
+    }
+
+    if (!anyAttackReady && dist <= (ranges.engage + 0.15) && !opponentVulnerable) {
+      scores.moveForward = (scores.moveForward || 0) + (getFighterClassId(fighter) === 'spearman' ? 0.52 : 0.16);
+      scores.idle = (scores.idle || 0) + (getFighterClassId(fighter) === 'spearman' ? 0.08 : 0.02);
+      if (getFighterClassId(fighter) === 'spearman') {
+        scores.block = (scores.block || 0) + 0.1;
+        scores.quickAttack = (scores.quickAttack || 0) * 0.15;
+        scores.heavyAttack = (scores.heavyAttack || 0) * 0.08;
+        scores.thrustAttack = (scores.thrustAttack || 0) * 0.2;
       }
     }
 
@@ -253,6 +464,17 @@ export class AIController {
           scores.backstep = (scores.backstep || 0) + 0.25;
         }
       }
+    }
+
+    if (defensiveWindow.shouldDefendNow) {
+      scores.block = (scores.block || 0) + 0.32;
+      scores.parry = (scores.parry || 0) + 0.18;
+      scores.quickAttack = (scores.quickAttack || 0) * 0.4;
+      scores.heavyAttack = (scores.heavyAttack || 0) * 0.1;
+      scores.thrustAttack = (scores.thrustAttack || 0) * 0.2;
+    } else if (defensiveWindow.shouldPreemptMovement) {
+      scores.sidestep = (scores.sidestep || 0) + 0.16;
+      scores.block = (scores.block || 0) + 0.08;
     }
 
     scores.sidestep = (scores.sidestep || 0) - 0.06 + (p.sidestepBias || 0) + noise();
@@ -300,6 +522,105 @@ export class AIController {
       scores.block = (scores.block || 0) * 0.6;
     }
 
+    if (getFighterClassId(fighter) === 'spearman' && inRange && engagement.forwardDot >= 0.72 && !nearEdge && recentOpponentSidestep) {
+      scores.quickAttack = (scores.quickAttack || 0) * 0.12;
+      scores.heavyAttack = (scores.heavyAttack || 0) * 0.06;
+      scores.thrustAttack = (scores.thrustAttack || 0) * 0.18;
+      scores.block = (scores.block || 0) + 0.22;
+      scores.moveForward = (scores.moveForward || 0) + 0.3;
+      scores.idle = (scores.idle || 0) + 0.14;
+      scores.sidestep = (scores.sidestep || 0) - 0.28;
+      scores.backstep = (scores.backstep || 0) - 0.14;
+    }
+
+    if (spearmanApproachLaneThreat) {
+      scores.thrustAttack = (scores.thrustAttack || 0) * 0.08;
+      scores.heavyAttack = (scores.heavyAttack || 0) * 0.4;
+      scores.quickAttack = dist <= quickDecisionReach ? (scores.quickAttack || 0) * 0.85 : (scores.quickAttack || 0) * 0.2;
+      scores.block = (scores.block || 0) + 0.16;
+      scores.moveForward = (scores.moveForward || 0) + 0.26;
+      scores.idle = (scores.idle || 0) + 0.18;
+      scores.sidestep = (scores.sidestep || 0) - 0.12;
+      scores.backstep = (scores.backstep || 0) - 0.08;
+    }
+
+    if (spearmanMobileApproachBand) {
+      scores.quickAttack = (scores.quickAttack || 0) * 0.08;
+      scores.heavyAttack = (scores.heavyAttack || 0) * 0.16;
+      scores.thrustAttack = (scores.thrustAttack || 0) * 0.03;
+      scores.block = (scores.block || 0) + 0.24;
+      scores.moveForward = (scores.moveForward || 0) + 0.34;
+      scores.idle = (scores.idle || 0) + 0.24;
+      scores.sidestep = (scores.sidestep || 0) - 0.18;
+      scores.backstep = (scores.backstep || 0) - 0.12;
+    }
+
+    if (spearmanNoCommitStepBand) {
+      scores.quickAttack = 0;
+      scores.heavyAttack = 0;
+      scores.thrustAttack = 0;
+      scores.block = (scores.block || 0) + 0.32;
+      scores.moveForward = (scores.moveForward || 0) + 0.42;
+      scores.idle = (scores.idle || 0) + 0.28;
+      scores.moveBack = (scores.moveBack || 0) + 0.06;
+      scores.sidestep = (scores.sidestep || 0) - 0.24;
+      scores.backstep = (scores.backstep || 0) - 0.16;
+    }
+
+    if (getFighterClassId(fighter) === 'spearman' && !spearmanHeavyCommitAllowed && !opponentAttacking) {
+      scores.heavyAttack = 0;
+    }
+
+    if (getFighterClassId(fighter) === 'spearman') {
+      const intent = this._selectSpearmanIntent(
+        fighter,
+        opponent,
+        frameCount,
+        engagement,
+        dist,
+        motionRead,
+        defensiveWindow,
+        opponentVulnerable,
+        closeRange,
+        nearEdge,
+      );
+      switch (intent) {
+        case 'hold_line':
+          scores.heavyAttack = 0;
+          scores.thrustAttack = (scores.thrustAttack || 0) * 0.45;
+          scores.quickAttack = closeRange ? (scores.quickAttack || 0) * 0.75 : 0;
+          scores.block = (scores.block || 0) + 0.22;
+          scores.moveForward = (scores.moveForward || 0) + 0.28;
+          scores.idle = (scores.idle || 0) + 0.16;
+          break;
+        case 'intercept':
+          scores.heavyAttack = spearmanSafeHeavyWindow ? (scores.heavyAttack || 0) * 0.5 : 0;
+          scores.thrustAttack = (scores.thrustAttack || 0) + 0.28;
+          scores.quickAttack = (scores.quickAttack || 0) + (closeRange ? 0.14 : 0.02);
+          scores.block = (scores.block || 0) + 0.08;
+          break;
+        case 'punish':
+          scores.quickAttack = (scores.quickAttack || 0) + 0.2;
+          scores.thrustAttack = (scores.thrustAttack || 0) + 0.12;
+          scores.heavyAttack = (scores.heavyAttack || 0) + 0.18;
+          break;
+        case 'pressure':
+          scores.quickAttack = (scores.quickAttack || 0) + 0.08;
+          scores.heavyAttack = spearmanHeavyCommitAllowed ? (scores.heavyAttack || 0) + 0.1 : 0;
+          break;
+        case 'reset':
+          scores.quickAttack = 0;
+          scores.heavyAttack = 0;
+          scores.thrustAttack = 0;
+          scores.moveForward = (scores.moveForward || 0) + 0.18;
+          scores.moveBack = (scores.moveBack || 0) + 0.22;
+          scores.block = (scores.block || 0) + 0.18;
+          break;
+        default:
+          break;
+      }
+    }
+
     if (recentOwnWhiff) {
       scores.quickAttack = (scores.quickAttack || 0) * 0.3;
       scores.heavyAttack = (scores.heavyAttack || 0) * (heavySpecialist ? 0.45 : 0.2);
@@ -340,15 +661,7 @@ export class AIController {
 
     scores.idle = 0.1 + (p.idleBias || 0) + noise();
 
-    let bestAction = 'idle';
-    let bestScore = -Infinity;
-    for (const [action, score] of Object.entries(scores)) {
-      if (score > bestScore) {
-        bestScore = score;
-        bestAction = action;
-      }
-    }
-
+    const bestAction = this._pickAction(scores, fighter, p);
     this.pendingAction = bestAction;
     this._executePending(fighter, dt);
   }
@@ -357,6 +670,41 @@ export class AIController {
     const total = this._opponentBlockCount + this._opponentAttackCount;
     if (total < 3) return 0.3;
     return this._opponentBlockCount / total;
+  }
+
+  _getOpponentMotionRead(frameCount) {
+    return {
+      recentApproach: frameCount - this._recentApproachFrame <= 18,
+      recentLateralThreat: frameCount - this._recentLateralThreatFrame <= 22,
+      sidestepPunishCount: this._sidestepPunishCount,
+      recentlyPunishedBySidestep: frameCount - this._lastSidestepPunishFrame <= SIDESTEP_PUNISH_MEMORY_FRAMES,
+    };
+  }
+
+  _selectSpearmanIntent(fighter, opponent, frameCount, engagement, dist, motionRead, defensiveWindow, opponentVulnerable, closeRange, nearEdge) {
+    if (frameCount < this._intentLockUntil && this._intent && this._intent !== 'neutral') {
+      return this._intent;
+    }
+
+    let nextIntent = 'hold_line';
+
+    if (nearEdge || engagement.forwardDot < ATTACK_FRONT_DOT_MIN) {
+      nextIntent = 'reset';
+    } else if (opponentVulnerable || defensiveWindow.canImmediatePunish) {
+      nextIntent = 'punish';
+    } else if (defensiveWindow.shouldDefendNow || motionRead.recentLateralThreat || motionRead.recentlyPunishedBySidestep) {
+      nextIntent = 'hold_line';
+    } else if (opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN) {
+      nextIntent = closeRange ? 'pressure' : 'hold_line';
+    } else if (motionRead.recentApproach && engagement.forwardDot >= 0.9 && dist <= this._getAttackDecisionReach(fighter, AttackType.THRUST) - 0.04) {
+      nextIntent = 'intercept';
+    } else if (closeRange && engagement.forwardDot >= ATTACK_FRONT_DOT_STRONG) {
+      nextIntent = 'pressure';
+    }
+
+    this._intent = nextIntent;
+    this._intentLockUntil = frameCount + (nextIntent === 'punish' ? 8 : 6);
+    return nextIntent;
   }
 
   _getEngagementContext(fighter, opponent, dist) {
@@ -376,20 +724,95 @@ export class AIController {
     };
   }
 
+  _getAttackOverreachAllowance(fighter, attackType, attack) {
+    if (getFighterClassId(fighter) === 'spearman') {
+      switch (attackType) {
+        case AttackType.QUICK:
+          return 0;
+        case AttackType.HEAVY:
+          return 0;
+        case AttackType.THRUST:
+          return 0.04;
+        default:
+          return 0;
+      }
+    }
+
+    return ATTACK_RANGE_MARGIN + Math.min(Math.max(attack.lunge || 0, 0) * 0.35, 0.18);
+  }
+
+  _getAttackDecisionReach(fighter, attackType) {
+    const attack = getAttackData(attackType, fighter.charDef);
+    let decisionReach = attack.aiRange + this._getAttackOverreachAllowance(fighter, attackType, attack);
+
+    if (getFighterClassId(fighter) === 'spearman') {
+      switch (attackType) {
+        case AttackType.QUICK:
+          decisionReach = attack.aiRange - 0.42;
+          break;
+        case AttackType.HEAVY:
+          decisionReach = attack.aiRange - 0.5;
+          break;
+        case AttackType.THRUST:
+          decisionReach = attack.aiRange - 0.56;
+          break;
+        default:
+          break;
+      }
+      decisionReach = Math.max(attack.aiRange * 0.62, decisionReach);
+    }
+
+    return decisionReach;
+  }
+
   _scoreAttackOpportunity(fighter, attackType, engagement, baseScore) {
     const attack = getAttackData(attackType, fighter.charDef);
-    const effectiveReach = attack.aiRange + attack.lunge + ATTACK_RANGE_MARGIN;
-    if (engagement.dist > effectiveReach) return 0;
+    const decisionReach = this._getAttackDecisionReach(fighter, attackType);
+    if (engagement.dist > decisionReach) return 0;
     if (engagement.forwardDot <= ATTACK_FRONT_DOT_MIN) return 0;
 
     const facingWeight = Math.min(
       1,
       Math.max(0, (engagement.forwardDot - ATTACK_FRONT_DOT_MIN) / (ATTACK_FRONT_DOT_STRONG - ATTACK_FRONT_DOT_MIN)),
     );
-    const farPenalty = Math.max(0, engagement.dist - attack.aiRange);
-    const penaltySpan = Math.max(effectiveReach * 0.35, 0.4);
-    const rangeWeight = Math.max(0.35, 1 - (farPenalty / penaltySpan));
+    const farPenalty = Math.max(0, engagement.dist - decisionReach);
+    const penaltySpan = Math.max(this._getAttackOverreachAllowance(fighter, attackType, attack), 0.08);
+    const minRangeWeight = getFighterClassId(fighter) === 'spearman' ? 0 : 0.35;
+    const rangeWeight = Math.max(minRangeWeight, 1 - (farPenalty / penaltySpan));
     return baseScore * facingWeight * rangeWeight;
+  }
+
+  _pickAction(scores, fighter, p) {
+    const entries = Object.entries(scores)
+      .filter(([action, score]) => {
+        if (!Number.isFinite(score)) return false;
+        if (this._isAttackAction(action)) {
+          if (getFighterClassId(fighter) === 'spearman' && action === 'heavyAttack') return score >= SPEARMAN_HEAVY_SCORE_MIN;
+          return score >= ATTACK_SCORE_MIN;
+        }
+        return score >= ACTION_SCORE_MIN;
+      })
+      .sort((a, b) => b[1] - a[1]);
+
+    if (!entries.length) return 'idle';
+    if (getFighterClassId(fighter) !== 'spearman') return entries[0][0];
+
+    const bestScore = entries[0][1];
+    const candidates = entries.filter(([, score]) => score >= bestScore - 0.12).slice(0, 3);
+    if (candidates.length === 1) return candidates[0][0];
+
+    const weights = candidates.map(([, score]) => Math.max(0.01, score - (bestScore - 0.12) + 0.02));
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return candidates[i][0];
+    }
+    return candidates[0][0];
+  }
+
+  _isAttackAction(action) {
+    return action === 'quickAttack' || action === 'heavyAttack' || action === 'thrustAttack';
   }
 
   _executePersistent(fighter, dt) {
@@ -418,18 +841,42 @@ export class AIController {
     switch (action) {
       case 'quickAttack':
         fighter.attack(AttackType.QUICK);
+        this._recentAttackCommitFrame = fighter?.match?.frameCount || this.lastDecisionFrame;
+        this._recentAttackCommitType = AttackType.QUICK;
         this.currentAction = null;
         break;
       case 'heavyAttack':
+        if (getFighterClassId(fighter) === 'spearman') {
+          this._plannedAttack = {
+            action,
+            attackType: AttackType.HEAVY,
+            confirmUntil: this.lastDecisionFrame + SPEARMAN_HEAVY_CONFIRM_FRAMES,
+          };
+          this.currentAction = null;
+          break;
+        }
         fighter.attack(AttackType.HEAVY);
+        this._recentAttackCommitFrame = fighter?.match?.frameCount || this.lastDecisionFrame;
+        this._recentAttackCommitType = AttackType.HEAVY;
         this.currentAction = null;
         break;
       case 'thrustAttack':
+        if (getFighterClassId(fighter) === 'spearman') {
+          this._plannedAttack = {
+            action,
+            attackType: AttackType.THRUST,
+            confirmUntil: this.lastDecisionFrame + SPEARMAN_THRUST_CONFIRM_FRAMES,
+          };
+          this.currentAction = null;
+          break;
+        }
         fighter.attack(AttackType.THRUST);
+        this._recentAttackCommitFrame = fighter?.match?.frameCount || this.lastDecisionFrame;
+        this._recentAttackCommitType = AttackType.THRUST;
         this.currentAction = null;
         break;
       case 'block':
-        fighter.block();
+        fighter.guard();
         this.blockHeldFrames = 0;
         break;
       case 'parry':
@@ -438,6 +885,16 @@ export class AIController {
         break;
       case 'sidestep':
         this.sideDir = Math.random() > 0.5 ? 1 : -1;
+        fighter.sidestep(this.sideDir);
+        this.currentAction = null;
+        break;
+      case 'sidestepUp':
+        this.sideDir = -1;
+        fighter.sidestep(this.sideDir);
+        this.currentAction = null;
+        break;
+      case 'sidestepDown':
+        this.sideDir = 1;
         fighter.sidestep(this.sideDir);
         this.currentAction = null;
         break;
@@ -469,6 +926,9 @@ export class AIController {
       baseProfileName: this.baseProfileName,
       currentAction: this.currentAction,
       pendingAction: this.pendingAction,
+      intent: this._intent,
+      intentLockUntil: this._intentLockUntil,
+      plannedAttack: this._plannedAttack,
       reactionFrames: this.personality.reactionFrames,
       decisionNoise: this.personality.decisionNoise,
       aggression: this.personality.aggression,
@@ -479,6 +939,9 @@ export class AIController {
       sideDir: this.sideDir,
       opponentBlockCount: this._opponentBlockCount,
       opponentAttackCount: this._opponentAttackCount,
+      sidestepPunishCount: this._sidestepPunishCount,
+      recentApproachFrame: this._recentApproachFrame,
+      recentLateralThreatFrame: this._recentLateralThreatFrame,
     };
   }
 
@@ -501,5 +964,16 @@ export class AIController {
     this._selfLastBackstepFrame = -9999;
     this._selfLastClashFrame = -9999;
     this._mobilityFatigue = 0;
+    this._lastObservedDist = null;
+    this._lastObservedSideDot = 0;
+    this._recentApproachFrame = -9999;
+    this._recentLateralThreatFrame = -9999;
+    this._sidestepPunishCount = 0;
+    this._lastSidestepPunishFrame = -9999;
+    this._recentAttackCommitFrame = -9999;
+    this._recentAttackCommitType = null;
+    this._intent = 'neutral';
+    this._intentLockUntil = 0;
+    this._plannedAttack = null;
   }
 }

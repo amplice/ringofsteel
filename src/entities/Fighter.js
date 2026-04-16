@@ -21,7 +21,7 @@ export class Fighter extends FighterCore {
   static _playerMarkerTexture = null;
 
   constructor(playerIndex, color, charDef, animData) {
-    super(playerIndex, charDef.glbPath ?? charDef.displayName ?? 'fighter', charDef);
+    super(playerIndex, charDef.id ?? charDef.glbPath ?? charDef.displayName ?? 'fighter', charDef);
     if (!animData?.model || !animData?.clips) {
       const charName = charDef?.displayName || 'unknown';
       throw new Error(`Missing animation data for fighter '${charName}'`);

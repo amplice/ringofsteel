@@ -5,6 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:client": "vite --host 127.0.0.1 --port 5180 --strictPort",
+    "dev:server": "node server.mjs",
+    "dev:up": "powershell -ExecutionPolicy Bypass -File scripts/start-local-servers.ps1",
+    "dev:check": "powershell -ExecutionPolicy Bypass -File scripts/check-local-servers.ps1",
+    "dev:down": "powershell -ExecutionPolicy Bypass -File scripts/stop-local-servers.ps1",
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server.mjs",

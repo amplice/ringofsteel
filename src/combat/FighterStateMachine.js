@@ -1,6 +1,7 @@
 import {
   FighterState, AttackType,
   PARRY_WINDOW_FRAMES,
+  PARRY_REENTRY_COOLDOWN_FRAMES,
   BLOCK_STUN_FRAMES, HIT_STUN_FRAMES, PARRIED_STUN_FRAMES, PARRY_SUCCESS_FRAMES_BY_ATTACK,
   CLASH_PUSHBACK_FRAMES,
   SIDESTEP_DASH_FRAMES, SIDESTEP_RECOVERY_FRAMES,
@@ -21,6 +22,7 @@ export class FighterStateMachine {
     // Sidestep state
     this.sidestepDirection = 0;    // +1 or -1 (Z axis)
     this.sidestepPhase = null;     // 'dash' | 'recovery'
+    this.parryCooldownFrames = 0;
   }
 
   get isActionable() {
@@ -52,14 +54,7 @@ export class FighterStateMachine {
   startAttack(attackType, durationFrames) {
     if (!this.isActionable) return false;
 
-    const data = { ...getAttackData(attackType, this.fighter.charDef) };
-    const backstepBonus = this.fighter._getBackstepAttackLungeBonus?.() ?? 0;
-    if (backstepBonus > 0) {
-      data.lunge += backstepBonus;
-      this.fighter._consumeBackstepAttackBonus?.();
-    }
-
-    this.currentAttackData = data;
+    this.currentAttackData = { ...getAttackData(attackType, this.fighter.charDef) };
     this.currentAttackType = attackType;
     this.hitApplied = false;
     this.transition(FighterState.ATTACK_ACTIVE, durationFrames);
@@ -74,7 +69,9 @@ export class FighterStateMachine {
 
   startParry() {
     if (!this.isActionable) return false;
+    if (this.parryCooldownFrames > 0) return false;
     this.transition(FighterState.PARRY);
+    this.parryCooldownFrames = PARRY_REENTRY_COOLDOWN_FRAMES;
     return true;
   }
 
@@ -121,6 +118,9 @@ export class FighterStateMachine {
   }
 
   update() {
+    if (this.parryCooldownFrames > 0) {
+      this.parryCooldownFrames--;
+    }
     this.stateFrames++;
 
     switch (this.state) {
@@ -176,7 +176,6 @@ export class FighterStateMachine {
       case FighterState.DODGE:
         // Backstep
         if (this.stateFrames >= BACKSTEP_FRAMES) {
-          this.fighter._grantBackstepAttackBonus?.();
           this.transition(FighterState.IDLE);
         }
         break;
@@ -198,5 +197,6 @@ export class FighterStateMachine {
     this.hitApplied = false;
     this.sidestepDirection = 0;
     this.sidestepPhase = null;
+    this.parryCooldownFrames = 0;
   }
 }

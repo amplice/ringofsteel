@@ -57,6 +57,7 @@ export const WeaponType = {
 export const FRAME_DURATION = 1 / 60;
 
 export const PARRY_WINDOW_FRAMES = 9;
+export const PARRY_REENTRY_COOLDOWN_FRAMES = 24;
 export const BLOCK_STUN_FRAMES = 16;
 export const HIT_STUN_FRAMES = 16;
 export const PARRIED_STUN_FRAMES = 24;
@@ -88,8 +89,6 @@ export const SIDESTEP_RECOVERY_FRAMES = 8;
 export const BACKSTEP_FRAMES = 21;
 export const BACKSTEP_DISTANCE = 1.5;
 export const BACKSTEP_INVULN_FRAMES = 6;
-export const BACKSTEP_ATTACK_BONUS_WINDOW_FRAMES = 18;
-export const BACKSTEP_ATTACK_LUNGE_BONUS = 0.28;
 
 // Block pushback
 export const BLOCK_PUSHBACK_SPEED = 2.0;

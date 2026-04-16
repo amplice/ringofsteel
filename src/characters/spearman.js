@@ -22,7 +22,7 @@ export const spearman = defineCharacter('spearman', {
   attackData: {
     [AttackType.QUICK]: {
       aiRange: 2.0,
-      lunge: 0.2,
+      lunge: 0.5,
       blockPush: 0.5,
       lungeStart: 0.5,
       lungeEnd: 1.0,
@@ -32,7 +32,7 @@ export const spearman = defineCharacter('spearman', {
     },
     [AttackType.HEAVY]: {
       aiRange: 2.3,
-      lunge: 0.5,
+      lunge: 0.6,
       blockPush: 1.2,
       lungeStart: 1 / 3,
       lungeEnd: 2 / 3,
@@ -46,7 +46,7 @@ export const spearman = defineCharacter('spearman', {
     },
     [AttackType.THRUST]: {
       aiRange: 2.5,
-      lunge: 0.2,
+      lunge: 0.3,
       blockPush: 0.8,
       lungeRatio: 0.5,
       contactStart: 13 / 48,
@@ -56,9 +56,9 @@ export const spearman = defineCharacter('spearman', {
   },
   sim: {
     attackFrames: {
-      [AttackType.QUICK]: 37,
-      [AttackType.HEAVY]: 43,
-      [AttackType.THRUST]: 34,
+      [AttackType.QUICK]: 43,
+      [AttackType.HEAVY]: 55,
+      [AttackType.THRUST]: 45,
     },
     poseProfile: {
       idle: {
@@ -106,8 +106,9 @@ export const spearman = defineCharacter('spearman', {
     walk_backward: 2.1,
     strafe_left: 1.484375,
     strafe_right: 1.2109375,
-    attack_heavy: 0.9,
-    attack_thrust: 0.72,
+    attack_quick: 1.05,
+    attack_heavy: 0.97,
+    attack_thrust: 0.93,
     block_parry: 1.25,
     clash_knockback: 2.5,
     block_knockback: 2.5,

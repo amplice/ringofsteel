@@ -74,8 +74,17 @@ export class DebugOverlay {
 
   update(data) {
     if (!this.enabled) return;
-    this.el.textContent = this._formatData(data);
-    this._updateSceneHelpers(data);
+    try {
+      this.el.textContent = this._formatData(data);
+      this._updateSceneHelpers(data);
+    } catch (error) {
+      this.el.textContent = [
+        `Debug Overlay  [${DEBUG_OPTIONS.toggleKey}]`,
+        '',
+        `overlay error: ${error?.message || error}`,
+      ].join('\n');
+      console.error('[DebugOverlay] update failed', error, data);
+    }
   }
 
   _formatData(data) {
@@ -85,13 +94,13 @@ export class DebugOverlay {
 
     const lines = [];
     lines.push(`Debug Overlay  [${DEBUG_OPTIONS.toggleKey}]`);
-    lines.push(`state=${data.gameState} frame=${data.frameCount} timeScale=${data.timeScale.toFixed(2)} rawDt=${data.rawDelta.toFixed(4)} steps=${data.steps} timer=${data.stateTimer.toFixed(3)}`);
+    lines.push(`state=${data.gameState} frame=${data.frameCount} timeScale=${this._fmt(data.timeScale, 2)} rawDt=${this._fmt(data.rawDelta, 4)} steps=${data.steps} timer=${this._fmt(data.stateTimer, 3)}`);
     lines.push(`mode=${data.mode} difficulty=${data.difficulty} round=${data.currentRound} score=${data.p1Score}-${data.p2Score} hitstop=${data.screen.hitstopFrames} freeze=${data.screen.onHitstop}`);
-    lines.push(`camera killCam=${data.camera.killCamActive} phase=${data.camera.killCamPhase} orbit=${data.camera.orbitAngle.toFixed(2)} shake=${data.camera.shakeIntensity.toFixed(3)} killTime=${data.camera.killCamTime.toFixed(2)}`);
-    lines.push(`distance=${data.distance.toFixed(3)} animSandbox=${data.animSandbox}`);
+    lines.push(`camera killCam=${data.camera.killCamActive} phase=${data.camera.killCamPhase} orbit=${this._fmt(data.camera.orbitAngle, 2)} shake=${this._fmt(data.camera.shakeIntensity, 3)} killTime=${this._fmt(data.camera.killCamTime, 2)}`);
+    lines.push(`distance=${this._fmt(data.distance, 3)} animSandbox=${data.animSandbox}`);
 
     if (data.ai) {
-      lines.push(`ai current=${data.ai.currentAction ?? '-'} pending=${data.ai.pendingAction ?? '-'} react=${data.ai.reactionFrames} noise=${data.ai.decisionNoise.toFixed(2)} aggro=${data.ai.aggression.toFixed(2)} parry=${data.ai.parryRate.toFixed(2)}`);
+      lines.push(`ai current=${data.ai.currentAction ?? '-'} pending=${data.ai.pendingAction ?? '-'} react=${data.ai.reactionFrames} noise=${this._fmt(data.ai.decisionNoise, 2)} aggro=${this._fmt(data.ai.aggression, 2)} parry=${this._fmt(data.ai.parryRate, 2)}`);
       lines.push(`ai sideDir=${data.ai.sideDir} blockHeld=${data.ai.blockHeldFrames}`);
     } else {
       lines.push('ai current=- pending=-');
@@ -111,18 +120,22 @@ export class DebugOverlay {
 
     const lines = [];
     lines.push(`${label} ${fighter.charName} weapon=${fighter.weaponType} state=${fighter.state} frames=${fighter.stateFrames} attack=${fighter.attackType ?? '-'} clip=${fighter.activeClip ?? '-'} hitApplied=${fighter.hitApplied}`);
-    lines.push(`  pos=(${fighter.position.x.toFixed(2)}, ${fighter.position.z.toFixed(2)}) rotY=${fighter.rotationY.toFixed(2)} facingRight=${fighter.facingRight} step=${fighter.stepping ? fighter.stepDirection : 0} stepFrames=${fighter.stepFrames} cooldown=${fighter.stepCooldown}`);
+    lines.push(`  pos=(${this._fmt(fighter.position?.x, 2)}, ${this._fmt(fighter.position?.z, 2)}) rotY=${this._fmt(fighter.rotationY, 2)} facingRight=${fighter.facingRight} step=${fighter.stepping ? fighter.stepDirection : 0} stepFrames=${fighter.stepFrames} cooldown=${fighter.stepCooldown}`);
     lines.push(`  actionable=${fighter.actionable} attacking=${fighter.attacking} sidestepPhase=${fighter.sidestepPhase ?? '-'} dead=${fighter.dead}`);
-    lines.push(`  tipSpeed=${fighter.tipSpeed.toFixed(4)} baseSpeed=${fighter.baseSpeed.toFixed(4)} relTarget=${fighter.tipRelativeToward.toFixed(4)} relForward=${fighter.tipRelativeForward.toFixed(4)}`);
+    lines.push(`  tipSpeed=${this._fmt(fighter.tipSpeed, 4)} baseSpeed=${this._fmt(fighter.baseSpeed, 4)} relTarget=${this._fmt(fighter.tipRelativeToward, 4)} relForward=${this._fmt(fighter.tipRelativeForward, 4)}`);
     if (fighter.collision) {
-      lines.push(`  collision dist=${fighter.collision.distance.toFixed(4)} hurtRadius=${fighter.collision.hurtRadius.toFixed(3)} hurtHeight=${fighter.collision.hurtHeight.toFixed(3)} defender=${fighter.collision.defenderState ?? '-'}`);
-      lines.push(`  collision mode=${fighter.collision.weaponHitMode ?? fighter.weaponHitMode ?? '-'} hitRadius=${(fighter.collision.weaponHitRadius ?? fighter.weaponHitRadius ?? 0).toFixed(3)} window=${fighter.collision.contactWindowPassed} progress=${(fighter.collision.attackProgress ?? 0).toFixed(2)} [${(fighter.collision.contactWindowStart ?? 0).toFixed(2)}..${(fighter.collision.contactWindowEnd ?? 1).toFixed(2)}] motionGate=${fighter.collision.motionGatePassed} forward=${fighter.collision.forwardDrive.toFixed(4)} toward=${fighter.collision.towardTarget.toFixed(4)} segmentHit=${fighter.collision.segmentHit}`);
+      lines.push(`  collision dist=${this._fmt(fighter.collision.distance, 4)} hurtRadius=${this._fmt(fighter.collision.hurtRadius, 3)} hurtHeight=${this._fmt(fighter.collision.hurtHeight, 3)} defender=${fighter.collision.defenderState ?? '-'}`);
+      lines.push(`  collision mode=${fighter.collision.weaponHitMode ?? fighter.weaponHitMode ?? '-'} hitRadius=${this._fmt((fighter.collision.weaponHitRadius ?? fighter.weaponHitRadius ?? 0), 3)} window=${fighter.collision.contactWindowPassed} progress=${this._fmt((fighter.collision.attackProgress ?? 0), 2)} [${this._fmt((fighter.collision.contactWindowStart ?? 0), 2)}..${this._fmt((fighter.collision.contactWindowEnd ?? 1), 2)}] motionGate=${fighter.collision.motionGatePassed} forward=${this._fmt(fighter.collision.forwardDrive, 4)} toward=${this._fmt(fighter.collision.towardTarget, 4)} segmentHit=${fighter.collision.segmentHit}`);
       lines.push(`  collision resolve=${fighter.collision.lastResolve ?? '-'} result=${fighter.collision.lastCheckResult ?? '-'}`);
       if (Number.isFinite(fighter.collision.weaponClashDistance)) {
-        lines.push(`  clash dist=${fighter.collision.weaponClashDistance.toFixed(4)} radius=${fighter.weaponClashRadius.toFixed(3)} overlap=${fighter.collision.weaponClashOverlap}`);
+        lines.push(`  clash dist=${this._fmt(fighter.collision.weaponClashDistance, 4)} radius=${this._fmt(fighter.weaponClashRadius, 3)} overlap=${fighter.collision.weaponClashOverlap}`);
       }
     }
     return lines.join('\n');
+  }
+
+  _fmt(value, digits = 2) {
+    return Number.isFinite(value) ? value.toFixed(digits) : '-';
   }
 
   destroy() {

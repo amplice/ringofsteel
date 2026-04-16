@@ -28,17 +28,17 @@ const AI_DIFFICULTY_PROFILE_MAP = Object.freeze({
   spearman: Object.freeze({
     easy: 'spearman_heavy_bully',
     medium: 'spearman_evasive',
-    hard: 'heavy_bully',
+    hard: 'spearman_heavy_bully',
   }),
   ronin: Object.freeze({
     easy: 'ronin_lancer',
     medium: 'ronin_duelist',
-    hard: 'ronin_hard_duelist',
+    hard: 'ronin_aggressor',
   }),
   knight: Object.freeze({
     easy: 'knight_bulwark',
     medium: 'knight_duelist',
-    hard: 'knight_duelist',
+    hard: 'knight_sentinel',
   }),
 });
 
@@ -222,7 +222,7 @@ export class Game {
     // AI
     if (this.mode === 'ai') {
       const aiProfile = this._getAIDifficultyProfile(p2.charDef.id, this.difficulty);
-      const usePlannerHard = this.difficulty === 'hard' && p2.charDef.id !== 'spearman';
+      const usePlannerHard = this.difficulty === 'hard';
       this.aiController = usePlannerHard
         ? new PlannerAIController(aiProfile)
         : new AIController(aiProfile);

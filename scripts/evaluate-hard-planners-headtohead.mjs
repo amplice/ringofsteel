@@ -11,9 +11,9 @@ const MAX_MATCH_ROUNDS = 7;
 const MAX_ROUND_FRAMES = 60 * 18;
 
 const PLANNER_PROFILES = Object.freeze({
-  spearman: 'spearman_hard_line',
-  ronin: 'ronin_hard_duelist',
-  knight: 'knight_duelist',
+  spearman: 'spearman_heavy_bully',
+  ronin: 'ronin_aggressor',
+  knight: 'knight_sentinel',
 });
 
 function parseArgs(argv) {
@@ -30,6 +30,17 @@ function numberOption(value, fallback) {
   if (value == null) return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseProfilesOption(value) {
+  if (!value) return { ...PLANNER_PROFILES };
+  const overrides = { ...PLANNER_PROFILES };
+  for (const pair of value.split(',')) {
+    const [charId, profile] = pair.split(':');
+    if (!charId || !profile) continue;
+    overrides[charId] = profile;
+  }
+  return overrides;
 }
 
 function ensureDir(filePath) {
@@ -114,14 +125,14 @@ function applyOutcome(row, result, seat) {
   row[seat][key]++;
 }
 
-function evaluatePlannerChar(charId, opponents, repeats) {
-  const plannerProfile = PLANNER_PROFILES[charId];
+function evaluatePlannerChar(charId, opponents, repeats, plannerProfiles) {
+  const plannerProfile = plannerProfiles[charId];
   const rows = [];
 
   for (const opponentCharId of opponents) {
     if (opponentCharId === charId) continue;
     const row = initRow(`${opponentCharId}:planner`);
-    const opponentProfile = PLANNER_PROFILES[opponentCharId];
+    const opponentProfile = plannerProfiles[opponentCharId];
 
     for (let repeat = 0; repeat < repeats; repeat++) {
       const left = runMatch(
@@ -163,12 +174,13 @@ const options = parseArgs(process.argv.slice(2));
 const repeats = numberOption(options.repeats, DEFAULT_REPEATS);
 const chars = options.chars ? options.chars.split(',') : ['knight'];
 const opponents = options.opponents ? options.opponents.split(',') : ['spearman', 'ronin'];
+const plannerProfiles = parseProfilesOption(options.profiles);
 
-const results = chars.map((charId) => evaluatePlannerChar(charId, opponents, repeats));
+const results = chars.map((charId) => evaluatePlannerChar(charId, opponents, repeats, plannerProfiles));
 const payload = {
   generatedAt: new Date().toISOString(),
   repeats,
-  plannerProfiles: PLANNER_PROFILES,
+  plannerProfiles,
   chars,
   opponents,
   results,

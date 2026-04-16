@@ -57,9 +57,9 @@ export const knight = defineCharacter('knight', {
   },
   sim: {
     attackFrames: {
-      [AttackType.QUICK]: 49,
-      [AttackType.HEAVY]: 56,
-      [AttackType.THRUST]: 50,
+      [AttackType.QUICK]: 48,
+      [AttackType.HEAVY]: 55,
+      [AttackType.THRUST]: 49,
     },
     poseProfile: {
       idle: {
@@ -104,9 +104,9 @@ export const knight = defineCharacter('knight', {
   },
   clipSpeedFactor: { walk: 1.8, strafe: 2.0, attack: 2.0, backstep: 3.0, knockback: 2.0 },
   clipSpeedOverrides: {
-    attack_quick: 1.5,
-    attack_heavy: 1.7,
-    attack_thrust: 1.5,
+    attack_quick: 1.525,
+    attack_heavy: 1.725,
+    attack_thrust: 1.525,
     backstep: 1.3,
     strafe_right: 1.25,
     block_parry: 5.5,

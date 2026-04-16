@@ -1,7 +1,7 @@
 import { Fighter } from '../entities/Fighter.js';
 import { ModelLoader } from '../entities/ModelLoader.js';
 import { CHARACTER_DEFS } from '../entities/CharacterDefs.js';
-import { AIController } from '../ai/AIController.js';
+import { createControllerFromSpec, normalizeControllerSpec, resetControllerInstance } from '../ai/ControllerSpec.js';
 import { AI_CLASS_PROFILE_SETS } from '../ai/AIPersonality.js';
 import { HitResolver } from '../combat/HitResolver.js';
 import { MatchSim } from './MatchSim.js';
@@ -51,7 +51,11 @@ function classifyKillSetup(trace) {
   if (!context) return 'unknown';
   if (trace.reason === 'ring_out') return 'ring_out';
   if (context.parrySuccessFramesAgo != null && context.parrySuccessFramesAgo <= 45) return 'parry_punish';
-  if (context.clashFramesAgo != null && context.clashFramesAgo <= 45) return 'clash_followup';
+  if (
+    context.clashFramesAgo != null &&
+    context.lastAttackStartedAfterClash &&
+    context.attackStartedWithinClashWindow
+  ) return 'clash_followup';
   if (context.sidestepFramesAgo != null && context.sidestepFramesAgo <= 45) return 'sidestep_followup';
   if (context.backstepFramesAgo != null && context.backstepFramesAgo <= 45) return 'backstep_followup';
   return 'neutral';
@@ -144,6 +148,52 @@ export class SelfPlayRunner {
     return { config, matches, summary };
   }
 
+  async runSeries(options = {}) {
+    const {
+      p1Profile = 'medium',
+      p2Profile = 'medium',
+      p1Char = 'spearman',
+      p2Char = 'spearman',
+      roundsToWin = ROUNDS_TO_WIN,
+      repeats = 1,
+      maxRoundFrames = 60 * 25,
+      maxMatchRounds = 9,
+      seedBase = 1337,
+    } = options;
+
+    await this.preloadCharacters([p1Char, p2Char]);
+
+    const matches = [];
+    for (let i = 0; i < repeats; i++) {
+      const match = await this.runMatch({
+        p1Profile,
+        p2Profile,
+        p1Char,
+        p2Char,
+        roundsToWin,
+        maxRoundFrames,
+        maxMatchRounds,
+        seed: seedBase + i,
+      });
+      matches.push(match);
+    }
+
+    const config = {
+      mode: 'series',
+      p1Profile,
+      p2Profile,
+      p1Char,
+      p2Char,
+      roundsToWin,
+      repeats,
+      maxRoundFrames,
+      maxMatchRounds,
+      seedBase,
+    };
+    const summary = this._summarizeTournament(matches);
+    return { config, matches, summary };
+  }
+
   async runMatch(options) {
     const {
       p1Profile = 'medium',
@@ -162,13 +212,17 @@ export class SelfPlayRunner {
     return withSeededRandom(seed, () => {
       const fighter1 = this._createFighter(0, p1Char);
       const fighter2 = this._createFighter(1, p2Char);
-      const ai1 = new AIController(p1Profile);
-      const ai2 = new AIController(p2Profile);
+      const p1ControllerSpec = normalizeControllerSpec(p1Profile);
+      const p2ControllerSpec = normalizeControllerSpec(p2Profile);
+      const ai1 = createControllerFromSpec(p1ControllerSpec);
+      const ai2 = createControllerFromSpec(p2ControllerSpec);
 
       const match = {
         seed,
-        p1Profile,
-        p2Profile,
+        p1Profile: p1ControllerSpec.raw,
+        p2Profile: p2ControllerSpec.raw,
+        p1ControllerKind: p1ControllerSpec.kind,
+        p2ControllerKind: p2ControllerSpec.kind,
         p1Char,
         p2Char,
         roundsToWin,
@@ -176,7 +230,7 @@ export class SelfPlayRunner {
         p2Score: 0,
         winner: null,
         rounds: [],
-        metrics: this._createMatchMetrics(p1Profile, p2Profile, p1Char, p2Char),
+        metrics: this._createMatchMetrics(p1ControllerSpec, p2ControllerSpec, p1Char, p2Char),
       };
 
       for (let roundIndex = 1; roundIndex <= maxMatchRounds; roundIndex++) {
@@ -189,8 +243,8 @@ export class SelfPlayRunner {
           roundIndex,
           maxRoundFrames,
           match,
-          p1Profile,
-          p2Profile,
+          p1ControllerSpec,
+          p2ControllerSpec,
           p1Char,
           p2Char,
         });
@@ -207,11 +261,11 @@ export class SelfPlayRunner {
     });
   }
 
-  _runRound({ fighter1, fighter2, ai1, ai2, roundIndex, maxRoundFrames, match, p1Profile, p2Profile, p1Char, p2Char }) {
+  _runRound({ fighter1, fighter2, ai1, ai2, roundIndex, maxRoundFrames, match, p1ControllerSpec, p2ControllerSpec, p1Char, p2Char }) {
     const sim = new MatchSim({ fighter1, fighter2, hitResolver: this.hitResolver });
     sim.startRound(FIGHT_START_DISTANCE);
-    ai1.reset();
-    ai2.reset();
+    resetControllerInstance(ai1);
+    resetControllerInstance(ai2);
 
     const state = {
       frameCount: 0,
@@ -221,7 +275,7 @@ export class SelfPlayRunner {
       killReason: null,
       fighters: [fighter1, fighter2],
       trackers: new Map(),
-      metrics: this._createRoundMetrics(roundIndex, p1Profile, p2Profile, p1Char, p2Char),
+      metrics: this._createRoundMetrics(roundIndex, p1ControllerSpec, p2ControllerSpec, p1Char, p2Char),
     };
 
     for (const fighter of state.fighters) {
@@ -289,18 +343,20 @@ export class SelfPlayRunner {
     return fighter;
   }
 
-  _createMatchMetrics(p1Profile, p2Profile, p1Char, p2Char) {
+  _createMatchMetrics(p1ControllerSpec, p2ControllerSpec, p1Char, p2Char) {
     return {
       totalFrames: 0,
       resultCounts: { clash: 0, blocked: 0, parried: 0, lethal_hit: 0 },
-      p1: this._createSideMetrics(p1Profile, p1Char),
-      p2: this._createSideMetrics(p2Profile, p2Char),
+      p1: this._createSideMetrics(p1ControllerSpec, p1Char),
+      p2: this._createSideMetrics(p2ControllerSpec, p2Char),
     };
   }
 
-  _createSideMetrics(profile, charId) {
+  _createSideMetrics(controllerSpec, charId) {
     return {
-      profile,
+      profile: controllerSpec.raw,
+      controllerKind: controllerSpec.kind,
+      controllerProfile: controllerSpec.profile,
       charId,
       attacksStarted: 0,
       attacksWhiffed: 0,
@@ -321,13 +377,13 @@ export class SelfPlayRunner {
     };
   }
 
-  _createRoundMetrics(roundIndex, p1Profile, p2Profile, p1Char, p2Char) {
+  _createRoundMetrics(roundIndex, p1ControllerSpec, p2ControllerSpec, p1Char, p2Char) {
     return {
       roundIndex,
       timeout: false,
       resultCounts: { clash: 0, blocked: 0, parried: 0, lethal_hit: 0 },
-      p1: this._createSideMetrics(p1Profile, p1Char),
-      p2: this._createSideMetrics(p2Profile, p2Char),
+      p1: this._createSideMetrics(p1ControllerSpec, p1Char),
+      p2: this._createSideMetrics(p2ControllerSpec, p2Char),
       killTraces: [],
     };
   }
@@ -488,6 +544,7 @@ export class SelfPlayRunner {
       if (fighter.state === FighterState.CLASH) {
         sideMetrics.clashes++;
         tracker.lastClashFrame = state.frameCount;
+        tracker.lastClashDurationFrames = fighter.fsm.stateDuration ?? null;
         tracker.recentEvents.push({
           frame: state.frameCount,
           kind: 'clash_state',
@@ -547,6 +604,16 @@ export class SelfPlayRunner {
           backstepFramesAgo: killerTracker ? state.frameCount - killerTracker.lastBackstepFrame : null,
           parrySuccessFramesAgo: killerTracker ? state.frameCount - killerTracker.lastParrySuccessFrame : null,
           clashFramesAgo: killerTracker ? state.frameCount - killerTracker.lastClashFrame : null,
+          attackStartFramesAgo: killerTracker ? state.frameCount - killerTracker.lastAttackStartFrame : null,
+          lastAttackStartedAfterClash: killerTracker
+            ? killerTracker.lastAttackStartFrame >= killerTracker.lastClashFrame
+            : false,
+          attackStartedWithinClashWindow: killerTracker
+            ? (
+              killerTracker.lastAttackStartFrame >= killerTracker.lastClashFrame &&
+              killerTracker.lastAttackStartFrame <= (killerTracker.lastClashFrame + (killerTracker.lastClashDurationFrames ?? 0) + 2)
+            )
+            : false,
           offAngle: this._getFacingDot(killer, victim) < 0.55,
         },
       },

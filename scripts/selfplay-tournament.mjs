@@ -20,6 +20,10 @@ const seedBase = Number(args.find(a => a.startsWith('--seed='))?.split('=')[1] |
 const profilesArg = args.find(a => a.startsWith('--profiles='))?.split('=')[1];
 const charsArg = args.find(a => a.startsWith('--chars='))?.split('=')[1];
 const classProfilesArg = args.find(a => a.startsWith('--class-profiles='))?.split('=')[1];
+const p1Profile = args.find(a => a.startsWith('--p1-spec='))?.split('=')[1] || args.find(a => a.startsWith('--p1-profile='))?.split('=')[1];
+const p2Profile = args.find(a => a.startsWith('--p2-spec='))?.split('=')[1] || args.find(a => a.startsWith('--p2-profile='))?.split('=')[1];
+const p1Char = args.find(a => a.startsWith('--p1-char='))?.split('=')[1];
+const p2Char = args.find(a => a.startsWith('--p2-char='))?.split('=')[1];
 const profiles = profilesArg ? profilesArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 const characters = charsArg ? charsArg.split(',').map(s => s.trim()).filter(Boolean) : undefined;
 const classProfileSets = classProfilesArg === 'default' ? 'default' : undefined;
@@ -98,8 +102,9 @@ async function main() {
     await page.waitForFunction(() => typeof window.runSelfPlayTournament === 'function', { timeout: 30000 });
     console.log('[selfplay-script] runner available');
 
-    console.log('[selfplay-script] running tournament');
-    const result = await page.evaluate(async ({ repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets }) => {
+    const directSeries = Boolean(p1Profile && p2Profile && p1Char && p2Char);
+    console.log(directSeries ? '[selfplay-script] running direct series' : '[selfplay-script] running tournament');
+    const result = await page.evaluate(async ({ repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets, p1Profile, p2Profile, p1Char, p2Char }) => {
       return window.runSelfPlayTournament({
         repeats,
         maxRoundFrames,
@@ -109,8 +114,12 @@ async function main() {
         profiles,
         characters,
         classProfileSets,
+        p1Profile,
+        p2Profile,
+        p1Char,
+        p2Char,
       });
-    }, { repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets });
+    }, { repeats, maxRoundFrames, roundsToWin, maxMatchRounds, seedBase, profiles, characters, classProfileSets, p1Profile, p2Profile, p1Char, p2Char });
 
     const outPath = path.join(OUT_DIR, `selfplay-${timestamp()}.json`);
     fs.writeFileSync(outPath, JSON.stringify(result, null, 2));

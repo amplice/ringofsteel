@@ -8,11 +8,14 @@ function setStatus(text) {
 
 window.runSelfPlayTournament = async (options = {}) => {
   console.log('[selfplay-page] tournament requested', options);
-  setStatus('Running self-play tournament...');
+  const directSeries = options?.p1Profile && options?.p2Profile && options?.p1Char && options?.p2Char;
+  setStatus(directSeries ? 'Running self-play series...' : 'Running self-play tournament...');
   const runner = new SelfPlayRunner();
-  const result = await runner.runTournament(options);
+  const result = directSeries
+    ? await runner.runSeries(options)
+    : await runner.runTournament(options);
   console.log('[selfplay-page] tournament completed', result?.summary);
-  setStatus('Tournament complete.');
+  setStatus(directSeries ? 'Series complete.' : 'Tournament complete.');
   return result;
 };
 

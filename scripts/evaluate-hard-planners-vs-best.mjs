@@ -3,18 +3,17 @@ import path from 'node:path';
 import { CHARACTER_DEFS } from '../src/entities/CharacterDefs.js';
 import { FighterSim } from '../src/sim/FighterSim.js';
 import { MatchSim } from '../src/sim/MatchSim.js';
-import { AIController } from '../src/ai/AIController.js';
-import { PlannerAIController } from '../src/ai/PlannerAIController.js';
+import { createControllerFromSpec, resetControllerInstance } from '../src/ai/ControllerSpec.js';
 import { FRAME_DURATION, ROUNDS_TO_WIN } from '../src/core/Constants.js';
 
 const DEFAULT_REPEATS = 10;
 const MAX_MATCH_ROUNDS = 7;
-const MAX_ROUND_FRAMES = 60 * 18;
+const DEFAULT_ROUND_SECONDS = 180;
 
 const PLANNER_PROFILES = Object.freeze({
-  spearman: 'spearman_hard_line',
-  ronin: 'ronin_hard_duelist',
-  knight: 'knight_duelist',
+  spearman: 'spearman_heavy_bully',
+  ronin: 'ronin_aggressor',
+  knight: 'knight_sentinel',
 });
 
 const BEST_SCRIPTED = Object.freeze([
@@ -52,8 +51,7 @@ function createFighter(playerIndex, charId) {
 }
 
 function resetController(controller) {
-  if (typeof controller?.resetRound === 'function') controller.resetRound();
-  else if (typeof controller?.reset === 'function') controller.reset();
+  resetControllerInstance(controller);
 }
 
 function stepController(controller, fighter, opponent, sim, dt) {
@@ -70,7 +68,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController) {
   resetController(rightController);
 
   let frames = 0;
-  while (!sim.roundOver && frames < MAX_ROUND_FRAMES) {
+  while (!sim.roundOver && frames < maxRoundFrames) {
     sim.step(FRAME_DURATION, {
       controller1: (fighter, opponent, innerSim, dt) => stepController(leftController, fighter, opponent, innerSim, dt),
       controller2: (fighter, opponent, innerSim, dt) => stepController(rightController, fighter, opponent, innerSim, dt),
@@ -131,16 +129,16 @@ function evaluatePlannerChar(charId, repeats) {
       const left = runMatch(
         charId,
         opponent.charId,
-        () => new PlannerAIController(plannerProfile),
-        () => new AIController(opponent.profile),
+        () => createControllerFromSpec({ kind: 'planner', profile: plannerProfile }),
+        () => createControllerFromSpec(opponent.profile),
       );
       applyOutcome(row, left, 'leftSeat');
 
       const right = runMatch(
         opponent.charId,
         charId,
-        () => new AIController(opponent.profile),
-        () => new PlannerAIController(plannerProfile),
+        () => createControllerFromSpec(opponent.profile),
+        () => createControllerFromSpec({ kind: 'planner', profile: plannerProfile }),
       );
       const flipped = { winner: right.winner === 2 ? 1 : right.winner === 1 ? 2 : 0 };
       applyOutcome(row, flipped, 'rightSeat');
@@ -165,12 +163,15 @@ function evaluatePlannerChar(charId, repeats) {
 
 const options = parseArgs(process.argv.slice(2));
 const repeats = numberOption(options.repeats, DEFAULT_REPEATS);
+const roundSeconds = numberOption(options['round-seconds'], DEFAULT_ROUND_SECONDS);
+const maxRoundFrames = Math.max(60, Math.round(roundSeconds / FRAME_DURATION));
 const chars = options.chars ? options.chars.split(',') : ['spearman', 'ronin', 'knight'];
 
 const results = chars.map((charId) => evaluatePlannerChar(charId, repeats));
 const payload = {
   generatedAt: new Date().toISOString(),
   repeats,
+  roundSeconds,
   bestScripted: BEST_SCRIPTED,
   plannerProfiles: PLANNER_PROFILES,
   results,

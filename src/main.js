@@ -6,7 +6,10 @@ window.runSelfPlayTournament = async (options = {}) => {
   console.log('[selfplay] tournament requested', options);
   const { SelfPlayRunner } = await import('./sim/SelfPlayRunner.js');
   const runner = new SelfPlayRunner();
-  const result = await runner.runTournament(options);
+  const directSeries = options?.p1Profile && options?.p2Profile && options?.p1Char && options?.p2Char;
+  const result = directSeries
+    ? await runner.runSeries(options)
+    : await runner.runTournament(options);
   console.log('[selfplay] tournament completed', result?.summary);
   return result;
 };

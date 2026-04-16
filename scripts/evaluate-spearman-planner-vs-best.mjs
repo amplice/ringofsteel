@@ -3,13 +3,12 @@ import path from 'node:path';
 import { CHARACTER_DEFS } from '../src/entities/CharacterDefs.js';
 import { FighterSim } from '../src/sim/FighterSim.js';
 import { MatchSim } from '../src/sim/MatchSim.js';
-import { AIController } from '../src/ai/AIController.js';
-import { PlannerAIController } from '../src/ai/PlannerAIController.js';
+import { createControllerFromSpec, resetControllerInstance } from '../src/ai/ControllerSpec.js';
 import { FRAME_DURATION, ROUNDS_TO_WIN } from '../src/core/Constants.js';
 
 const DEFAULT_REPEATS = 10;
 const MAX_MATCH_ROUNDS = 7;
-const MAX_ROUND_FRAMES = 60 * 18;
+const DEFAULT_ROUND_SECONDS = 180;
 
 const OPPONENTS = Object.freeze([
   { charId: 'ronin', profile: 'aggressor', label: 'ronin:aggressor' },
@@ -47,8 +46,7 @@ function createFighter(playerIndex, charId) {
 }
 
 function resetController(controller) {
-  if (typeof controller?.resetRound === 'function') controller.resetRound();
-  else if (typeof controller?.reset === 'function') controller.reset();
+  resetControllerInstance(controller);
 }
 
 function stepController(controller, fighter, opponent, sim, dt) {
@@ -65,7 +63,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController) {
   resetController(rightController);
 
   let frames = 0;
-  while (!sim.roundOver && frames < MAX_ROUND_FRAMES) {
+  while (!sim.roundOver && frames < maxRoundFrames) {
     sim.step(FRAME_DURATION, {
       controller1: (fighter, opponent, innerSim, dt) => stepController(leftController, fighter, opponent, innerSim, dt),
       controller2: (fighter, opponent, innerSim, dt) => stepController(rightController, fighter, opponent, innerSim, dt),
@@ -128,19 +126,19 @@ function evaluateOpponent(spec, repeats) {
 
   for (let repeat = 0; repeat < repeats; repeat++) {
     const left = runMatch(
-      'spearman',
-      spec.charId,
-      () => new PlannerAIController('spearman_hard_line'),
-      () => new AIController(spec.profile),
-    );
+        'spearman',
+        spec.charId,
+        () => createControllerFromSpec({ kind: 'planner', profile: 'spearman_hard_line' }),
+        () => createControllerFromSpec(spec.profile),
+      );
     applyOutcome(result, left, 'leftSeat');
 
     const right = runMatch(
-      spec.charId,
-      'spearman',
-      () => new AIController(spec.profile),
-      () => new PlannerAIController('spearman_hard_line'),
-    );
+        spec.charId,
+        'spearman',
+        () => createControllerFromSpec(spec.profile),
+        () => createControllerFromSpec({ kind: 'planner', profile: 'spearman_hard_line' }),
+      );
     const flipped = {
       winner: right.winner === 2 ? 1 : right.winner === 1 ? 2 : 0,
     };
@@ -152,6 +150,8 @@ function evaluateOpponent(spec, repeats) {
 
 const options = parseArgs(process.argv.slice(2));
 const repeats = numberOption(options.repeats, DEFAULT_REPEATS);
+const roundSeconds = numberOption(options['round-seconds'], DEFAULT_ROUND_SECONDS);
+const maxRoundFrames = Math.max(60, Math.round(roundSeconds / FRAME_DURATION));
 
 const results = OPPONENTS.map((spec) => evaluateOpponent(spec, repeats));
 const totals = results.reduce((acc, row) => {
@@ -164,6 +164,7 @@ const totals = results.reduce((acc, row) => {
 const payload = {
   generatedAt: new Date().toISOString(),
   repeats,
+  roundSeconds,
   controller: {
     charId: 'spearman',
     controllerKind: 'planner',

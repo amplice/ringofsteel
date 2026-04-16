@@ -3,13 +3,13 @@ import path from 'node:path';
 import { CHARACTER_DEFS } from '../src/entities/CharacterDefs.js';
 import { FighterSim } from '../src/sim/FighterSim.js';
 import { MatchSim } from '../src/sim/MatchSim.js';
-import { AIController } from '../src/ai/AIController.js';
+import { createControllerFromSpec, resetControllerInstance } from '../src/ai/ControllerSpec.js';
 import { AI_PROFILE_LIBRARY } from '../src/ai/AIPersonality.js';
 import { FRAME_DURATION, ROUNDS_TO_WIN } from '../src/core/Constants.js';
 
 const DEFAULT_REPEATS = 1;
 const MAX_MATCH_ROUNDS = 7;
-const MAX_ROUND_FRAMES = 60 * 18;
+const DEFAULT_ROUND_SECONDS = 180;
 
 const SCRIPTED_ROSTER = Object.freeze([
   'knight:aggressor','knight:baseline','knight:counter_guard','knight:duelist','knight:evasive','knight:heavy_bully','knight:knight_bulwark','knight:knight_duelist','knight:knight_sentinel','knight:lancer','knight:punisher','knight:scrapper','knight:sentinel','knight:skirmisher','knight:turtler',
@@ -49,8 +49,7 @@ function createFighter(playerIndex, charId) {
 }
 
 function resetController(controller) {
-  if (typeof controller?.resetRound === 'function') controller.resetRound();
-  else if (typeof controller?.reset === 'function') controller.reset();
+  resetControllerInstance(controller);
 }
 
 function stepController(controller, fighter, opponent, sim, dt) {
@@ -67,7 +66,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController) {
   resetController(rightController);
 
   let frames = 0;
-  while (!sim.roundOver && frames < MAX_ROUND_FRAMES) {
+  while (!sim.roundOver && frames < maxRoundFrames) {
     sim.step(FRAME_DURATION, {
       controller1: (fighter, opponent, innerSim, dt) => stepController(leftController, fighter, opponent, innerSim, dt),
       controller2: (fighter, opponent, innerSim, dt) => stepController(rightController, fighter, opponent, innerSim, dt),
@@ -124,8 +123,8 @@ function evaluateProfileForChar(charId, profile, repeats) {
       const left = runMatch(
         charId,
         spec.opponentChar,
-        () => new AIController(profile),
-        () => new AIController(spec.opponentProfile),
+        () => createControllerFromSpec(profile),
+        () => createControllerFromSpec(spec.opponentProfile),
       );
       const leftResult = left.winner === 1 ? 'wins' : left.winner === 2 ? 'losses' : 'draws';
       summary[leftResult]++;
@@ -137,8 +136,8 @@ function evaluateProfileForChar(charId, profile, repeats) {
       const right = runMatch(
         spec.opponentChar,
         charId,
-        () => new AIController(spec.opponentProfile),
-        () => new AIController(profile),
+        () => createControllerFromSpec(spec.opponentProfile),
+        () => createControllerFromSpec(profile),
       );
       const rightResult = right.winner === 2 ? 'wins' : right.winner === 1 ? 'losses' : 'draws';
       summary[rightResult]++;
@@ -152,6 +151,8 @@ function evaluateProfileForChar(charId, profile, repeats) {
 
 const options = parseArgs(process.argv.slice(2));
 const repeats = numberOption(options.repeats, DEFAULT_REPEATS);
+const roundSeconds = numberOption(options['round-seconds'], DEFAULT_ROUND_SECONDS);
+const maxRoundFrames = Math.max(60, Math.round(roundSeconds / FRAME_DURATION));
 const chars = options.chars ? options.chars.split(',') : ['spearman', 'ronin', 'knight'];
 const filterProfiles = options.profiles ? new Set(options.profiles.split(',')) : null;
 const profiles = Object.keys(AI_PROFILE_LIBRARY).filter((name) => !filterProfiles || filterProfiles.has(name));
@@ -173,6 +174,7 @@ const grouped = Object.fromEntries(chars.map((charId) => [charId, results.filter
 const payload = {
   generatedAt: new Date().toISOString(),
   repeats,
+  roundSeconds,
   profiles,
   chars,
   grouped,

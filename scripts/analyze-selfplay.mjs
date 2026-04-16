@@ -77,6 +77,10 @@ function printRows(title, rows, formatter) {
   }
 }
 
+function sortEntriesDesc(obj = {}) {
+  return Object.entries(obj).sort((a, b) => b[1] - a[1]);
+}
+
 function pct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
@@ -101,6 +105,9 @@ function main() {
     console.log(`Kill class+attack+setup: ${JSON.stringify(summary.killTraceSummary.byClassAttackSetup ?? {})}`);
     console.log(`Kill class matchups: ${JSON.stringify(summary.killTraceSummary.byClassMatchup ?? {})}`);
   }
+  if (summary.roundOutcomeSummary) {
+    console.log(`Round outcomes: ${JSON.stringify(summary.roundOutcomeSummary.byReason ?? {})}`);
+  }
 
   const byProfileChar = aggregateSides(matches, (side) => `${side.profile}[${side.charId}]`)
     .sort((a, b) => b.kills - a.kills);
@@ -114,6 +121,19 @@ function main() {
   printRows('By class', byChar, (row) =>
     `${row.key.padEnd(10)} kills=${String(row.kills).padStart(3)} lethalHits=${String(row.lethalHits).padStart(3)} whiff=${pct(row.whiffRate).padStart(6)} sidesteps=${String(row.sidesteps).padStart(4)} sidestepKills=${String(row.sidestepKills).padStart(3)} (${pct(row.sidestepKillShare)})`,
   );
+
+  const matchupRows = sortEntriesDesc(summary.matchupRecords).map(([key, record]) => ({
+    key,
+    ...record,
+  }));
+  printRows('Matchup records', matchupRows, (row) =>
+    `${row.key} matches=${row.matches} p1=${row.p1Wins} p2=${row.p2Wins} draws=${row.draws}`,
+  );
+
+  if (summary.roundOutcomeSummary?.byClassMatchup) {
+    const roundOutcomeRows = sortEntriesDesc(summary.roundOutcomeSummary.byClassMatchup).map(([key, count]) => ({ key, count }));
+    printRows('Round outcomes by class matchup', roundOutcomeRows, (row) => `${row.key} ${row.count}`);
+  }
 
   if (summary.findings.length) {
     printRows('Summary findings', summary.findings, (finding) => `- ${finding}`);

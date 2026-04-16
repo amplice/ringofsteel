@@ -236,7 +236,7 @@ export class MatchSim {
 
     if (this.fighter1.fsm.isAttacking && !this.fighter1.hitApplied) {
       if (
-        (this.fighter2.state === FighterState.BLOCK && this.hitResolver.checkBlockContact(this.fighter1, this.fighter2)) ||
+        (this.fighter2.fsm.isGuarding && this.hitResolver.checkBlockContact(this.fighter1, this.fighter2)) ||
         this.hitResolver.checkSwordCollision(this.fighter1, this.fighter2)
       ) {
         this._resolveHit(this.fighter1, this.fighter2);
@@ -246,7 +246,7 @@ export class MatchSim {
 
     if (this.fighter2.fsm.isAttacking && !this.fighter2.hitApplied) {
       if (
-        (this.fighter1.state === FighterState.BLOCK && this.hitResolver.checkBlockContact(this.fighter2, this.fighter1)) ||
+        (this.fighter1.fsm.isGuarding && this.hitResolver.checkBlockContact(this.fighter2, this.fighter1)) ||
         this.hitResolver.checkSwordCollision(this.fighter2, this.fighter1)
       ) {
         this._resolveHit(this.fighter2, this.fighter1);

@@ -53,9 +53,9 @@ export const ronin = defineCharacter('ronin', {
   },
   sim: {
     attackFrames: {
-      [AttackType.QUICK]: 37,
-      [AttackType.HEAVY]: 47,
-      [AttackType.THRUST]: 27,
+      [AttackType.QUICK]: 41,
+      [AttackType.HEAVY]: 50,
+      [AttackType.THRUST]: 41,
     },
     poseProfile: {
       idle: {

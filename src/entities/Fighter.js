@@ -11,7 +11,7 @@ import {
 import { TrailEffect } from '../animation/TrailEffect.js';
 import { moveAngleTowards } from '../utils/MathUtils.js';
 import {
-  FighterState, AttackType, WeaponType, PARRY_WINDOW_FRAMES,
+  FighterState, AttackType, WeaponType,
 } from '../core/Constants.js';
 
 const _markerBodyPosition = new THREE.Vector3();
@@ -306,8 +306,8 @@ export class Fighter extends FighterCore {
     const ind = this._stateIndicator;
     const s = this.state;
 
-    const parryActive = s === FighterState.PARRY && this.fsm.stateFrames <= PARRY_WINDOW_FRAMES;
-    const parryFallback = s === FighterState.PARRY && this.fsm.stateFrames > PARRY_WINDOW_FRAMES;
+    const parryActive = this.fsm.isParryWindowActive;
+    const parryFallback = this.fsm.isParryFallbackBlock;
     ind.block.visible = (s === FighterState.BLOCK || s === FighterState.BLOCK_STUN || parryFallback);
     ind.parry.visible = parryActive;
     ind.success.visible = (s === FighterState.PARRY_SUCCESS);

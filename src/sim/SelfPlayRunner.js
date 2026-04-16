@@ -680,6 +680,11 @@ export class SelfPlayRunner {
         byClassAttackSetup: {},
         byClassMatchup: {},
       },
+      roundOutcomeSummary: {
+        byReason: {},
+        byMatchup: {},
+        byClassMatchup: {},
+      },
       matchupRecords: {},
       findings: [],
     };
@@ -718,6 +723,15 @@ export class SelfPlayRunner {
       }
 
       for (const round of match.rounds) {
+        const roundReason = round.killReason ?? (round.metrics?.timeout ? 'timeout' : 'unknown');
+        const profileMatchup = `${match.p1Char}:${match.p1Profile} vs ${match.p2Char}:${match.p2Profile}`;
+        const classMatchup = `${match.p1Char} vs ${match.p2Char}`;
+        summary.roundOutcomeSummary.byReason[roundReason] = (summary.roundOutcomeSummary.byReason[roundReason] || 0) + 1;
+        summary.roundOutcomeSummary.byMatchup[`${profileMatchup}:${roundReason}`] =
+          (summary.roundOutcomeSummary.byMatchup[`${profileMatchup}:${roundReason}`] || 0) + 1;
+        summary.roundOutcomeSummary.byClassMatchup[`${classMatchup}:${roundReason}`] =
+          (summary.roundOutcomeSummary.byClassMatchup[`${classMatchup}:${roundReason}`] || 0) + 1;
+
         if (!round.killTrace) continue;
         const killerCharId = round.killTrace.killer.charId ?? 'unknown';
         const attackType = round.killTrace.killer.attackType ?? 'unknown';

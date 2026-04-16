@@ -203,29 +203,13 @@ export class Game {
 
   _startMatch(p1Char, p2Char) {
     this._disconnectOnlineSession();
-    this.p1Score = 0;
-    this.p2Score = 0;
-    this.currentRound = 1;
+    this._resetMatchScoreState();
 
-    this._cleanupFighters();
-
-    const p1 = this._getCharData(p1Char);
-    const p2 = this._getCharData(p2Char);
-    this.fighter1 = new Fighter(0, 0x991111, p1.charDef, p1.animData);
-    this.fighter2 = new Fighter(1, 0x112266, p2.charDef, p2.animData);
-    this.fighter1.addToScene(this.scene);
-    this.fighter2.addToScene(this.scene);
-
-    this._attachWeapon(this.fighter1);
-    this._attachWeapon(this.fighter2);
+    const { p1, p2 } = this._spawnFighters(p1Char, p2Char);
 
     // AI
     if (this.mode === 'ai') {
-      const aiProfile = this._getAIDifficultyProfile(p2.charDef.id, this.difficulty);
-      const usePlannerHard = this.difficulty === 'hard';
-      this.aiController = usePlannerHard
-        ? new PlannerAIController(aiProfile)
-        : new AIController(aiProfile);
+      this.aiController = this._createCpuController(p2.charDef.id, this.difficulty);
       this.aiMatchRecorder.startMatch({
         mode: 'ai',
         fighter1Char: p1.charDef.id,
@@ -276,18 +260,10 @@ export class Game {
   _startRound() {
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
-    this.clock.setTimeScale(1.0);
-    this.killSlowMoTimer = 0;
-    this._killRealStart = null;
+    this._resetCombatPresentation();
 
     this.matchSim?.startRound(FIGHT_START_DISTANCE);
     this.aiController?.reset();
-
-    this.cameraController.stopKillCam();
-    this.cameraController.reset();
-
-    this.particles.reset();
-    this.screenEffects.reset();
 
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
@@ -309,6 +285,44 @@ export class Game {
     const charProfiles = AI_DIFFICULTY_PROFILE_MAP[charId];
     if (charProfiles && charProfiles[difficulty]) return charProfiles[difficulty];
     return difficulty;
+  }
+
+  _createCpuController(charId, difficulty) {
+    const aiProfile = this._getAIDifficultyProfile(charId, difficulty);
+    return difficulty === 'hard'
+      ? new PlannerAIController(aiProfile)
+      : new AIController(aiProfile);
+  }
+
+  _resetMatchScoreState() {
+    this.p1Score = 0;
+    this.p2Score = 0;
+    this.currentRound = 1;
+  }
+
+  _resetCombatPresentation() {
+    this.clock.setTimeScale(1.0);
+    this.killSlowMoTimer = 0;
+    this._killRealStart = null;
+    this.cameraController.stopKillCam();
+    this.cameraController.reset();
+    this.particles.reset();
+    this.screenEffects.reset();
+  }
+
+  _spawnFighters(p1Char, p2Char) {
+    this._cleanupFighters();
+
+    const p1 = this._getCharData(p1Char);
+    const p2 = this._getCharData(p2Char);
+    this.fighter1 = new Fighter(0, 0x991111, p1.charDef, p1.animData);
+    this.fighter2 = new Fighter(1, 0x112266, p2.charDef, p2.animData);
+    this.fighter1.addToScene(this.scene);
+    this.fighter2.addToScene(this.scene);
+    this._attachWeapon(this.fighter1);
+    this._attachWeapon(this.fighter2);
+
+    return { p1, p2 };
   }
 
   _cleanupFighters() {
@@ -347,18 +361,14 @@ export class Game {
     }
 
     this._disconnectOnlineSession();
-      this.ui.select.setOnlineBusy(true);
-      this.ui.select.setOnlineLocked(false);
-      this._cleanupFighters();
-      this.aiController = null;
-      this.matchSim = null;
-      this.p1Score = 0;
-      this.p2Score = 0;
-      this.currentRound = 1;
-      this.onlinePendingMatchResult = null;
-      this.clock.setTimeScale(1.0);
-      this.killSlowMoTimer = 0;
-      this._killRealStart = null;
+    this.ui.select.setOnlineBusy(true);
+    this.ui.select.setOnlineLocked(false);
+    this._cleanupFighters();
+    this.aiController = null;
+    this.matchSim = null;
+    this._resetMatchScoreState();
+    this.onlinePendingMatchResult = null;
+    this._resetCombatPresentation();
 
     const session = new OnlineSession({ url: requestedUrl });
     this.onlineSession = session;
@@ -584,28 +594,14 @@ export class Game {
   }
 
   _startOnlineMatch(players, snapshot = null) {
-    this._cleanupFighters();
-    this.clock.setTimeScale(1.0);
-    this.killSlowMoTimer = 0;
-    this._killRealStart = null;
-    this.cameraController.stopKillCam();
-    this.cameraController.reset();
-    this.screenEffects.reset();
-    this.particles.reset();
+    this._resetCombatPresentation();
 
     const sortedPlayers = [...players].sort((a, b) => a.slot - b.slot);
     const p1 = sortedPlayers[0];
     const p2 = sortedPlayers[1];
     if (!p1 || !p2) return;
 
-    const p1Char = this._getCharData(p1.characterId);
-    const p2Char = this._getCharData(p2.characterId);
-    this.fighter1 = new Fighter(0, 0x991111, p1Char.charDef, p1Char.animData);
-    this.fighter2 = new Fighter(1, 0x112266, p2Char.charDef, p2Char.animData);
-    this.fighter1.addToScene(this.scene);
-    this.fighter2.addToScene(this.scene);
-    this._attachWeapon(this.fighter1);
-    this._attachWeapon(this.fighter2);
+    this._spawnFighters(p1.characterId, p2.characterId);
 
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;

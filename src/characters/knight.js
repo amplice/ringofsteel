@@ -59,7 +59,7 @@ export const knight = defineCharacter('knight', {
     attackFrames: {
       [AttackType.QUICK]: 48,
       [AttackType.HEAVY]: 55,
-      [AttackType.THRUST]: 49,
+      [AttackType.THRUST]: 50,
     },
     poseProfile: {
       idle: {

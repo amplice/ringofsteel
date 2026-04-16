@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  FighterState, HitResult, PARRY_WINDOW_FRAMES,
+  FighterState, HitResult,
   BACKSTEP_INVULN_FRAMES,
   WeaponType,
 } from '../core/Constants.js';
@@ -47,14 +47,10 @@ export class HitResolver {
       return finish(HitResult.WHIFF);
     }
 
-    // Priority 3: Parry -> Parried (within window), or Blocked (past window but still in parry state)
-    if (defender.state === FighterState.PARRY) {
-      if (defender.stateFrames <= PARRY_WINDOW_FRAMES) {
-        return finish(HitResult.PARRIED);
-      }
-      // Past parry window but still in PARRY state — treat as block
-      return finish(HitResult.BLOCKED);
-    }
+    // Priority 3: Parry -> parried during the live window, or blocked during
+    // the explicit parry fallback frames.
+    if (defender.fsm?.isParryWindowActive) return finish(HitResult.PARRIED);
+    if (defender.fsm?.isParryFallbackBlock) return finish(HitResult.BLOCKED);
 
     // Priority 4: Active block only -> Blocked
     if (defender.state === FighterState.BLOCK) {

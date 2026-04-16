@@ -41,10 +41,27 @@ export class FighterStateMachine {
     return this.state === FighterState.ATTACK_ACTIVE;
   }
 
+  get isParryWindowActive() {
+    return this.state === FighterState.PARRY && this.stateFrames <= PARRY_WINDOW_FRAMES;
+  }
+
+  get isParryFallbackBlock() {
+    return this.state === FighterState.PARRY && this.stateFrames > PARRY_WINDOW_FRAMES;
+  }
+
+  get isGuarding() {
+    return this.state === FighterState.BLOCK || this.state === FighterState.PARRY;
+  }
+
   transition(newState, duration = 0) {
-    if (this.state === FighterState.ATTACK_ACTIVE && newState !== FighterState.ATTACK_ACTIVE) {
+    if (newState !== FighterState.ATTACK_ACTIVE) {
       this.currentAttackData = null;
       this.currentAttackType = null;
+      this.hitApplied = false;
+    }
+    if (newState !== FighterState.SIDESTEP) {
+      this.sidestepDirection = 0;
+      this.sidestepPhase = null;
     }
     this.state = newState;
     this.stateFrames = 0;
@@ -173,8 +190,6 @@ export class FighterStateMachine {
           this.sidestepPhase = 'recovery';
           this.stateFrames = 0;
         } else if (this.sidestepPhase === 'recovery' && this.stateFrames >= recoveryFrames) {
-          this.sidestepDirection = 0;
-          this.sidestepPhase = null;
           this.transition(FighterState.IDLE);
         }
         }

@@ -8,10 +8,9 @@ import {
   HitResult,
   FIGHT_START_DISTANCE,
   ARENA_RADIUS,
-  BLOCK_PUSHBACK_SPEED,
   KNOCKBACK_SLIDE_SPEED,
+  BLOCK_KNOCKBACK_SLIDE_SPEED,
   HEAVY_ADVANTAGE_STUN_MULT,
-  HEAVY_ADVANTAGE_SLIDE_MULT,
   HEAVY_CLASH_STUN_MULT,
   HEAVY_CLASH_WINNER_STUN_MULT,
   CLASH_SLIDE_MULT,
@@ -77,8 +76,6 @@ export class MatchSim {
     this.fighter1.update(dt, this.fighter2);
     this.fighter2.update(dt, this.fighter1);
 
-    this._applyBlockPushback(this.fighter1, this.fighter2, dt);
-    this._applyBlockPushback(this.fighter2, this.fighter1, dt);
     this._applyKnockbackSlide(this.fighter1, this.fighter2, dt);
     this._enforceFighterSeparation(this.fighter1, this.fighter2);
     this._checkHits();
@@ -173,20 +170,6 @@ export class MatchSim {
     };
   }
 
-  _applyBlockPushback(attacker, defender, dt) {
-    if (!attacker.fsm.isAttacking) return;
-    if (defender.state !== FighterState.BLOCK_STUN) return;
-    if (!this.hitResolver.checkWeaponOverlap(attacker, defender)) return;
-
-    const { dx, dz, dist } = this._getFighterPairDelta(attacker, defender);
-
-    const nx = dx / (dist || 0.01);
-    const nz = dz / (dist || 0.01);
-    const pushbackScale = defender.slideMult || this._getImpactSlideScale(attacker, defender);
-    defender.position.x += nx * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
-    defender.position.z += nz * BLOCK_PUSHBACK_SPEED * pushbackScale * dt;
-  }
-
   _applyKnockbackSlide(a, b, dt) {
     const stunStates = [FighterState.CLASH, FighterState.HIT_STUN, FighterState.PARRIED_STUN, FighterState.BLOCK_STUN];
     const aStun = stunStates.includes(a.state);
@@ -198,12 +181,36 @@ export class MatchSim {
     const nz = dz / dist;
 
     if (aStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (a.slideMult || 1) * dt;
+      let slide;
+      if (a.state === FighterState.BLOCK_STUN) {
+        const remaining = a.blockPushRemaining || 0;
+        if (remaining <= 0) {
+          slide = 0;
+        } else {
+          const maxSlide = BLOCK_KNOCKBACK_SLIDE_SPEED * (a.slideMult || 1) * dt;
+          slide = Math.min(maxSlide, remaining);
+          a.blockPushRemaining = Math.max(0, remaining - slide);
+        }
+      } else {
+        slide = KNOCKBACK_SLIDE_SPEED * (a.slideMult || 1) * dt;
+      }
       a.position.x -= nx * slide;
       a.position.z -= nz * slide;
     }
     if (bStun) {
-      const slide = KNOCKBACK_SLIDE_SPEED * (b.slideMult || 1) * dt;
+      let slide;
+      if (b.state === FighterState.BLOCK_STUN) {
+        const remaining = b.blockPushRemaining || 0;
+        if (remaining <= 0) {
+          slide = 0;
+        } else {
+          const maxSlide = BLOCK_KNOCKBACK_SLIDE_SPEED * (b.slideMult || 1) * dt;
+          slide = Math.min(maxSlide, remaining);
+          b.blockPushRemaining = Math.max(0, remaining - slide);
+        }
+      } else {
+        slide = KNOCKBACK_SLIDE_SPEED * (b.slideMult || 1) * dt;
+      }
       b.position.x += nx * slide;
       b.position.z += nz * slide;
     }
@@ -309,6 +316,9 @@ export class MatchSim {
         const parryFrames = Math.round(baseParryFrames * parryStunScale);
         attacker.fsm.applyParriedStun(parryFrames);
         attacker.slideMult = parrySlideScale;
+        // PARRY_SUCCESS is kept as an explicit post-parry state mostly for AI
+        // and instrumentation. The actual mechanical punish window is driven
+        // primarily by the attacker entering PARRIED_STUN.
         defender.fsm.applyParrySuccess(undefined, attackType);
         this.events.push({
           type: 'combat_result',
@@ -325,15 +335,21 @@ export class MatchSim {
       case HitResult.BLOCKED: {
         const isHeavy = result.attackerType === AttackType.HEAVY;
         const stunBonus = isHeavy ? HEAVY_ADVANTAGE_STUN_MULT : 1;
-        const slideBonus = isHeavy ? HEAVY_ADVANTAGE_SLIDE_MULT : 1;
+        const attackBlockPush = attacker.fsm.currentAttackData?.blockPush ?? 0.8;
         const blockStunScale = this._getImpactStunScale(attacker, defender, stunBonus);
-        const blockSlideScale = this._getImpactSlideScale(attacker, defender, slideBonus);
+        const blockPushDistance = attackBlockPush * this._getImpactSlideScale(
+          attacker,
+          defender,
+          1,
+        );
         attacker.fsm.applyBlockStun();
         defender.fsm.applyBlockStun(Math.round(BLOCK_STUN_FRAMES * blockStunScale));
-        defender.slideMult = blockSlideScale;
+        defender.blockPushRemaining = blockPushDistance;
+        defender.slideMult = 1;
         this.events.push({
           type: 'combat_result',
           result: HitResult.BLOCKED,
+          blockPushDistance,
           attackerIndex: attacker.playerIndex,
           defenderIndex: defender.playerIndex,
           attackerType: result.attackerType,
@@ -459,3 +475,4 @@ export class MatchSim {
     return { dx, dz, dist: Math.sqrt(distSq) };
   }
 }
+

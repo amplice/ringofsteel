@@ -54,6 +54,7 @@ export class FighterCore {
     this._stepDirection = 0;
     this._stepCooldown = 0;
     this.slideMult = 1;
+    this.blockPushRemaining = 0;
     this._debugCollision = null;
     this._wasAttacking = false;
     this._postAttackTurnTime = 0;
@@ -371,6 +372,7 @@ export class FighterCore {
       hurtRadius: this._debugCollision?.hurtRadius ?? HURT_CYLINDER.radius,
       hurtHeight: this._debugCollision?.hurtHeight ?? HURT_CYLINDER.height,
       bodyRadius: getBodyRadius(this.charDef),
+      blockPushRemaining: this.blockPushRemaining,
       collision: this._debugCollision ? { ...this._debugCollision } : null,
       ...this._getDebugSnapshotExtras(),
     };
@@ -387,6 +389,7 @@ export class FighterCore {
     this.damageSystem.reset();
     this.walkPhase = 0;
     this.slideMult = 1;
+    this.blockPushRemaining = 0;
     this.activeClipName = 'idle';
     this._stepping = false;
     this._stepFrames = 0;

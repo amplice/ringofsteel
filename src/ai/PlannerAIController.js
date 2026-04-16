@@ -133,6 +133,8 @@ export class PlannerAIController extends AIController {
     const engageRange = dist <= (fighter.charDef?.aiRanges?.engage ?? 3.0);
     const edgeDistance = Math.hypot(fighter.position.x, fighter.position.z);
     const blocking = opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN;
+    const recentBlock = (this._opponentLastBlockFrame ?? -9999) > -9999 && ((this.lastDecisionFrame - this._opponentLastBlockFrame) <= 36);
+    const blockRatio = this._getOpponentBlockRatio?.() ?? 0.3;
     const vulnerable =
       opponent.state === FighterState.HIT_STUN ||
       opponent.state === FighterState.PARRIED_STUN ||
@@ -150,6 +152,8 @@ export class PlannerAIController extends AIController {
       engageRange,
       edgeDistance,
       blocking,
+      recentBlock,
+      blockRatio,
       vulnerable,
       recentClash,
       stableLane,
@@ -220,21 +224,62 @@ export class PlannerAIController extends AIController {
       actions.delete('backstep');
     }
 
+    if (
+      classId === 'knight' &&
+      !(
+        blocking ||
+        vulnerable ||
+        recentClash ||
+        opponent.fsm.isAttacking ||
+        (motionRead.recentApproach && dist <= 2.05) ||
+        (stableLane && dist >= 1.65 && dist <= 1.95)
+      )
+    ) {
+      actions.delete('heavyAttack');
+    }
+
+    if (
+      classId === 'knight' &&
+      dist > 2.25 &&
+      !blocking &&
+      !vulnerable &&
+      !opponent.fsm.isAttacking &&
+      !recentClash
+    ) {
+      actions.delete('thrustAttack');
+    }
+
     return [...actions];
   }
 
   _buildLikelyResponses(fighter, opponent, dist, motionRead) {
     const classId = getFighterClassId(fighter);
+    const opponentClassId = getFighterClassId(opponent);
+    const recentBlock = (this._opponentLastBlockFrame ?? -9999) > -9999 && ((this.lastDecisionFrame - this._opponentLastBlockFrame) <= 36);
     const responses = [];
     const sidestepWeightBase = motionRead.recentlyPunishedBySidestep || motionRead.recentApproach ? 0.38 : 0.24;
     const sidestepWeight =
       classId === 'spearman' || classId === 'knight'
         ? sidestepWeightBase + 0.04
         : sidestepWeightBase - 0.03;
+    const blockRatio = this._getOpponentBlockRatio?.() ?? 0.3;
     responses.push({ action: 'sidestepUp', weight: sidestepWeight });
     responses.push({ action: 'sidestepDown', weight: sidestepWeight * 0.75 });
     responses.push({ action: 'moveForward', weight: dist > 2.1 ? 0.18 : 0.1 });
-    responses.push({ action: 'block', weight: opponent.state === FighterState.BLOCK ? 0.22 : 0.14 });
+    let blockWeight = opponent.state === FighterState.BLOCK ? 0.22 : 0.14;
+    if (classId === 'knight' && opponentClassId === 'spearman' && dist <= 2.25) {
+      blockWeight += 0.12;
+    }
+    if (classId === 'knight' && dist <= 2.3) {
+      blockWeight += Math.max(0, blockRatio - 0.28) * 0.45;
+    }
+    if (classId === 'knight' && opponentClassId === 'spearman' && dist <= 2.35 && (recentBlock || blockRatio >= 0.48)) {
+      const turtleBias = (recentBlock ? 0.12 : 0) + Math.max(0, blockRatio - 0.48) * 0.65;
+      responses[0].weight *= 0.72;
+      responses[1].weight *= 0.72;
+      blockWeight += 0.18 + turtleBias;
+    }
+    responses.push({ action: 'block', weight: blockWeight });
     responses.push({ action: 'quickAttack', weight: dist < 2.1 ? 0.18 : 0.08 });
     if (dist <= 2.2) {
       responses.push({ action: 'moveBack', weight: classId === 'ronin' ? 0.12 : 0.06 });
@@ -246,6 +291,7 @@ export class PlannerAIController extends AIController {
   _evaluateActionAgainstResponse(fighter, opponent, frameCount, aiAction, responseAction) {
     const classId = getFighterClassId(fighter);
     const opponentClassId = getFighterClassId(opponent);
+    const opponentBlockRatio = this._getOpponentBlockRatio?.() ?? 0.3;
     const sim = this._preparePlannerSim(fighter, opponent, frameCount);
     const aiIndex = fighter.playerIndex;
     const aiSim = aiIndex === 0 ? sim.fighter1 : sim.fighter2;
@@ -369,6 +415,30 @@ export class PlannerAIController extends AIController {
       if (aiAction === 'moveBack') score += responseAction === 'quickAttack' || responseAction === 'moveForward' ? 1.5 : 0;
       if (aiAction === 'backstep') score += responseAction === 'quickAttack' ? 3 : 0;
     } else if (classId === 'knight') {
+      const openNeutralHeavy =
+        aiAction === 'heavyAttack' &&
+        !opponentSim.fsm.isAttacking &&
+        opponentSim.state !== FighterState.BLOCK &&
+        opponentSim.state !== FighterState.BLOCK_STUN &&
+        opponentSim.state !== FighterState.HIT_STUN &&
+        opponentSim.state !== FighterState.PARRIED_STUN &&
+        opponentSim.state !== FighterState.CLASH &&
+        initialEngagement.dist > 1.9;
+      const openNeutralThrust =
+        aiAction === 'thrustAttack' &&
+        !opponentSim.fsm.isAttacking &&
+        opponentSim.state !== FighterState.BLOCK &&
+        opponentSim.state !== FighterState.BLOCK_STUN &&
+        opponentSim.state !== FighterState.HIT_STUN &&
+        opponentSim.state !== FighterState.PARRIED_STUN &&
+        opponentSim.state !== FighterState.CLASH &&
+        initialEngagement.dist > 2.15;
+      const closeGuardPressure =
+        opponentClassId === 'spearman' &&
+        opponentBlockRatio >= 0.48 &&
+        initialEngagement.dist <= 2.25;
+      const recentPressureChain =
+        this._plannerRecentActions.slice(-2).filter((action) => action === 'moveForward' || action === 'quickAttack' || action === 'thrustAttack').length;
       if (opponentClassId === 'spearman') {
         if (aiAction === 'block' && !opponentSim.fsm.isAttacking) score -= 1.8;
         if (aiAction === 'moveForward' && finalEngagement.forwardDot > 0.94 && aiSim.distanceTo(opponentSim) < initialEngagement.dist - 0.14) score += 2.2;
@@ -378,6 +448,18 @@ export class PlannerAIController extends AIController {
           score += clamp(angleGain * 12, -1, 4);
           if (finalSideAbs >= 0.16 && finalSideAbs <= 0.46 && finalEngagement.forwardDot >= 0.78) score += 3.2;
         }
+        if (responseAction === 'block') {
+          if (aiAction === 'quickAttack' && finalEngagement.forwardDot > 0.92 && aiSim.distanceTo(opponentSim) <= 1.9) score += 5.2;
+          if (aiAction === 'moveForward' && finalEngagement.forwardDot > 0.94 && aiSim.distanceTo(opponentSim) < initialEngagement.dist - 0.1) score += 3.4;
+          if (aiAction === 'heavyAttack' && finalEngagement.forwardDot > 0.94 && aiSim.distanceTo(opponentSim) <= 2.0) score += 4.2;
+          if (aiAction === 'thrustAttack' && finalEngagement.forwardDot > 0.95 && aiSim.distanceTo(opponentSim) <= 2.05) score += 3.6;
+          if (closeGuardPressure) {
+            if (aiAction === 'moveForward') score += 4.6;
+            if (aiAction === 'quickAttack') score += 5.8;
+            if (aiAction === 'thrustAttack') score += 4.4;
+            if (aiAction === 'heavyAttack' && initialEngagement.dist <= 1.95) score += 2.6;
+          }
+        }
       }
       if (aiAction === 'block' && !opponentSim.fsm.isAttacking) score -= 1.4;
       if (aiAction === 'block' && (responseAction === 'quickAttack' || responseAction === 'moveForward')) score += 1.8;
@@ -385,16 +467,27 @@ export class PlannerAIController extends AIController {
       if (aiAction === 'quickAttack' && finalEngagement.forwardDot > 0.92 && aiSim.distanceTo(opponentSim) <= 1.85) score += 2.4;
       if (aiAction === 'heavyAttack' && responseAction === 'block') score += 4;
       if (aiAction === 'heavyAttack' && finalEngagement.forwardDot > 0.95 && aiSim.distanceTo(opponentSim) >= 1.65 && aiSim.distanceTo(opponentSim) <= 2.05) score += 2.8;
+      if (openNeutralHeavy) score -= 9.5;
+      if (openNeutralThrust) score -= 8.5;
+      if (aiAction === 'heavyAttack' && (responseAction === 'sidestepUp' || responseAction === 'sidestepDown')) score -= 4.5;
+      if (aiAction === 'thrustAttack' && (responseAction === 'sidestepUp' || responseAction === 'sidestepDown')) score -= 3.2;
       if (aiAction === 'thrustAttack' && finalEngagement.forwardDot > 0.94 && aiSim.distanceTo(opponentSim) <= 2.1) score += 4.2;
       if (aiAction === 'idle') score -= 0.8;
       if (aiAction === 'sidestepUp' || aiAction === 'sidestepDown') score -= 1.1;
+      if (closeGuardPressure) {
+        if (aiAction === 'moveForward') score += 2.4 + recentPressureChain * 0.8;
+        if (aiAction === 'quickAttack') score += 2.8 + recentPressureChain * 1.0;
+        if (aiAction === 'thrustAttack') score += 1.8 + recentPressureChain * 0.7;
+        if (aiAction === 'moveBack') score -= 2.4;
+        if (aiAction === 'idle') score -= 2.8;
+      }
     }
 
     return score;
   }
 
   _getActionPriorBias(classId, action, context) {
-    const { dist, blocking, vulnerable, defensiveNeed, motionRead, stableLane, recentClash } = context;
+    const { dist, blocking, recentBlock, blockRatio, vulnerable, defensiveNeed, motionRead, stableLane, recentClash } = context;
     const profileBias = this._getProfileActionBias(action);
     switch (classId) {
       case 'spearman':
@@ -446,7 +539,7 @@ export class PlannerAIController extends AIController {
           case 'block':
             return (defensiveNeed ? 0.04 : -0.18) + profileBias;
           case 'moveForward':
-            return 0.18 + profileBias;
+            return (0.18 + ((blocking || recentBlock || blockRatio >= 0.42) ? 0.08 : 0) + ((blockRatio >= 0.5 && dist <= 2.25) ? 0.1 : 0)) + profileBias;
           case 'moveBack':
             return -0.18 + profileBias;
           case 'sidestepUp':
@@ -455,11 +548,21 @@ export class PlannerAIController extends AIController {
           case 'backstep':
             return -0.16 + profileBias;
           case 'quickAttack':
-            return (dist <= 1.8 || vulnerable ? 0.1 : -0.06) + profileBias;
+            return (dist <= 1.8 || vulnerable ? 0.1 : -0.06) +
+              ((blocking || recentBlock || blockRatio >= 0.42) && dist <= 1.95 ? 0.12 : 0) +
+              ((blockRatio >= 0.5 && dist <= 2.0) ? 0.08 : 0) +
+              profileBias;
           case 'thrustAttack':
-            return (dist <= 2.1 || blocking || vulnerable ? 0.14 : -0.08) + profileBias;
+            return (dist <= 2.1 || blocking || vulnerable ? 0.14 : -0.08) +
+              ((!blocking && !vulnerable && dist > 2.2) ? -0.12 : 0) +
+              ((blockRatio >= 0.5 && dist <= 2.1) ? 0.06 : 0) +
+              profileBias;
           case 'heavyAttack':
-            return (blocking || vulnerable || recentClash || stableLane ? 0.18 : -0.06) + profileBias;
+            return (blocking || vulnerable || recentClash ? 0.18 : -0.16) +
+              ((motionRead.recentApproach && dist <= 2.05) ? 0.08 : 0) +
+              ((stableLane && dist >= 1.65 && dist <= 1.95) ? 0.08 : 0) +
+              ((blocking || recentBlock || blockRatio >= 0.5) && dist <= 2.05 ? 0.1 : 0) +
+              profileBias;
           default:
             return profileBias;
         }
@@ -533,6 +636,7 @@ export class PlannerAIController extends AIController {
     target._applySnapshotCore(snapshot, (attackType) => getAttackData(attackType, target.charDef), { applyTransform: true });
     target.walkPhase = snapshot.walkPhase;
     target.slideMult = snapshot.slideMult;
+    target.blockPushRemaining = snapshot.blockPushRemaining ?? 0;
     target._stepping = snapshot.stepping;
     target._stepDirection = snapshot.stepDirection;
     target._stepFrames = snapshot.stepFrames;
@@ -561,6 +665,7 @@ export class PlannerAIController extends AIController {
       dead: fighter.damageSystem.isDead?.() ?? false,
       walkPhase: fighter.walkPhase ?? 0,
       slideMult: fighter.slideMult ?? 1,
+      blockPushRemaining: fighter.blockPushRemaining ?? 0,
       stepping: debug.stepping ?? false,
       stepDirection: debug.stepDirection ?? 0,
       stepFrames: debug.stepFrames ?? 0,

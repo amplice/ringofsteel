@@ -17,6 +17,8 @@ const SIDESTEP_PUNISH_MEMORY_FRAMES = 240;
 const ACTION_SCORE_MIN = 0.02;
 const ATTACK_SCORE_MIN = 0.06;
 const SPEARMAN_HEAVY_SCORE_MIN = 0.2;
+const AI_PARRY_PUNISH_DELAY_MIN = 2;
+const AI_PARRY_PUNISH_DELAY_MAX = 5;
 
 function getFighterClassId(fighter) {
   return fighter?.charDef?.id ?? fighter?.charId ?? null;
@@ -58,6 +60,8 @@ export class AIController {
     this._intent = 'neutral';
     this._intentLockUntil = 0;
     this._plannedAttack = null;
+    this._parryPunishReadyFrame = -9999;
+    this._parryPunishDelayFrames = 0;
   }
 
   setDifficulty(profile) {
@@ -74,6 +78,13 @@ export class AIController {
     this._trackOpponent(opponent, frameCount);
     this._trackSelf(fighter, frameCount);
     this._trackReactiveRead(fighter, opponent, frameCount);
+
+    if (fighter.state === FighterState.PARRY_SUCCESS && frameCount < this._parryPunishReadyFrame) {
+      this.currentAction = null;
+      this.pendingAction = null;
+      this._applyMovement(fighter, dt);
+      return;
+    }
 
     if (this._processPlannedAttack(fighter, opponent, frameCount, dt)) {
       this._applyMovement(fighter, dt);
@@ -162,6 +173,14 @@ export class AIController {
       }
       if (state === FighterState.CLASH) {
         this._selfLastClashFrame = frameCount;
+      }
+      if (state === FighterState.PARRY_SUCCESS) {
+        // The combat layer keeps PARRY_SUCCESS mostly as an explicit AI hook.
+        // Human-facing punish advantage mostly comes from the opponent's
+        // PARRIED_STUN, but the AI still uses this state to time ripostes.
+        this._parryPunishDelayFrames =
+          AI_PARRY_PUNISH_DELAY_MIN + Math.floor(Math.random() * (AI_PARRY_PUNISH_DELAY_MAX - AI_PARRY_PUNISH_DELAY_MIN + 1));
+        this._parryPunishReadyFrame = frameCount + this._parryPunishDelayFrames;
       }
       this._selfLastState = state;
     }
@@ -305,6 +324,12 @@ export class AIController {
       opponent.state === FighterState.BLOCK_STUN ||
       opponent.state === FighterState.CLASH;
     const opponentVulnerable = opponentRecovering || opponentStunned;
+
+    if (fighter.state === FighterState.PARRY_SUCCESS) {
+      this._makeParryPunishDecision(fighter, opponent, dt, frameCount, p, engagement, dist);
+      return;
+    }
+
     const spearmanSafeHeavyWindow =
       getFighterClassId(fighter) === 'spearman' &&
       !opponentAttacking &&
@@ -666,6 +691,45 @@ export class AIController {
     this._executePending(fighter, dt);
   }
 
+  _makeParryPunishDecision(fighter, opponent, dt, frameCount, p, engagement, dist) {
+    const quickDecisionReach = this._getAttackDecisionReach(fighter, AttackType.QUICK);
+    const heavyDecisionReach = this._getAttackDecisionReach(fighter, AttackType.HEAVY);
+    const thrustDecisionReach = this._getAttackDecisionReach(fighter, AttackType.THRUST);
+    const remainingParryFrames = Math.max(0, (fighter.fsm.stateDuration || 0) - fighter.stateFrames);
+    const strongFront = engagement.forwardDot >= 0.94;
+    const perfectFront = engagement.forwardDot >= 0.975;
+    const cleanClose = dist <= quickDecisionReach + 0.02;
+    const cleanMid = dist <= thrustDecisionReach - 0.04;
+    const heavyConfirmed =
+      perfectFront &&
+      dist <= heavyDecisionReach - 0.08 &&
+      remainingParryFrames >= 11 &&
+      opponent.state !== FighterState.SIDESTEP &&
+      opponent.state !== FighterState.WALK_BACK;
+
+    const scores = {};
+    if (cleanClose) {
+      scores.quickAttack =
+        this._scoreAttackOpportunity(fighter, AttackType.QUICK, engagement, 2.1 + (p.quickBias || 0));
+    }
+    if (cleanMid) {
+      scores.thrustAttack =
+        this._scoreAttackOpportunity(fighter, AttackType.THRUST, engagement, 1.7 + (p.thrustBias || 0));
+    }
+    if (heavyConfirmed) {
+      scores.heavyAttack =
+        this._scoreAttackOpportunity(fighter, AttackType.HEAVY, engagement, 0.95 + (p.heavyBias || 0));
+    }
+
+    if (!cleanClose && dist <= thrustDecisionReach + 0.2) {
+      scores.moveForward = 0.55 + (p.moveForwardBias || 0);
+    }
+
+    const bestAction = this._pickAction(scores, fighter, p);
+    this.pendingAction = bestAction;
+    this._executePending(fighter, dt);
+  }
+
   _getOpponentBlockRatio() {
     const total = this._opponentBlockCount + this._opponentAttackCount;
     if (total < 3) return 0.3;
@@ -942,6 +1006,8 @@ export class AIController {
       sidestepPunishCount: this._sidestepPunishCount,
       recentApproachFrame: this._recentApproachFrame,
       recentLateralThreatFrame: this._recentLateralThreatFrame,
+      parryPunishReadyFrame: this._parryPunishReadyFrame,
+      parryPunishDelayFrames: this._parryPunishDelayFrames,
     };
   }
 
@@ -975,5 +1041,8 @@ export class AIController {
     this._intent = 'neutral';
     this._intentLockUntil = 0;
     this._plannedAttack = null;
+    this._parryPunishReadyFrame = -9999;
+    this._parryPunishDelayFrames = 0;
   }
 }
+

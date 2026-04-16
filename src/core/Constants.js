@@ -60,16 +60,21 @@ export const PARRY_WINDOW_FRAMES = 9;
 export const PARRY_REENTRY_COOLDOWN_FRAMES = 24;
 export const BLOCK_STUN_FRAMES = 16;
 export const HIT_STUN_FRAMES = 16;
-export const PARRIED_STUN_FRAMES = 24;
+export const PARRIED_STUN_FRAMES = 14;
+// Legacy explicit post-parry state duration. This no longer creates a unique
+// human-facing mechanic beyond normal actionability; the attacker's
+// PARRIED_STUN is the real punish window. The state is still kept because AI,
+// telemetry, and presentation key off it directly.
 export const PARRY_SUCCESS_FRAMES_BY_ATTACK = Object.freeze({
-  quick: 34,
-  heavy: 22,
-  thrust: 28,
+  quick: 20,
+  heavy: 13,
+  thrust: 16,
 });
 export const CLASH_PUSHBACK_FRAMES = 16;
 
 // Knockback slide speed (units/sec) — fighters slide apart during stun
 export const KNOCKBACK_SLIDE_SPEED = 1.88;
+export const BLOCK_KNOCKBACK_SLIDE_SPEED = 3.6;
 
 // Heavy attack advantage multipliers.
 // Stun and displacement are separated so they can be tuned independently.
@@ -91,7 +96,7 @@ export const BACKSTEP_DISTANCE = 1.5;
 export const BACKSTEP_INVULN_FRAMES = 6;
 
 // Block pushback
-export const BLOCK_PUSHBACK_SPEED = 2.0;
+export const BLOCK_PUSHBACK_SPEED = 2.35;
 
 // Movement
 export const WALK_SPEED = 3.0;
@@ -121,3 +126,4 @@ export const DEBUG_OPTIONS = {
   toggleKey: 'F3',
   storageKey: 'ring-of-steel-debug-overlay',
 };
+

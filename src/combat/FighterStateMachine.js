@@ -103,6 +103,10 @@ export class FighterStateMachine {
   }
 
   applyParrySuccess(frames, attackType = null) {
+    // Legacy explicit state retained for AI/presentation hooks. In gameplay it
+    // is not meaningfully stronger than returning to IDLE, because both states
+    // are actionable; the attacker's PARRIED_STUN is what really creates the
+    // punish opportunity.
     const defaultFrames = attackType
       ? (PARRY_SUCCESS_FRAMES_BY_ATTACK[attackType] ?? PARRIED_STUN_FRAMES)
       : PARRIED_STUN_FRAMES;
@@ -143,7 +147,9 @@ export class FighterStateMachine {
         break;
 
       case FighterState.PARRY_SUCCESS:
-        // Actionable state — defender can counter-attack during this window
+        // Legacy post-parry marker. Still actionable, but not a unique
+        // human-facing mechanic on its own; the real advantage comes from the
+        // opponent being in PARRIED_STUN.
         if (this.stateFrames >= this.stateDuration) {
           this.transition(FighterState.IDLE);
         }
@@ -155,6 +161,7 @@ export class FighterStateMachine {
       case FighterState.CLASH:
         if (this.stateFrames >= this.stateDuration) {
           this.fighter.slideMult = 1;
+          this.fighter.blockPushRemaining = 0;
           this.transition(FighterState.IDLE);
         }
         break;
@@ -200,3 +207,4 @@ export class FighterStateMachine {
     this.parryCooldownFrames = 0;
   }
 }
+

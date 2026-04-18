@@ -18,6 +18,9 @@ import { UIManager } from './ui/UIManager.js';
 import { MatchSim } from './sim/MatchSim.js';
 import { captureInputFrame } from './sim/InputFrame.js';
 import { OnlineSession } from './net/OnlineSession.js';
+import { SoundManager } from './audio/SoundManager.js';
+import { listAudioAssets } from './audio/AudioCatalog.js';
+import { GameAudio } from './audio/GameAudio.js';
 import {
   GameState, HitResult,
   FIGHT_START_DISTANCE, ROUNDS_TO_WIN, ROUND_INTRO_DURATION,
@@ -50,6 +53,8 @@ export class Game {
     this.input = new InputManager();
     this.ui = new UIManager();
     this.screenEffects = new ScreenEffects();
+    this.sound = new SoundManager();
+    this.gameAudio = new GameAudio(this.sound);
 
     this.scene = null;
     this.camera = null;
@@ -117,11 +122,15 @@ export class Game {
     }
     this.ui.showLoading(0.95, 'Finalizing interface...');
     HumanAIMatchRecorder.installWindowApi();
+    this.gameAudio.preload(listAudioAssets()).catch((error) => {
+      console.warn('[sound] preload failed', error);
+    });
 
     // UI
     this.ui.showTitle();
 
     this.ui.title.onStart = () => {
+      this.sound.unlock().catch(() => {});
       this._disconnectDiscoverySession();
       this._stopOnlineLobbyRefresh();
       this._disconnectOnlineSession();
@@ -133,10 +142,12 @@ export class Game {
     };
 
     this.ui.title.onAnimPlayer = async () => {
+      this.sound.unlock().catch(() => {});
       await this._startAnimationSandbox();
     };
 
     this.ui.select.onConfirm = async (config) => {
+      this.sound.unlock().catch(() => {});
       this.mode = config.mode;
       this.difficulty = config.difficulty;
       if (config.mode === 'online') {
@@ -264,6 +275,7 @@ export class Game {
 
     this.matchSim?.startRound(FIGHT_START_DISTANCE);
     this.aiController?.reset();
+    this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
 
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
@@ -321,6 +333,7 @@ export class Game {
     this.fighter2.addToScene(this.scene);
     this._attachWeapon(this.fighter1);
     this._attachWeapon(this.fighter2);
+    this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
 
     return { p1, p2 };
   }
@@ -335,6 +348,7 @@ export class Game {
       this.fighter2 = null;
     }
     this.matchSim = null;
+    this.gameAudio.resetFighterState([]);
   }
 
   async _startOnlineSession(config) {
@@ -608,14 +622,15 @@ export class Game {
     this.ui.showHUD();
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
-    this.ui.hud.setOnlineMeta({
-      visible: true,
-      status: this.onlineLocalSlot === 0 ? 'ONLINE P1' : 'ONLINE P2',
-      code: this.onlineSession?.lobbyCode ?? '------',
-      pingMs: this.onlinePingMs,
-    });
-    this.ui.hud.showRoundAnnounce(this.currentRound);
-    this.input.clearBuffers();
+      this.ui.hud.setOnlineMeta({
+        visible: true,
+        status: this.onlineLocalSlot === 0 ? 'ONLINE P1' : 'ONLINE P2',
+        code: this.onlineSession?.lobbyCode ?? '------',
+        pingMs: this.onlinePingMs,
+      });
+      this.ui.hud.showRoundAnnounce(this.currentRound);
+      this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
+      this.input.clearBuffers();
 
     if (snapshot) {
       this._handleOnlineStateSnapshot(snapshot);
@@ -803,6 +818,7 @@ export class Game {
     }
 
     if (this.fighter1 && this.fighter2) {
+      this.gameAudio.updateFighters([this.fighter1, this.fighter2]);
       this.cameraController.update(dt, this.fighter1, this.fighter2);
     }
 
@@ -953,6 +969,7 @@ export class Game {
   }
 
   _handleSimEvent(event) {
+    this.gameAudio.handleCombatEvent(event);
     if (event.type === 'ring_out') return;
     if (event.type !== 'combat_result') return;
 

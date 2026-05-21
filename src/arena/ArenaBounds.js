@@ -19,6 +19,10 @@ export function getArenaBounds(stageId = currentArenaStage) {
   return getStageBounds(stageId);
 }
 
+export function getStageCameraBounds(stageId = currentArenaStage) {
+  return STAGE_DEFS[normalizeStageId(stageId)].camera ?? null;
+}
+
 export function isPointInsideArena(x, z, stageId = null, margin = 0) {
   const bounds = getStageBounds(stageId ?? currentArenaStage);
   if (bounds.type === 'circle') {

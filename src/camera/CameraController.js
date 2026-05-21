@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { lerp, clamp } from '../utils/MathUtils.js';
+import { getCurrentArenaStage, getStageCameraBounds } from '../arena/ArenaBounds.js';
 
 const _bodyA = new THREE.Vector3();
 const _bodyB = new THREE.Vector3();
@@ -57,6 +58,9 @@ export class CameraController {
     // Distance-based zoom
     const dist = fighter1.distanceTo(fighter2);
     const zoomDist = clamp(5 + dist * 0.8, 5, 14);
+    const stageCamera = getStageCameraBounds(getCurrentArenaStage());
+    const heightOffset = stageCamera?.heightOffset ?? 2.5;
+    const lookAtYOffset = stageCamera?.lookAtYOffset ?? 0;
 
     // Compute the angle of the line between fighters
     let dx = _bodyB.x - _bodyA.x;
@@ -79,11 +83,12 @@ export class CameraController {
 
     this.targetPosition.set(
       midX + Math.cos(this.orbitAngle) * zoomDist * 0.3,
-      midY + 2.5,
+      midY + heightOffset,
       midZ + Math.sin(this.orbitAngle) * zoomDist
     );
+    this._clampPositionToStageCameraBounds(this.targetPosition);
 
-    this.targetLookAt.set(midX, midY, midZ);
+    this.targetLookAt.set(midX, midY + lookAtYOffset, midZ);
 
     if (this._needsSnap) {
       this.camera.position.copy(this.targetPosition);
@@ -93,15 +98,27 @@ export class CameraController {
       this.camera.position.lerp(this.targetPosition, 0.08);
       this.currentLookAt.lerp(this.targetLookAt, 0.1);
     }
+    this._clampPositionToStageCameraBounds(this.camera.position);
 
     // Apply shake
     if (this.shakeIntensity > 0.001) {
       this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity;
       this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
       this.shakeIntensity *= this.shakeDecay;
+      this._clampPositionToStageCameraBounds(this.camera.position);
     }
 
     this.camera.lookAt(this.currentLookAt);
+  }
+
+  _clampPositionToStageCameraBounds(position) {
+    const cameraBounds = getStageCameraBounds(getCurrentArenaStage());
+    if (!cameraBounds?.maxRadius) return;
+    const dist = Math.hypot(position.x, position.z);
+    if (dist <= cameraBounds.maxRadius || dist < 1e-6) return;
+    const scale = cameraBounds.maxRadius / dist;
+    position.x *= scale;
+    position.z *= scale;
   }
 
   _lerpAngle(a, b, t) {
@@ -182,6 +199,8 @@ export class CameraController {
       this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
       this.shakeIntensity *= this.shakeDecay;
     }
+    this._clampPositionToStageCameraBounds(this.camera.position);
+    this.camera.lookAt(this.currentLookAt);
   }
 
   startKillCam(victim, killer) {

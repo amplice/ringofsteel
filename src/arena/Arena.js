@@ -22,6 +22,7 @@ export class Arena {
     this._clearGroup();
 
     const stage = STAGE_DEFS[normalized];
+    this._applyStageEnvironment(stage);
     if (stage.builder === 'low_poly_arena') {
       this._buildLowPolyArena(stage);
       return normalized;
@@ -35,7 +36,7 @@ export class Arena {
     try {
       const gltf = await this.loader.loadAsync(stage.modelPath);
       if (token !== this._loadToken) return this.stageId;
-      this._buildModelArena(gltf.scene, stage);
+      await this._buildModelArena(gltf.scene, stage, token);
       return normalized;
     } catch (error) {
       console.warn(`[arena] Failed to load stage '${normalized}', falling back to test arena`, error);
@@ -69,7 +70,7 @@ export class Arena {
     });
   }
 
-  _buildModelArena(model, stage) {
+  async _buildModelArena(model, stage, token) {
     const root = new THREE.Group();
     root.name = `stage_${stage.id}`;
     model.name = `${stage.id}_model`;
@@ -87,12 +88,198 @@ export class Arena {
       }
     });
     root.add(model);
+    this._addModelStageLighting(root, stage);
+    this._addModelStageBackdrop(root, stage);
     this.group.add(root);
     this._addPitFloor(stage);
     if (stage.showBoundaryMarkers !== false) {
       this._addFightBoundaryMarkers(0.035, 0xb88d55);
     }
+    await this._addModelStageDecor(root, stage, token);
   }
+
+  _applyStageEnvironment(stage) {
+    const env = stage.environment ?? {};
+    const background = env.background ?? 0x111118;
+    const fogColor = env.fogColor ?? background;
+    this.scene.background = new THREE.Color(background);
+    this.scene.fog = env.fogDensity
+      ? new THREE.FogExp2(fogColor, env.fogDensity)
+      : null;
+  }
+
+  _addModelStageLighting(root, stage) {
+    const lighting = stage.lighting;
+    if (!lighting) return;
+
+    if (lighting.hemisphere) {
+      const hemi = new THREE.HemisphereLight(
+        lighting.hemisphere.skyColor,
+        lighting.hemisphere.groundColor,
+        lighting.hemisphere.intensity,
+      );
+      hemi.name = `${stage.id}_hemisphere_light`;
+      root.add(hemi);
+    }
+
+    if (lighting.sun) {
+      const sun = new THREE.DirectionalLight(lighting.sun.color, lighting.sun.intensity);
+      sun.name = `${stage.id}_sun_light`;
+      sun.position.set(...lighting.sun.position);
+      sun.castShadow = true;
+      sun.shadow.mapSize.width = 2048;
+      sun.shadow.mapSize.height = 2048;
+      sun.shadow.camera.near = 1;
+      sun.shadow.camera.far = 36;
+      sun.shadow.camera.left = -14;
+      sun.shadow.camera.right = 14;
+      sun.shadow.camera.top = 14;
+      sun.shadow.camera.bottom = -14;
+      sun.shadow.bias = -0.00025;
+      sun.shadow.normalBias = 0.01;
+      root.add(sun);
+    }
+
+    if (lighting.fill) {
+      const fill = new THREE.AmbientLight(lighting.fill.color, lighting.fill.intensity);
+      fill.name = `${stage.id}_ambient_fill`;
+      root.add(fill);
+    }
+  }
+
+  _addModelStageBackdrop(root, stage) {
+    if (stage.backdrop?.type !== 'amphitheater_day') return;
+
+    const blockerMat = new THREE.MeshStandardMaterial({
+      color: stage.backdrop.blockerColor ?? 0x5d4b38,
+      roughness: 1,
+      metalness: 0,
+      side: THREE.DoubleSide,
+    });
+    const blocker = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        stage.backdrop.blockerRadius ?? 16,
+        stage.backdrop.blockerRadius ?? 16,
+        stage.backdrop.blockerHeight ?? 8,
+        96,
+        1,
+        true,
+      ),
+      blockerMat,
+    );
+    blocker.name = `${stage.id}_lower_opening_shadow_backdrop`;
+    blocker.position.y = stage.backdrop.blockerY ?? 3;
+    blocker.receiveShadow = true;
+    root.add(blocker);
+
+    const sky = new THREE.Group();
+    sky.name = `${stage.id}_cloud_sky`;
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0xf6efe0,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const shadeMat = new THREE.MeshBasicMaterial({
+      color: 0xd7c5a9,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    const cloudDefs = [
+      [-10.5, 8.0, -18.5, 2.8, 0.65, -0.08],
+      [-7.6, 8.25, -19.0, 2.1, 0.5, 0.02],
+      [6.8, 8.5, -19.5, 2.7, 0.58, 0.1],
+      [10.0, 8.15, -18.2, 1.9, 0.44, -0.04],
+      [-13.5, 7.8, 3.2, 2.0, 0.42, 0.22],
+      [13.0, 8.4, 2.5, 2.4, 0.5, -0.18],
+    ];
+    for (const [x, y, z, sx, sy, rot] of cloudDefs) {
+      const cloud = new THREE.Mesh(new THREE.CircleGeometry(1, 18), cloudMat);
+      cloud.name = `${stage.id}_soft_cloud`;
+      cloud.position.set(x, y, z);
+      cloud.scale.set(sx, sy, 1);
+      cloud.rotation.set(-0.18, 0, rot);
+      sky.add(cloud);
+
+      const shade = new THREE.Mesh(new THREE.CircleGeometry(1, 18), shadeMat);
+      shade.name = `${stage.id}_soft_cloud_shadow`;
+      shade.position.set(x + sx * 0.16, y - sy * 0.18, z + 0.02);
+      shade.scale.set(sx * 0.72, sy * 0.52, 1);
+      shade.rotation.copy(cloud.rotation);
+      sky.add(shade);
+    }
+    root.add(sky);
+  }
+
+  async _addModelStageDecor(root, stage, token) {
+    if (!stage.decorModels?.length) return;
+
+    const decorRoot = new THREE.Group();
+    decorRoot.name = `${stage.id}_decor`;
+    root.add(decorRoot);
+
+    for (const decor of stage.decorModels) {
+      try {
+        const gltf = await this.loader.loadAsync(decor.path);
+        if (token !== this._loadToken) return;
+        this._addDecorScatter(decorRoot, gltf.scene, decor, stage);
+      } catch (error) {
+        console.warn(`[arena] Failed to load decor '${decor.path}' for stage '${stage.id}'`, error);
+      }
+    }
+  }
+
+  _addDecorScatter(root, source, decor, stage) {
+    if (decor.mode !== 'ring') return;
+
+    source.traverse((child) => {
+      if (!child.isMesh) return;
+      child.castShadow = true;
+      child.receiveShadow = true;
+    });
+    source.updateMatrixWorld(true);
+    const sourceBox = new THREE.Box3().setFromObject(source);
+    const rand = this._makeRand(this._hashString(`${stage.id}:${decor.path}:${decor.radius}:${decor.count}`));
+    const count = decor.count ?? 1;
+    const radius = decor.radius ?? 8;
+    const radialJitter = decor.radialJitter ?? 0;
+    const angleJitter = decor.angleJitter ?? 0;
+    const scaleMin = decor.scaleMin ?? 1;
+    const scaleMax = decor.scaleMax ?? scaleMin;
+    const rotationJitter = decor.rotationJitter ?? 0;
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (rand() - 0.5) * angleJitter;
+      const scale = scaleMin + rand() * (scaleMax - scaleMin);
+      const r = radius + (rand() - 0.5) * radialJitter;
+      const clone = source.clone(true);
+      clone.name = `${stage.id}_decor_${i}`;
+      clone.scale.setScalar(scale);
+      clone.position.set(
+        Math.cos(angle) * r,
+        (-sourceBox.min.y * scale) + (decor.yOffset ?? 0) - (decor.groundSink ?? 0),
+        Math.sin(angle) * r,
+      );
+      clone.rotation.y = decor.faceCenter
+        ? -angle + Math.PI / 2 + (rand() - 0.5) * rotationJitter
+        : rand() * Math.PI * 2;
+      root.add(clone);
+    }
+  }
+
+  _hashString(value) {
+    let hash = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
 
   _addPitFloor(stage) {
     if (!stage.pitFloor) return;
@@ -109,6 +296,7 @@ export class Arena {
     floor.receiveShadow = true;
     this.group.add(floor);
   }
+
 
   _buildTestArena() {
     const platformGeo = new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS + 0.3, 0.4, 48);

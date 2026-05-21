@@ -11,6 +11,7 @@ export class Arena {
     this.loader = new GLTFLoader();
     this.stageId = normalizeStageId(stageId);
     this._loadToken = 0;
+    this._weather = null;
     scene.add(this.group);
   }
 
@@ -49,7 +50,70 @@ export class Arena {
     }
   }
 
+  update(dt) {
+    if (!this._weather?.rain) return;
+    const attr = this._weather.rain.geometry.getAttribute('position');
+    const speed = this._weather.rainSpeed ?? 9.5;
+    const windX = this._weather.rainWindX ?? 3.2;
+    const windZ = this._weather.rainWindZ ?? -0.7;
+    const minY = this._weather.minY ?? -1.6;
+    const maxY = this._weather.maxY ?? 9.8;
+
+    for (let i = 0; i < attr.count; i += 2) {
+      const fall = dt * speed;
+      const driftX = dt * windX;
+      const driftZ = dt * windZ;
+      for (const point of [i, i + 1]) {
+        attr.setX(point, attr.getX(point) + driftX);
+        attr.setY(point, attr.getY(point) - fall);
+        attr.setZ(point, attr.getZ(point) + driftZ);
+      }
+      if (attr.getY(i) < minY || Math.abs(attr.getX(i)) > 13 || Math.abs(attr.getZ(i)) > 10) {
+        const resetY = maxY + Math.random() * 1.8;
+        const x = -12 + Math.random() * 24;
+        const z = -9 + Math.random() * 18;
+        const length = 0.42 + Math.random() * 0.72;
+        attr.setXYZ(i, x, resetY, z);
+        attr.setXYZ(i + 1, x + 0.28, resetY - length, z - 0.08);
+      }
+    }
+    attr.needsUpdate = true;
+
+    this._updateLightning(dt);
+  }
+
+  _updateLightning(dt) {
+    const weather = this._weather;
+    if (!weather?.lightning) return;
+
+    weather.lightningTimer = (weather.lightningTimer ?? 0) - dt;
+    if (weather.lightningTimer <= 0) {
+      weather.lightningTimer = 3.8 + Math.random() * 6.5;
+      weather.flashTime = 0.12 + Math.random() * 0.08;
+      weather.flashPulse = Math.random() > 0.68 ? 2 : 1;
+    }
+
+    if ((weather.flashTime ?? 0) > 0) {
+      weather.flashTime -= dt;
+      const flicker = weather.flashPulse === 2 && weather.flashTime < 0.08 ? 0.45 : 1;
+      const strength = Math.max(0, weather.flashTime / 0.18) * flicker;
+      weather.lightning.material.opacity = 0.25 + strength * 0.85;
+      weather.flashLight.intensity = 0.6 + strength * 5.2;
+      weather.flashFill.intensity = 0.15 + strength * 1.15;
+      this.scene.background = new THREE.Color(0x081526).lerp(new THREE.Color(0x9fb9ff), strength * 0.32);
+      return;
+    }
+
+    weather.lightning.material.opacity = 0.0;
+    weather.flashLight.intensity = 0.0;
+    weather.flashFill.intensity = 0.0;
+    const stage = STAGE_DEFS[this.stageId];
+    const background = stage?.environment?.background ?? 0x111118;
+    this.scene.background = new THREE.Color(background);
+  }
+
   _clearGroup() {
+    this._weather = null;
     while (this.group.children.length) {
       const child = this.group.children.pop();
       this._disposeObject(child);
@@ -90,6 +154,7 @@ export class Arena {
     root.add(model);
     this._addModelStageLighting(root, stage);
     this._addModelStageBackdrop(root, stage);
+    this._addModelStageAtmosphere(root, stage);
     this.group.add(root);
     this._addPitFloor(stage);
     if (stage.showBoundaryMarkers !== false) {
@@ -215,6 +280,287 @@ export class Arena {
     root.add(sky);
   }
 
+  _addModelStageAtmosphere(root, stage) {
+    if (stage.atmosphere?.type === 'mountaintop_clouds') {
+      this._addMountaintopClouds(root, stage);
+      return;
+    }
+    if (stage.atmosphere?.type !== 'moonlit_bamboo') return;
+
+    const atmosphere = stage.atmosphere;
+    const shafts = new THREE.Group();
+    shafts.name = `${stage.id}_moonlight_shafts`;
+    root.add(shafts);
+
+    const shaftMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.shaftColor ?? 0xb9d8ff,
+      map: this._makeMoonlightShaftTexture(),
+      transparent: true,
+      opacity: atmosphere.shaftOpacity ?? 0.14,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const shaftDefs = [
+      [-4.0, 4.8, -5.8, 1.15, 7.1, -0.58],
+      [-1.1, 5.1, -6.5, 0.9, 7.8, -0.46],
+      [2.9, 4.9, -6.1, 1.25, 6.9, -0.38],
+      [4.9, 4.4, -3.2, 0.7, 5.8, -0.52],
+      [-5.2, 4.6, -2.8, 0.75, 6.2, -0.62],
+    ];
+    for (const [x, y, z, width, height, tilt] of shaftDefs) {
+      const shaft = new THREE.Mesh(new THREE.PlaneGeometry(width, height), shaftMat.clone());
+      shaft.name = `${stage.id}_moonlight_shaft`;
+      shaft.position.set(x, y, z);
+      shaft.rotation.set(tilt, -0.34, -0.12);
+      shaft.renderOrder = -1;
+      shafts.add(shaft);
+    }
+
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xc8e2ff,
+      transparent: true,
+      opacity: 0.035,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(5.6, 32), glowMat);
+    glow.name = `${stage.id}_moonlit_ground_glow`;
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.y = 0.035;
+    root.add(glow);
+  }
+
+  _makeMoonlightShaftTexture() {
+    return this._makeCanvasTexture(128, 512, (ctx, width, height) => {
+      const horizontal = ctx.createLinearGradient(0, 0, width, 0);
+      horizontal.addColorStop(0, 'rgba(255,255,255,0)');
+      horizontal.addColorStop(0.42, 'rgba(255,255,255,0.45)');
+      horizontal.addColorStop(0.5, 'rgba(255,255,255,0.65)');
+      horizontal.addColorStop(0.58, 'rgba(255,255,255,0.45)');
+      horizontal.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = horizontal;
+      ctx.fillRect(0, 0, width, height);
+
+      const fade = ctx.createLinearGradient(0, 0, 0, height);
+      fade.addColorStop(0, 'rgba(0,0,0,0)');
+      fade.addColorStop(0.18, 'rgba(0,0,0,0.78)');
+      fade.addColorStop(0.72, 'rgba(0,0,0,0.44)');
+      fade.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'source-over';
+
+      const rand = this._makeRand(0x5a7bb1);
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 22; i++) {
+        ctx.fillStyle = `rgba(0,0,0,${0.025 + rand() * 0.035})`;
+        ctx.fillRect(rand() * width, rand() * height, 2 + rand() * 14, height * (0.12 + rand() * 0.32));
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
+  _addMountaintopClouds(root, stage) {
+    const atmosphere = stage.atmosphere;
+    const cloudGroup = new THREE.Group();
+    cloudGroup.name = `${stage.id}_cloud_sea`;
+    root.add(cloudGroup);
+    this._addMountaintopWeather(cloudGroup, stage);
+
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.cloudColor ?? 0xf0f3f4,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.cloudOpacity ?? 0.55,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x1a2330,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    const cloudDefs = [
+      [-9.0, -7.2, 5.2, 1.2, 0.08],
+      [-5.2, -8.8, 4.0, 0.95, -0.04],
+      [-0.8, -9.4, 5.8, 1.25, 0.03],
+      [4.4, -8.4, 4.6, 1.0, -0.12],
+      [8.6, -6.8, 5.0, 1.1, 0.1],
+      [-10.4, 0.8, 4.4, 0.9, -0.08],
+      [10.2, 1.0, 4.9, 1.0, 0.07],
+      [-6.4, 7.6, 4.8, 1.05, 0.02],
+      [0.0, 8.6, 5.4, 1.2, -0.05],
+      [6.5, 7.4, 4.7, 1.05, 0.08],
+    ];
+    for (const [x, z, radius, scale, rot] of cloudDefs) {
+      const cloud = new THREE.Mesh(new THREE.CircleGeometry(radius, 28), cloudMat.clone());
+      cloud.name = `${stage.id}_low_cloud`;
+      cloud.position.set(x, atmosphere.cloudY ?? -2.2, z);
+      cloud.rotation.x = -Math.PI / 2;
+      cloud.rotation.z = rot;
+      cloud.scale.set(1.45 * scale, 0.62 * scale, 1);
+      cloud.renderOrder = -2;
+      cloudGroup.add(cloud);
+
+      const shade = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.72, 24), shadowMat.clone());
+      shade.name = `${stage.id}_low_cloud_shadow`;
+      shade.position.set(x + radius * 0.18, (atmosphere.cloudY ?? -2.2) - 0.04, z - radius * 0.08);
+      shade.rotation.copy(cloud.rotation);
+      shade.scale.set(1.28 * scale, 0.48 * scale, 1);
+      shade.renderOrder = -3;
+      cloudGroup.add(shade);
+    }
+
+    const bankMat = cloudMat.clone();
+    bankMat.opacity = Math.min(0.55, (atmosphere.cloudOpacity ?? 0.55) * 0.72);
+    const bankDefs = [
+      [-7.8, -0.35, 6.8, 5.0, 1.05, -0.28],
+      [-2.8, -0.15, 8.9, 4.2, 0.82, -0.08],
+      [3.4, -0.22, 8.4, 4.8, 0.95, 0.14],
+      [8.6, -0.4, 5.4, 4.5, 0.9, 0.32],
+      [-9.2, -0.55, -1.7, 4.1, 0.8, 0.5],
+      [9.4, -0.48, -1.2, 4.0, 0.78, -0.48],
+    ];
+    for (const [x, y, z, sx, sy, rot] of bankDefs) {
+      const bank = new THREE.Mesh(new THREE.CircleGeometry(1, 32), bankMat.clone());
+      bank.name = `${stage.id}_distant_cloud_bank`;
+      bank.position.set(x, y, z);
+      bank.scale.set(sx, sy, 1);
+      bank.rotation.set(-0.06, 0, rot);
+      bank.renderOrder = -1;
+      cloudGroup.add(bank);
+    }
+
+    const haze = new THREE.Mesh(
+      new THREE.CircleGeometry(18, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0x263547,
+        transparent: true,
+        opacity: 0.16,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    haze.name = `${stage.id}_distant_haze_disk`;
+    haze.rotation.x = -Math.PI / 2;
+    haze.position.y = (atmosphere.cloudY ?? -2.2) - 0.1;
+    haze.renderOrder = -4;
+    cloudGroup.add(haze);
+  }
+
+  _addMountaintopWeather(root, stage) {
+    const rand = this._makeRand(this._hashString(`${stage.id}:storm_rain`));
+    const rainPositions = [];
+    for (let i = 0; i < 920; i++) {
+      const x = (rand() - 0.5) * 24;
+      const z = (rand() - 0.5) * 18;
+      const y = -0.8 + rand() * 10.8;
+      const length = 0.42 + rand() * 0.72;
+      rainPositions.push(x, y, z, x + 0.28, y - length, z - 0.08);
+    }
+    const rainGeo = new THREE.BufferGeometry();
+    rainGeo.setAttribute('position', new THREE.Float32BufferAttribute(rainPositions, 3));
+    rainGeo.getAttribute('position').setUsage(THREE.DynamicDrawUsage);
+    const rain = new THREE.LineSegments(
+      rainGeo,
+      new THREE.LineBasicMaterial({
+        color: 0x8fb3d6,
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+        fog: true,
+      }),
+    );
+    rain.name = `${stage.id}_slant_rain`;
+    rain.renderOrder = 2;
+    root.add(rain);
+
+    const lightningPoints = [
+      new THREE.Vector3(7.6, 7.0, -10.5),
+      new THREE.Vector3(7.1, 5.9, -10.3),
+      new THREE.Vector3(7.5, 5.15, -10.45),
+      new THREE.Vector3(6.85, 4.25, -10.2),
+    ];
+    const lightning = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(lightningPoints),
+      new THREE.LineBasicMaterial({
+        color: 0xb8d1ff,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+        fog: false,
+      }),
+    );
+    lightning.name = `${stage.id}_distant_lightning`;
+    lightning.renderOrder = 3;
+    root.add(lightning);
+
+    const flashLight = new THREE.DirectionalLight(0xbdd7ff, 0);
+    flashLight.name = `${stage.id}_lightning_flash_key`;
+    flashLight.position.set(7, 9, -8);
+    root.add(flashLight);
+
+    const flashFill = new THREE.AmbientLight(0x8fb8ff, 0);
+    flashFill.name = `${stage.id}_lightning_flash_fill`;
+    root.add(flashFill);
+
+    this._weather = {
+      rain,
+      rainSpeed: 9.5,
+      rainWindX: 3.2,
+      rainWindZ: -0.7,
+      minY: -1.6,
+      maxY: 9.8,
+      lightning,
+      flashLight,
+      flashFill,
+      lightningTimer: 1.6,
+      flashTime: 0,
+      flashPulse: 1,
+    };
+  }
+
+  _makeSoftCloudTexture() {
+    return this._makeCanvasTexture(256, 256, (ctx, width, height) => {
+      const gradient = ctx.createRadialGradient(
+        width * 0.5,
+        height * 0.5,
+        width * 0.05,
+        width * 0.5,
+        height * 0.5,
+        width * 0.5,
+      );
+      gradient.addColorStop(0, 'rgba(255,255,255,0.78)');
+      gradient.addColorStop(0.42, 'rgba(255,255,255,0.58)');
+      gradient.addColorStop(0.72, 'rgba(255,255,255,0.22)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+
+      const rand = this._makeRand(0xc10dd5);
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 18; i++) {
+        const x = rand() * width;
+        const y = rand() * height;
+        const r = 12 + rand() * 38;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(0,0,0,0.12)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
   async _addModelStageDecor(root, stage, token) {
     if (!stage.decorModels?.length) return;
 
@@ -234,14 +580,45 @@ export class Arena {
   }
 
   _addDecorScatter(root, source, decor, stage) {
-    if (decor.mode !== 'ring') return;
-
     source.traverse((child) => {
       if (!child.isMesh) return;
       child.castShadow = true;
       child.receiveShadow = true;
+      if (decor.materialTint || decor.materialOpacity != null) {
+        const wasArray = Array.isArray(child.material);
+        const materials = wasArray ? child.material : [child.material];
+        const cloned = materials.map((material) => {
+          const clone = material.clone();
+          if (decor.materialTint) clone.color?.setHex(decor.materialTint);
+          if (decor.materialStyle === 'matte') {
+            clone.roughness = 1;
+            clone.metalness = 0;
+            clone.emissive?.setHex(0x000000);
+            clone.envMap = null;
+            clone.map = null;
+            clone.normalMap = null;
+            clone.roughnessMap = null;
+            clone.metalnessMap = null;
+          }
+          if (decor.materialOpacity != null) {
+            clone.transparent = true;
+            clone.opacity = decor.materialOpacity;
+            clone.depthWrite = false;
+          }
+          clone.fog = true;
+          return clone;
+        });
+        child.material = wasArray ? cloned : cloned[0];
+      }
     });
     source.updateMatrixWorld(true);
+
+    if (decor.mode === 'placements') {
+      this._addDecorPlacements(root, source, decor, stage);
+      return;
+    }
+    if (decor.mode !== 'ring') return;
+
     const sourceBox = new THREE.Box3().setFromObject(source);
     const rand = this._makeRand(this._hashString(`${stage.id}:${decor.path}:${decor.radius}:${decor.count}`));
     const count = decor.count ?? 1;
@@ -267,6 +644,27 @@ export class Arena {
       clone.rotation.y = decor.faceCenter
         ? -angle + Math.PI / 2 + (rand() - 0.5) * rotationJitter
         : rand() * Math.PI * 2;
+      root.add(clone);
+    }
+  }
+
+  _addDecorPlacements(root, source, decor, stage) {
+    for (let i = 0; i < (decor.placements?.length ?? 0); i++) {
+      const placement = decor.placements[i];
+      const clone = source.clone(true);
+      clone.name = `${stage.id}_decor_placement_${i}`;
+      const scale = placement.scale ?? 1;
+      if (Array.isArray(scale)) {
+        clone.scale.set(scale[0] ?? 1, scale[1] ?? 1, scale[2] ?? 1);
+      } else {
+        clone.scale.setScalar(scale);
+      }
+      clone.position.set(...(placement.position ?? [0, 0, 0]));
+      clone.rotation.set(
+        placement.rotationX ?? 0,
+        placement.rotationY ?? 0,
+        placement.rotationZ ?? 0,
+      );
       root.add(clone);
     }
   }

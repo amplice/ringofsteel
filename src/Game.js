@@ -934,6 +934,7 @@ export class Game {
     }
 
     this.environment.update(dt);
+    this.arena?.update(dt);
     this.particles.update(dt);
   }
 

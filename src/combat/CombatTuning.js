@@ -1,7 +1,7 @@
 import { WeaponType } from '../core/Constants.js';
 
 export const HURT_CYLINDER = Object.freeze({
-  radius: 0.36,
+  radius: 0.30,
   height: 1.8,
 });
 

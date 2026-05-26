@@ -5,16 +5,11 @@ import { FighterSim } from '../src/sim/FighterSim.js';
 import { MatchSim } from '../src/sim/MatchSim.js';
 import { createControllerFromSpec, resetControllerInstance } from '../src/ai/ControllerSpec.js';
 import { FRAME_DURATION, ROUNDS_TO_WIN } from '../src/core/Constants.js';
+import { HARD_AI_MATCHUP_PROFILE_MAP, resolveHardAIProfile } from '../src/ai/HardAIMatchupProfiles.js';
 
 const DEFAULT_REPEATS = 10;
 const MAX_MATCH_ROUNDS = 7;
 const DEFAULT_ROUND_SECONDS = 180;
-
-const PLANNER_PROFILES = Object.freeze({
-  spearman: 'spearman_heavy_bully',
-  ronin: 'ronin_aggressor',
-  knight: 'knight_sentinel',
-});
 
 function parseArgs(argv) {
   const options = {};
@@ -33,14 +28,30 @@ function numberOption(value, fallback) {
 }
 
 function parseProfilesOption(value) {
-  if (!value) return { ...PLANNER_PROFILES };
-  const overrides = { ...PLANNER_PROFILES };
+  if (!value) return null;
+  const overrides = {};
   for (const pair of value.split(',')) {
-    const [charId, profile] = pair.split(':');
-    if (!charId || !profile) continue;
-    overrides[charId] = profile;
+    const [charId, opponentOrProfile, maybeProfile] = pair.split(':');
+    if (!charId || !opponentOrProfile) continue;
+    if (maybeProfile) {
+      overrides[charId] = {
+        ...(typeof overrides[charId] === 'object' ? overrides[charId] : {}),
+        [opponentOrProfile]: maybeProfile,
+      };
+    } else {
+      overrides[charId] = opponentOrProfile;
+    }
   }
   return overrides;
+}
+
+function resolvePlannerProfile(charId, opponentCharId, plannerProfiles) {
+  const profile = plannerProfiles?.[charId];
+  if (typeof profile === 'string') return profile;
+  if (profile && typeof profile === 'object') {
+    return profile[opponentCharId] ?? profile.default ?? resolveHardAIProfile(charId, opponentCharId);
+  }
+  return resolveHardAIProfile(charId, opponentCharId);
 }
 
 function ensureDir(filePath) {
@@ -68,7 +79,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController, ro
   const fighter2 = createFighter(1, rightChar);
   const sim = new MatchSim({ fighter1, fighter2 });
 
-  sim.startRound(undefined, { swapSides: roundNumber % 2 === 0 });
+  sim.startRound();
   resetController(leftController);
   resetController(rightController);
 
@@ -110,6 +121,8 @@ function runMatch(leftChar, rightChar, leftControllerFactory, rightControllerFac
 function initRow(label) {
   return {
     label,
+    plannerProfile: null,
+    opponentProfile: null,
     wins: 0,
     losses: 0,
     draws: 0,
@@ -125,13 +138,15 @@ function applyOutcome(row, result, seat) {
 }
 
 function evaluatePlannerChar(charId, opponents, repeats, plannerProfiles) {
-  const plannerProfile = plannerProfiles[charId];
   const rows = [];
 
   for (const opponentCharId of opponents) {
     if (opponentCharId === charId) continue;
     const row = initRow(`${opponentCharId}:planner`);
-    const opponentProfile = plannerProfiles[opponentCharId];
+    const plannerProfile = resolvePlannerProfile(charId, opponentCharId, plannerProfiles);
+    const opponentProfile = resolvePlannerProfile(opponentCharId, charId, plannerProfiles);
+    row.plannerProfile = plannerProfile;
+    row.opponentProfile = opponentProfile;
 
     for (let repeat = 0; repeat < repeats; repeat++) {
       const left = runMatch(
@@ -163,7 +178,6 @@ function evaluatePlannerChar(charId, opponents, repeats, plannerProfiles) {
 
   return {
     charId,
-    plannerProfile,
     rows,
     totals,
   };
@@ -182,7 +196,7 @@ const payload = {
   generatedAt: new Date().toISOString(),
   repeats,
   roundSeconds,
-  plannerProfiles,
+  plannerProfiles: plannerProfiles ?? HARD_AI_MATCHUP_PROFILE_MAP,
   chars,
   opponents,
   results,

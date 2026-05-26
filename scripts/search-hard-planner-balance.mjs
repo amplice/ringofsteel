@@ -10,7 +10,8 @@ const DEFAULT_ROUND_SECONDS = 180;
 const PROFILE_OPTIONS = Object.freeze({
   spearman: ['spearman_evasive', 'spearman_heavy_bully', 'spearman_aggressor', 'spearman_hard_line'],
   ronin: ['ronin_evasive', 'ronin_aggressor', 'ronin_lancer', 'ronin_duelist', 'ronin_hard_duelist'],
-  knight: ['knight_duelist', 'knight_bulwark', 'knight_sentinel', 'knight_hard_guard'],
+  knight: ['knight_duelist', 'knight_bulwark', 'knight_balanced_guard', 'knight_sentinel', 'knight_hard_guard'],
+  huscarl: ['huscarl_raider', 'scrapper', 'skirmisher', 'aggressor'],
 });
 
 function parseArgs(argv) {
@@ -46,7 +47,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController, ro
   const fighter2 = createFighter(1, rightChar);
   const sim = new MatchSim({ fighter1, fighter2 });
 
-  sim.startRound(undefined, { swapSides: roundNumber % 2 === 0 });
+  sim.startRound();
   resetController(leftController);
   resetController(rightController);
 
@@ -128,11 +129,14 @@ const repeats = numberOption(options.repeats, 4);
 const topn = numberOption(options.topn, 12);
 const roundSeconds = numberOption(options['round-seconds'], DEFAULT_ROUND_SECONDS);
 const maxRoundFrames = Math.max(60, Math.round(roundSeconds / FRAME_DURATION));
-const chars = ['spearman', 'ronin', 'knight'];
+const chars = ['spearman', 'ronin', 'knight', 'huscarl'];
 const pairs = [
   ['spearman', 'ronin'],
   ['spearman', 'knight'],
+  ['spearman', 'huscarl'],
   ['ronin', 'knight'],
+  ['ronin', 'huscarl'],
+  ['knight', 'huscarl'],
 ];
 
 const ranked = [];
@@ -140,10 +144,12 @@ const ranked = [];
 for (const spearmanProfile of PROFILE_OPTIONS.spearman) {
   for (const roninProfile of PROFILE_OPTIONS.ronin) {
     for (const knightProfile of PROFILE_OPTIONS.knight) {
+      for (const huscarlProfile of PROFILE_OPTIONS.huscarl) {
       const profiles = {
         spearman: spearmanProfile,
         ronin: roninProfile,
         knight: knightProfile,
+        huscarl: huscarlProfile,
       };
 
       const results = pairs.map(([leftChar, rightChar]) => ({
@@ -156,6 +162,7 @@ for (const spearmanProfile of PROFILE_OPTIONS.spearman) {
         results,
         ...scoreCombo(results),
       });
+      }
     }
   }
 }

@@ -12,6 +12,7 @@ import { ParticleSystem } from './vfx/ParticleSystem.js';
 import { ScreenEffects } from './vfx/ScreenEffects.js';
 import { AIController } from './ai/AIController.js';
 import { PlannerAIController } from './ai/PlannerAIController.js';
+import { DEFAULT_HARD_AI_PROFILES, resolveHardAIProfile } from './ai/HardAIMatchupProfiles.js';
 import { HumanAIMatchRecorder } from './ai/HumanAIMatchRecorder.js';
 import { DebugOverlay } from './debug/DebugOverlay.js';
 import { UIManager } from './ui/UIManager.js';
@@ -32,22 +33,22 @@ const AI_DIFFICULTY_PROFILE_MAP = Object.freeze({
   spearman: Object.freeze({
     easy: 'spearman_heavy_bully',
     medium: 'spearman_evasive',
-    hard: 'spearman_heavy_bully',
+    hard: DEFAULT_HARD_AI_PROFILES.spearman,
   }),
   ronin: Object.freeze({
     easy: 'ronin_lancer',
     medium: 'ronin_duelist',
-    hard: 'ronin_aggressor',
+    hard: DEFAULT_HARD_AI_PROFILES.ronin,
   }),
   knight: Object.freeze({
     easy: 'knight_bulwark',
     medium: 'knight_duelist',
-    hard: 'knight_sentinel',
+    hard: DEFAULT_HARD_AI_PROFILES.knight,
   }),
   huscarl: Object.freeze({
     easy: 'scrapper',
     medium: 'huscarl_raider',
-    hard: 'huscarl_raider',
+    hard: DEFAULT_HARD_AI_PROFILES.huscarl,
   }),
 });
 
@@ -232,13 +233,13 @@ export class Game {
 
     // AI
     if (this.mode === 'watch') {
-      this.aiController1 = this._createCpuController(p1.charDef.id, this.difficulty);
-      this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty);
+      this.aiController1 = this._createCpuController(p1.charDef.id, this.difficulty, p2.charDef.id);
+      this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
       this.aiMatchRecorder.discard();
     } else if (this.mode === 'ai') {
       this.aiController1 = null;
-      this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty);
+      this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
       this.aiMatchRecorder.startMatch({
         mode: 'ai',
@@ -299,8 +300,7 @@ export class Game {
     this.stateTimer = 0;
     this._resetCombatPresentation();
 
-    const swapSides = this._shouldSwapRoundSides();
-    this.matchSim?.startRound(FIGHT_START_DISTANCE, { swapSides });
+    this.matchSim?.startRound(FIGHT_START_DISTANCE);
     this.aiController1?.reset();
     this.aiController2?.reset();
     this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
@@ -313,7 +313,6 @@ export class Game {
         roundNumber: this.currentRound,
         fighter1: this.fighter1,
         fighter2: this.fighter2,
-        swappedSides: swapSides,
         aiMeta: this.aiController?.getDebugSnapshot?.() ?? null,
         frameCount: this.matchSim?.frameCount ?? 0,
       });
@@ -322,14 +321,15 @@ export class Game {
     this.input.clearBuffers();
   }
 
-  _getAIDifficultyProfile(charId, difficulty) {
+  _getAIDifficultyProfile(charId, difficulty, opponentCharId = null) {
+    if (difficulty === 'hard') return resolveHardAIProfile(charId, opponentCharId);
     const charProfiles = AI_DIFFICULTY_PROFILE_MAP[charId];
     if (charProfiles && charProfiles[difficulty]) return charProfiles[difficulty];
     return difficulty;
   }
 
-  _createCpuController(charId, difficulty) {
-    const aiProfile = this._getAIDifficultyProfile(charId, difficulty);
+  _createCpuController(charId, difficulty, opponentCharId = null) {
+    const aiProfile = this._getAIDifficultyProfile(charId, difficulty, opponentCharId);
     return difficulty === 'hard'
       ? new PlannerAIController(aiProfile)
       : new AIController(aiProfile);
@@ -381,11 +381,6 @@ export class Game {
     this.aiController1 = null;
     this.aiController2 = null;
     this.gameAudio.resetFighterState([]);
-  }
-
-  _shouldSwapRoundSides() {
-    if (this.mode === 'online') return false;
-    return this.currentRound % 2 === 0;
   }
 
   async _startOnlineSession(config) {

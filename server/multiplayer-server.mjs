@@ -71,7 +71,7 @@ class MatchRoom {
     const fighter1 = new FighterSim(0, p1.characterId, CHARACTER_DEFS[p1.characterId]);
     const fighter2 = new FighterSim(1, p2.characterId, CHARACTER_DEFS[p2.characterId]);
     this.sim = new MatchSim({ fighter1, fighter2 });
-    this.sim.startRound(FIGHT_START_DISTANCE, { swapSides: this.roundNumber % 2 === 0 });
+    this.sim.startRound(FIGHT_START_DISTANCE);
     this.lobby.phase = 'match_running';
     metrics.totalMatchesStarted++;
     log('match_started', {

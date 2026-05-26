@@ -61,7 +61,7 @@ function runSingleRound(leftChar, rightChar, leftController, rightController, ro
   const fighter2 = createFighter(1, rightChar);
   const sim = new MatchSim({ fighter1, fighter2 });
 
-  sim.startRound(undefined, { swapSides: roundNumber % 2 === 0 });
+  sim.startRound();
   resetController(leftController);
   resetController(rightController);
 

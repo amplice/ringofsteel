@@ -75,6 +75,11 @@ export const CLASH_PUSHBACK_FRAMES = 16;
 // Knockback slide speed (units/sec) — fighters slide apart during stun
 export const KNOCKBACK_SLIDE_SPEED = 1.88;
 export const BLOCK_KNOCKBACK_SLIDE_SPEED = 3.6;
+export const WALL_BOUNCE_STUN_FRAMES = 60;
+export const WALL_BOUNCE_INSET = 0.3;
+export const WALL_BOUNCE_INWARD_DISTANCE = 0.42;
+export const WALL_BOUNCE_COOLDOWN_FRAMES = 18;
+export const WALL_BOUNCE_HITSTOP_FRAMES = 4;
 
 // Heavy attack advantage multipliers.
 // Stun and displacement are separated so they can be tuned independently.

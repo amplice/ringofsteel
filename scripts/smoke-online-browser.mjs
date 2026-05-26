@@ -61,7 +61,7 @@ async function waitForGameReady(page) {
       const game = window.__ringOfSteelGame;
       const expectedCharacters = Object.keys(CHARACTER_DEFS);
       if (!expectedCharacters.length) return false;
-      return expectedCharacters.every((charId) => game?._charCache?.[charId]);
+      return Boolean(game?.clock?.started) && expectedCharacters.every((charId) => game?._charCache?.[charId]);
     });
     if (ready) return;
     await delay(200);
@@ -137,6 +137,11 @@ async function readGameState(page) {
       hasFighter2: Boolean(game?.fighter2),
       fighter1State: game?.fighter1?.state ?? null,
       fighter2State: game?.fighter2?.state ?? null,
+      frameCount: game?.clock?.frameCount ?? null,
+      stateTimer: game?.stateTimer ?? null,
+      timeScale: game?.clock?.timeScale ?? null,
+      steps: game?._lastFrameStats?.steps ?? null,
+      hitstopFrames: game?.screenEffects?.hitstopFrames ?? null,
       onlineSlot: game?.onlineLocalSlot ?? null,
       onlineLobbyCode: game?.onlineSession?.lobbyCode ?? null,
       lastSnapshotFrame: game?.onlineSession?.lastSnapshot?.frameCount ?? null,
@@ -145,41 +150,29 @@ async function readGameState(page) {
 }
 
 async function dispatchQuickAttack(page) {
-  await page.evaluate(() => {
-    const game = window.__ringOfSteelGame;
-    const session = game?.onlineSession;
-    const baseFrame = session?.lastSnapshot?.frameCount ?? 0;
-    session?.sendInputFrame(baseFrame + 1, {
-      frame: baseFrame + 1,
-      held: {
-        left: false,
-        right: false,
-        sidestepUp: false,
-        sidestepDown: false,
-        block: false,
-      },
-      pressed: {
-        quick: true,
-        heavy: false,
-        thrust: false,
-        sidestepUp: false,
-        sidestepDown: false,
-        backstep: false,
-        block: false,
-      },
-    });
-  });
+  await page.keyboard.press('KeyJ');
 }
 
 async function waitForFighterState(page, fighterKey, expectedState, timeoutMs = 5000) {
-  await page.waitForFunction(
-    ({ fighterKey, expectedState }) => {
-      const game = window.__ringOfSteelGame;
-      return game?.[fighterKey]?.state === expectedState;
-    },
-    { timeout: timeoutMs },
-    { fighterKey, expectedState },
-  );
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await readGameState(page);
+    if (state[`${fighterKey}State`] === expectedState) return;
+    await delay(50);
+  }
+  const state = await readGameState(page);
+  throw new Error(`Timed out waiting for ${fighterKey} '${expectedState}': ${JSON.stringify(state)}`);
+}
+
+async function waitForGameState(page, expectedState, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await readGameState(page);
+    if (state.state === expectedState) return;
+    await delay(100);
+  }
+  const state = await readGameState(page);
+  throw new Error(`Timed out waiting for game state '${expectedState}': ${JSON.stringify(state)}`);
 }
 
 async function run() {
@@ -198,6 +191,11 @@ async function run() {
     browser = await puppeteer.launch({
       headless: true,
       protocolTimeout: 240000,
+      args: [
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
     });
     const hostPage = await browser.newPage();
     const guestPage = await browser.newPage();
@@ -213,15 +211,17 @@ async function run() {
     ]);
 
     console.log('[browser-smoke] waiting for game ready');
-    await Promise.all([
-      waitForGameReady(hostPage),
-      waitForGameReady(guestPage),
-    ]);
+    await hostPage.bringToFront();
+    await waitForGameReady(hostPage);
+    await guestPage.bringToFront();
+    await waitForGameReady(guestPage);
 
     console.log('[browser-smoke] creating host lobby');
+    await hostPage.bringToFront();
     const code = await configureOnlineHost(hostPage, 'spearman');
     console.log(`[browser-smoke] host code ${code}`);
     console.log('[browser-smoke] joining guest');
+    await guestPage.bringToFront();
     await configureOnlineGuest(guestPage, 'ronin', code);
 
     console.log('[browser-smoke] waiting for HUD');
@@ -230,18 +230,26 @@ async function run() {
       waitForHud(guestPage),
     ]);
 
+    console.log('[browser-smoke] waiting for fighting state');
+    await hostPage.bringToFront();
+    await waitForGameState(hostPage, 'fighting');
+    await guestPage.bringToFront();
+    await waitForGameState(guestPage, 'fighting');
+
     console.log('[browser-smoke] sending host quick attack');
+    await hostPage.bringToFront();
+    const attackSeen = Promise.all([
+      waitForFighterState(hostPage, 'fighter1', 'attack_active'),
+      waitForFighterState(guestPage, 'fighter1', 'attack_active'),
+    ]);
     await dispatchQuickAttack(hostPage);
-    await delay(750);
+    await attackSeen;
+    await delay(150);
     console.log('[browser-smoke] post-input state');
     console.log(JSON.stringify({
       host: await readGameState(hostPage),
       guest: await readGameState(guestPage),
     }, null, 2));
-    await Promise.all([
-      waitForFighterState(hostPage, 'fighter1', 'attack_active'),
-      waitForFighterState(guestPage, 'fighter1', 'attack_active'),
-    ]);
 
     const [hostState, guestState] = await Promise.all([
       readGameState(hostPage),

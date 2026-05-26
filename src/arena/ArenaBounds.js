@@ -19,6 +19,10 @@ export function getArenaBounds(stageId = currentArenaStage) {
   return getStageBounds(stageId);
 }
 
+export function getStageBoundaryMode(stageId = currentArenaStage) {
+  return getStageBounds(stageId).boundary ?? 'cliff';
+}
+
 export function getStageCameraBounds(stageId = currentArenaStage) {
   return STAGE_DEFS[normalizeStageId(stageId)].camera ?? null;
 }
@@ -43,6 +47,28 @@ export function getArenaEdgeDistance(x, z, stageId = null) {
   const bounds = getStageBounds(stageId ?? currentArenaStage);
   if (bounds.type === 'circle') return bounds.radius - Math.hypot(x, z);
   return Infinity;
+}
+
+export function getArenaBoundaryContact(x, z, stageId = null, inset = 0) {
+  const bounds = getStageBounds(stageId ?? currentArenaStage);
+  if (bounds.type !== 'circle') return null;
+
+  const limit = Math.max(0.2, bounds.radius - inset);
+  const dist = Math.hypot(x, z);
+  if (dist <= limit) return null;
+
+  const normalX = dist > 1e-6 ? x / dist : 1;
+  const normalZ = dist > 1e-6 ? z / dist : 0;
+  return {
+    boundary: bounds.boundary ?? 'cliff',
+    radius: bounds.radius,
+    limit,
+    penetration: dist - limit,
+    normalX,
+    normalZ,
+    pointX: normalX * bounds.radius,
+    pointZ: normalZ * bounds.radius,
+  };
 }
 
 export function clampPointToArena(pos, stageId = null, inset = 0.3) {

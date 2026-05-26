@@ -445,7 +445,7 @@ export class Game {
       if (requestedCode) {
         await session.joinLobby(requestedCode, config.p1Char);
       } else {
-        await session.createLobby(config.p1Char);
+        await session.createLobby(config.p1Char, 'private', this.currentStageId);
       }
       session.setReady(true);
       this.ui.select.setOnlineBusy(false);
@@ -479,7 +479,7 @@ export class Game {
       this.onlineMatchPlayers = null;
       this._bindOnlineSession(session);
       await session.connect();
-      await session.createLobby(config.p1Char, 'public');
+      await session.createLobby(config.p1Char, 'public', this.currentStageId);
       session.setReady(true);
       this.ui.select.setOnlineBusy(false);
       this.ui.select.setOnlineLocked(true);
@@ -510,7 +510,7 @@ export class Game {
       this.onlineMatchPlayers = null;
       this._bindOnlineSession(session);
       await session.connect();
-      await session.quickMatch(config.p1Char);
+      await session.quickMatch(config.p1Char, this.currentStageId);
       session.setReady(true);
       this.ui.select.setOnlineBusy(false);
       this.ui.select.setOnlineLocked(true);
@@ -611,6 +611,9 @@ export class Game {
 
   _handleOnlineLobbyState(detail) {
     if (!detail) return;
+    if (detail.stageId) {
+      this.currentStageId = normalizeStageId(detail.stageId);
+    }
     this.onlineMatchPlayers = detail.players ?? null;
     this.ui.select.setOnlineLobbyInfo(detail);
     const self = detail.players?.find((player) => player.self);
@@ -644,6 +647,9 @@ export class Game {
 
   async _handleOnlineMatchStart(detail) {
     if (!detail?.players) return;
+    if (detail.stageId) {
+      this.currentStageId = normalizeStageId(detail.stageId);
+    }
     this.onlineMatchPlayers = detail.players;
     this.currentRound = detail.roundNumber ?? this.currentRound;
     if (Array.isArray(detail.scores)) {
@@ -1056,6 +1062,23 @@ export class Game {
 
   _handleSimEvent(event) {
     this.gameAudio.handleCombatEvent(event);
+    if (event.type === 'wall_bounce') {
+      const contactPoint = new THREE.Vector3(
+        event.contactPoint?.x ?? 0,
+        event.contactPoint?.y ?? 1,
+        event.contactPoint?.z ?? 0,
+      );
+      const normal = new THREE.Vector3(
+        event.normal?.x ?? 0,
+        event.normal?.y ?? 0,
+        event.normal?.z ?? -1,
+      ).normalize();
+      this.particles.emitWallBounce(contactPoint, normal, 1.15);
+      this.particles.emitWhiteImpact(contactPoint, normal, 8);
+      this.cameraController.shake(0.12);
+      this.screenEffects.startHitstop(event.hitstopFrames ?? 4);
+      return;
+    }
     if (event.type === 'ring_out') return;
     if (event.type !== 'combat_result') return;
 

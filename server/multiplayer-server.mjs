@@ -18,6 +18,7 @@ import {
   ServerMessageType,
   createLobbyListPayload,
   createLobbyStatePayload,
+  sanitizeStageId,
   sanitizeInputFrame,
   validateClientMessage,
 } from '../src/net/Protocol.js';
@@ -70,12 +71,13 @@ class MatchRoom {
     const [p1, p2] = this.lobby.players;
     const fighter1 = new FighterSim(0, p1.characterId, CHARACTER_DEFS[p1.characterId]);
     const fighter2 = new FighterSim(1, p2.characterId, CHARACTER_DEFS[p2.characterId]);
-    this.sim = new MatchSim({ fighter1, fighter2 });
+    this.sim = new MatchSim({ fighter1, fighter2, stageId: this.lobby.stageId });
     this.sim.startRound(FIGHT_START_DISTANCE);
     this.lobby.phase = 'match_running';
     metrics.totalMatchesStarted++;
     log('match_started', {
       code: this.lobby.code,
+      stageId: this.lobby.stageId,
       roundNumber: this.roundNumber,
       players: this.lobby.players.map((player) => ({
         slot: player.slot,
@@ -92,6 +94,7 @@ class MatchRoom {
       type: ServerMessageType.MATCH_START,
       code: this.lobby.code,
       phase: this.lobby.phase,
+      stageId: this.lobby.stageId,
       roundNumber: this.roundNumber,
       scores: [...this.scores],
       players: this.lobby.players.map((player) => ({
@@ -233,12 +236,14 @@ class LobbyManager {
     this.lobbies = new Map();
   }
 
-  create(client, { visibility = 'private' } = {}) {
+  create(client, { visibility = 'private', stageId = null } = {}) {
     this._ensureClientFree(client);
     const code = this._generateCode();
+    const sanitizedStageId = sanitizeStageId(stageId);
     const lobby = {
       code,
       visibility,
+      stageId: sanitizedStageId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       phase: 'lobby',
@@ -250,6 +255,7 @@ class LobbyManager {
     log('lobby_created', {
       code,
       visibility,
+      stageId: sanitizedStageId,
       hostId: client.id,
     });
     client.lobbyCode = code;
@@ -278,7 +284,7 @@ class LobbyManager {
     return lobby;
   }
 
-  quickMatch(client) {
+  quickMatch(client, stageId = null) {
     this._ensureClientFree(client);
     const lobby = [...this.lobbies.values()]
       .filter((entry) =>
@@ -292,7 +298,7 @@ class LobbyManager {
       return this.join(client, lobby.code);
     }
 
-    return this.create(client, { visibility: 'public' });
+    return this.create(client, { visibility: 'public', stageId });
   }
 
   listPublicLobbies() {
@@ -566,7 +572,10 @@ wss.on('connection', (socket) => {
     try {
       switch (message.type) {
         case ClientMessageType.CREATE_LOBBY: {
-          const lobby = lobbyManager.create(socket, { visibility: message.visibility ?? 'private' });
+          const lobby = lobbyManager.create(socket, {
+            visibility: message.visibility ?? 'private',
+            stageId: message.stageId,
+          });
           broadcastLobby(lobby);
           broadcastPublicLobbyList();
           break;
@@ -581,7 +590,7 @@ wss.on('connection', (socket) => {
           send(socket, createLobbyListPayload(lobbyManager.listPublicLobbies()));
           break;
         case ClientMessageType.QUICK_MATCH: {
-          const lobby = lobbyManager.quickMatch(socket);
+          const lobby = lobbyManager.quickMatch(socket, message.stageId);
           broadcastLobby(lobby);
           broadcastPublicLobbyList();
           break;

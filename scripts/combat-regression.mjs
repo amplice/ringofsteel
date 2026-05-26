@@ -19,7 +19,9 @@ import {
   HEAVY_CLASH_WINNER_STUN_MULT,
   PARRIED_STUN_FRAMES,
   PARRY_WINDOW_FRAMES,
+  WALL_BOUNCE_STUN_FRAMES,
 } from '../src/core/Constants.js';
+import { AMPHITHEATER_PIT_RADIUS } from '../src/arena/StageDefs.js';
 
 const ATTACK_CLIPS = {
   [AttackType.QUICK]: 'attack_quick',
@@ -150,6 +152,26 @@ function testRingOutResolution() {
   assert.equal(sim.killReason, 'ring_out', 'ring-out should report the correct kill reason');
 }
 
+function testWallBoundaryBounce() {
+  const sim = new MatchSim({
+    fighter1: createFighter('spearman', 0),
+    fighter2: createFighter('knight', 1),
+    stageId: 'amphitheater',
+  });
+  sim.startRound();
+  sim.fighter1.fsm.applyHitStun(8);
+  sim.fighter1.position.set(AMPHITHEATER_PIT_RADIUS + 0.1, 0, 0);
+  sim._handleWallBoundaryBounces();
+
+  assert.equal(sim.roundOver, false, 'wall boundary should not ring out');
+  assert.equal(sim.events[0]?.type, 'wall_bounce', 'wall boundary should emit bounce event');
+  assert.ok(sim.fighter1.position.x < AMPHITHEATER_PIT_RADIUS, 'wall bounce should push fighter back inside');
+  assert.ok(
+    sim.fighter1.fsm.stateDuration >= sim.fighter1.fsm.stateFrames + WALL_BOUNCE_STUN_FRAMES,
+    'wall bounce should leave the slammed fighter vulnerable',
+  );
+}
+
 function testAuthoritativeTrackSync() {
   for (const [charId, charDef] of Object.entries(CHARACTER_DEFS)) {
     const authoritative = AUTHORITATIVE_TRACKS.characters?.[charId];
@@ -241,6 +263,7 @@ const TESTS = [
   ['clash resolution', testClashResolution],
   ['block push distance', testBlockPushDistance],
   ['ring-out resolution', testRingOutResolution],
+  ['wall boundary bounce', testWallBoundaryBounce],
   ['authoritative track sync', testAuthoritativeTrackSync],
   ['contact windows', testContactWindows],
   ['simultaneous controller scheduling', testSimultaneousControllerScheduling],

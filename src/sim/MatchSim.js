@@ -9,6 +9,11 @@ import {
   FIGHT_START_DISTANCE,
   KNOCKBACK_SLIDE_SPEED,
   BLOCK_KNOCKBACK_SLIDE_SPEED,
+  WALL_BOUNCE_STUN_FRAMES,
+  WALL_BOUNCE_INSET,
+  WALL_BOUNCE_INWARD_DISTANCE,
+  WALL_BOUNCE_COOLDOWN_FRAMES,
+  WALL_BOUNCE_HITSTOP_FRAMES,
   HEAVY_ADVANTAGE_STUN_MULT,
   HEAVY_CLASH_STUN_MULT,
   HEAVY_CLASH_WINNER_STUN_MULT,
@@ -18,12 +23,24 @@ import {
   HIT_STUN_FRAMES,
   PARRIED_STUN_FRAMES,
 } from '../core/Constants.js';
-import { clampPointToArena, getCurrentArenaStage, isPointInsideArena } from '../arena/ArenaBounds.js';
+import {
+  clampPointToArena,
+  getArenaBoundaryContact,
+  getCurrentArenaStage,
+  getStageBoundaryMode,
+  isPointInsideArena,
+} from '../arena/ArenaBounds.js';
 
 const _pairBodyA = new THREE.Vector3();
 const _pairBodyB = new THREE.Vector3();
 const ATTACK_BODY_SEPARATION_MULT = 0.5;
 const ATTACK_BODY_SEPARATION_RESTORE_FRAMES = 8;
+const WALL_BOUNCE_STATES = new Set([
+  FighterState.BLOCK_STUN,
+  FighterState.CLASH,
+  FighterState.HIT_STUN,
+  FighterState.PARRIED_STUN,
+]);
 
 export class MatchSim {
   constructor({ fighter1, fighter2, hitResolver = new HitResolver(), stageId = null }) {
@@ -38,6 +55,7 @@ export class MatchSim {
     this.killReason = null;
     this.events = [];
     this._attackSeparationRestoreFrames = 0;
+    this._wallBounceCooldownFrames = [0, 0];
   }
 
   startRound(startDistance = FIGHT_START_DISTANCE, options = {}) {
@@ -47,6 +65,8 @@ export class MatchSim {
     this.winner = null;
     this.killReason = null;
     this.events.length = 0;
+    this._wallBounceCooldownFrames[0] = 0;
+    this._wallBounceCooldownFrames[1] = 0;
 
     this.fighter1.resetForRound((swapSides ? 1 : -1) * startDistance / 2);
     this.fighter2.resetForRound((swapSides ? -1 : 1) * startDistance / 2);
@@ -58,6 +78,7 @@ export class MatchSim {
     }
 
     this.frameCount++;
+    this._tickWallBounceCooldowns();
 
     const {
       input1 = null,
@@ -90,6 +111,7 @@ export class MatchSim {
     this._checkHits();
     this.fighter1.syncStatePresentation();
     this.fighter2.syncStatePresentation();
+    this._handleWallBoundaryBounces();
     this._checkRingOut();
     this._clampToArenaIfNeeded(this.fighter1);
     this._clampToArenaIfNeeded(this.fighter2);
@@ -487,6 +509,8 @@ export class MatchSim {
   }
 
   _checkRingOut() {
+    if (getStageBoundaryMode(this.stageId) !== 'cliff') return;
+
     const checkFighter = (fighter, otherFighter) => {
       if (!isPointInsideArena(fighter.position.x, fighter.position.z, this.stageId, 0.5) && fighter.state !== FighterState.DYING && fighter.state !== FighterState.DEAD) {
         fighter.damageSystem.applyDamage();
@@ -504,6 +528,68 @@ export class MatchSim {
 
     if (!this.roundOver) checkFighter(this.fighter1, this.fighter2);
     if (!this.roundOver) checkFighter(this.fighter2, this.fighter1);
+  }
+
+  _tickWallBounceCooldowns() {
+    for (let i = 0; i < this._wallBounceCooldownFrames.length; i++) {
+      this._wallBounceCooldownFrames[i] = Math.max(0, this._wallBounceCooldownFrames[i] - 1);
+    }
+  }
+
+  _handleWallBoundaryBounces() {
+    if (getStageBoundaryMode(this.stageId) !== 'wall') return;
+    this._handleWallBoundaryBounce(this.fighter1);
+    this._handleWallBoundaryBounce(this.fighter2);
+  }
+
+  _handleWallBoundaryBounce(fighter) {
+    if (!fighter || fighter.state === FighterState.DYING || fighter.state === FighterState.DEAD) return;
+
+    const contact = getArenaBoundaryContact(
+      fighter.position.x,
+      fighter.position.z,
+      this.stageId,
+      WALL_BOUNCE_INSET,
+    );
+    if (!contact) return;
+
+    if (!WALL_BOUNCE_STATES.has(fighter.state) || this._wallBounceCooldownFrames[fighter.playerIndex] > 0) {
+      fighter.position.x = contact.normalX * contact.limit;
+      fighter.position.z = contact.normalZ * contact.limit;
+      return;
+    }
+
+    const targetRadius = Math.max(
+      0.2,
+      contact.radius - WALL_BOUNCE_INSET - WALL_BOUNCE_INWARD_DISTANCE,
+    );
+    fighter.position.x = contact.normalX * targetRadius;
+    fighter.position.z = contact.normalZ * targetRadius;
+    fighter.slideMult = Math.min(fighter.slideMult || 1, 0.25);
+    fighter.blockPushRemaining = 0;
+    fighter.fsm.stateDuration = Math.max(
+      fighter.fsm.stateDuration || 0,
+      fighter.fsm.stateFrames + WALL_BOUNCE_STUN_FRAMES,
+    );
+    this._wallBounceCooldownFrames[fighter.playerIndex] = WALL_BOUNCE_COOLDOWN_FRAMES;
+
+    this.events.push({
+      type: 'wall_bounce',
+      fighterIndex: fighter.playerIndex,
+      stageId: this.stageId,
+      hitstopFrames: WALL_BOUNCE_HITSTOP_FRAMES,
+      penetration: contact.penetration,
+      contactPoint: {
+        x: contact.pointX,
+        y: 1.0,
+        z: contact.pointZ,
+      },
+      normal: {
+        x: -contact.normalX,
+        y: 0,
+        z: -contact.normalZ,
+      },
+    });
   }
 
   _clampToArenaIfNeeded(fighter) {

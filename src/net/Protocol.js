@@ -1,4 +1,5 @@
 import { createEmptyInputFrame, INPUT_HELD_ACTIONS, INPUT_PRESSED_ACTIONS } from '../sim/InputFrame.js';
+import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
 
 export const ClientMessageType = Object.freeze({
   CREATE_LOBBY: 'create_lobby',
@@ -73,11 +74,16 @@ export function validateClientMessage(message) {
   }
 }
 
+export function sanitizeStageId(stageId) {
+  return STAGE_DEFS[stageId] ? stageId : DEFAULT_STAGE;
+}
+
 export function createLobbyStatePayload(lobby, selfId = null) {
   return {
     type: ServerMessageType.LOBBY_STATE,
     code: lobby.code,
     visibility: lobby.visibility,
+    stageId: normalizeStageId(lobby.stageId),
     players: lobby.players.map((player) => ({
       id: player.id,
       slot: player.slot,
@@ -101,6 +107,7 @@ export function createLobbyListPayload(lobbies) {
       playerCount: lobby.players.filter((player) => player.connected).length,
       maxPlayers: 2,
       hostCharacterId: lobby.players[0]?.characterId ?? null,
+      stageId: normalizeStageId(lobby.stageId),
       createdAt: lobby.createdAt,
     })),
   };

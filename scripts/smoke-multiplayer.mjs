@@ -92,9 +92,13 @@ async function run() {
     host.on('message', (raw) => hostEvents.push(JSON.parse(String(raw))));
     guest.on('message', (raw) => guestEvents.push(JSON.parse(String(raw))));
 
-    host.send(JSON.stringify({ type: 'create_lobby', visibility: 'public' }));
+    const hostStageId = 'amphitheater';
+    host.send(JSON.stringify({ type: 'create_lobby', visibility: 'public', stageId: hostStageId }));
     const hostLobby = await waitForMessage(host, (message) => message.type === 'lobby_state' && message.code);
     const code = hostLobby.code;
+    if (hostLobby.stageId !== hostStageId) {
+      throw new Error(`Lobby stage mismatch: expected ${hostStageId}, got ${hostLobby.stageId ?? 'none'}.`);
+    }
 
     guest.send(JSON.stringify({ type: 'list_lobbies' }));
     const lobbyList = await waitForMessage(guest, (message) => message.type === 'lobby_list');
@@ -102,16 +106,23 @@ async function run() {
     if (!listed) {
       throw new Error('Public lobby was not visible in lobby list.');
     }
+    const listedLobby = lobbyList.lobbies.find((lobby) => lobby.code === code);
+    if (listedLobby?.stageId !== hostStageId) {
+      throw new Error(`Listed lobby stage mismatch: expected ${hostStageId}, got ${listedLobby?.stageId ?? 'none'}.`);
+    }
 
     host.send(JSON.stringify({ type: 'select_character', characterId: 'spearman' }));
-    guest.send(JSON.stringify({ type: 'quick_match' }));
+    guest.send(JSON.stringify({ type: 'quick_match', stageId: 'mountaintop' }));
     await waitForMessage(guest, (message) => message.type === 'lobby_state' && message.code === code);
     guest.send(JSON.stringify({ type: 'select_character', characterId: 'ronin' }));
 
     host.send(JSON.stringify({ type: 'ready', ready: true }));
     guest.send(JSON.stringify({ type: 'ready', ready: true }));
 
-    await waitForMessage(host, (message) => message.type === 'match_start');
+    const matchStart = await waitForMessage(host, (message) => message.type === 'match_start');
+    if (matchStart.stageId !== hostStageId) {
+      throw new Error(`Match stage mismatch: expected ${hostStageId}, got ${matchStart.stageId ?? 'none'}.`);
+    }
     await delay(500);
 
     const errors = [...hostEvents, ...guestEvents]
@@ -121,6 +132,7 @@ async function run() {
     const summary = {
       health,
       code,
+      stageId: matchStart.stageId,
       listed,
       matchStarted: [...hostEvents, ...guestEvents].some((message) => message.type === 'match_start'),
       snapshotCount: [...hostEvents, ...guestEvents].filter((message) => message.type === 'state_snapshot').length,

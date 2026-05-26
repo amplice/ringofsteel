@@ -62,7 +62,7 @@ async function waitForGameReady(page) {
       const game = window.__ringOfSteelGame;
       const expectedCharacters = Object.keys(CHARACTER_DEFS);
       if (!expectedCharacters.length) return false;
-      return expectedCharacters.every((charId) => game?._charCache?.[charId]);
+      return Boolean(game?.clock?.started) && expectedCharacters.every((charId) => game?._charCache?.[charId]);
     });
     if (ready) return;
     await delay(200);
@@ -71,14 +71,14 @@ async function waitForGameReady(page) {
 }
 
 async function openOnlineMode(page, serverUrl) {
-  await page.evaluate((url) => {
+  await page.evaluate(async (url) => {
     const game = window.__ringOfSteelGame;
     game.gameState = 'select';
     game.ui.showSelect();
     game.ui.select.mode = 'online';
     game.ui.select._updateModeUI();
     if (game.ui.select.onModeChange) {
-      game.ui.select.onModeChange('online');
+      await game.ui.select.onModeChange('online');
     }
     const input = document.getElementById('online-server-url');
     input.value = url;
@@ -116,6 +116,9 @@ async function readGameState(page) {
       hasFighter2: Boolean(game?.fighter2),
       fighter1State: game?.fighter1?.state ?? null,
       fighter2State: game?.fighter2?.state ?? null,
+      frameCount: game?.clock?.frameCount ?? null,
+      stateTimer: game?.stateTimer ?? null,
+      timeScale: game?.clock?.timeScale ?? null,
       onlineSlot: game?.onlineLocalSlot ?? null,
       onlineLobbyCode: game?.onlineSession?.lobbyCode ?? null,
       discoveryConnected: Boolean(game?.onlineDiscoverySession?.connected),
@@ -124,33 +127,34 @@ async function readGameState(page) {
   });
 }
 
+async function waitForGameState(page, expectedState, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await readGameState(page);
+    if (state.state === expectedState) return;
+    await delay(100);
+  }
+  const state = await readGameState(page);
+  throw new Error(`Timed out waiting for game state '${expectedState}': ${JSON.stringify(state)}`);
+}
+
 async function dispatchForwardMove(page) {
-  await page.evaluate(() => {
-    const game = window.__ringOfSteelGame;
-    const session = game?.onlineSession;
-    const baseFrame = session?.lastSnapshot?.frameCount ?? 0;
-    const input = {
-      frame: baseFrame + 1,
-      held: {
-        left: true,
-        right: false,
-        sidestepUp: false,
-        sidestepDown: false,
-        block: false,
-      },
-      pressed: {
-        quick: false,
-        heavy: false,
-        thrust: false,
-        sidestepUp: false,
-        sidestepDown: false,
-        backstep: false,
-        block: false,
-      },
-    };
-    game?._applyOnlineLocalControlMapping?.(input);
-    session?.sendInputFrame(baseFrame + 1, input);
-  });
+  await page.keyboard.down('KeyA');
+}
+
+async function releaseForwardMove(page) {
+  await page.keyboard.up('KeyA');
+}
+
+async function waitForFighterState(page, fighterKey, expectedState, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await readGameState(page);
+    if (state[`${fighterKey}State`] === expectedState) return;
+    await delay(50);
+  }
+  const state = await readGameState(page);
+  throw new Error(`Timed out waiting for ${fighterKey} '${expectedState}': ${JSON.stringify(state)}`);
 }
 
 async function waitForLobbyListRow(page, timeoutMs = 15000) {
@@ -193,6 +197,11 @@ async function runOne({ mode }) {
     browser = await puppeteer.launch({
       headless: true,
       protocolTimeout: 240000,
+      args: [
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
     });
     const hostPage = await browser.newPage();
     const guestPage = await browser.newPage();
@@ -203,20 +212,21 @@ async function runOne({ mode }) {
     ]);
     console.log('[public-ui-smoke] pages loaded');
 
-    await Promise.all([
-      waitForGameReady(hostPage),
-      waitForGameReady(guestPage),
-    ]);
+    await hostPage.bringToFront();
+    await waitForGameReady(hostPage);
+    await guestPage.bringToFront();
+    await waitForGameReady(guestPage);
     console.log('[public-ui-smoke] game ready');
 
     const serverUrl = `ws://127.0.0.1:${WS_PORT}/ws`;
-    await Promise.all([
-      openOnlineMode(hostPage, serverUrl),
-      openOnlineMode(guestPage, serverUrl),
-    ]);
+    await hostPage.bringToFront();
+    await openOnlineMode(hostPage, serverUrl);
+    await guestPage.bringToFront();
+    await openOnlineMode(guestPage, serverUrl);
     console.log('[public-ui-smoke] online mode open');
 
     if (mode === 'public') {
+      await hostPage.bringToFront();
       await hostPage.$eval('#online-host-public-btn', (el) => el.click());
       console.log('[public-ui-smoke] host public clicked');
       const code = await waitForLobbyCode(hostPage);
@@ -233,19 +243,29 @@ async function runOne({ mode }) {
       ]);
       console.log('[public-ui-smoke] HUD visible');
 
+      await hostPage.bringToFront();
+      await waitForGameState(hostPage, 'fighting');
+      await guestPage.bringToFront();
+      await waitForGameState(guestPage, 'fighting');
       await dispatchForwardMove(guestPage);
-      await delay(750);
+      await Promise.all([
+        waitForFighterState(hostPage, 'fighter2', 'walk_forward'),
+        waitForFighterState(guestPage, 'fighter2', 'walk_forward'),
+      ]);
       console.log('[public-ui-smoke] guest move sent');
 
       const [hostState, guestState] = await Promise.all([
         readGameState(hostPage),
         readGameState(guestPage),
       ]);
+      await releaseForwardMove(guestPage);
 
       return { code, hostState, guestState };
     }
 
+    await hostPage.bringToFront();
     await hostPage.$eval('#online-quick-match-btn', (el) => el.click());
+    await guestPage.bringToFront();
     await guestPage.$eval('#online-quick-match-btn', (el) => el.click());
     console.log('[public-ui-smoke] quick match clicked both');
 
@@ -255,14 +275,19 @@ async function runOne({ mode }) {
     ]);
     console.log('[public-ui-smoke] HUD visible');
 
+    await hostPage.bringToFront();
+    await waitForGameState(hostPage, 'fighting');
+    await guestPage.bringToFront();
+    await waitForGameState(guestPage, 'fighting');
     await dispatchForwardMove(guestPage);
-    await delay(750);
+    await waitForFighterState(guestPage, 'fighter2', 'walk_forward');
     console.log('[public-ui-smoke] guest move sent');
 
     const [hostState, guestState] = await Promise.all([
       readGameState(hostPage),
       readGameState(guestPage),
     ]);
+    await releaseForwardMove(guestPage);
 
     return { code: hostState.onlineLobbyCode, hostState, guestState };
   } finally {

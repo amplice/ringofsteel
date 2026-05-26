@@ -2,13 +2,16 @@ import * as THREE from 'three';
 
 const MAX_PARTICLES = 320;
 const MAX_BLOOD = 420;
+const MAX_WALL_IMPACTS = 16;
 const ORIENT_UP = new THREE.Vector3(0, 1, 0);
+const ORIENT_FORWARD = new THREE.Vector3(0, 0, 1);
 
 export class ParticleSystem {
   constructor(scene) {
     this.scene = scene;
     this.particles = [];
     this.bloodParticles = [];
+    this.wallImpacts = [];
     this.activeCount = 0;
 
     const geo = new THREE.SphereGeometry(0.035, 5, 4);
@@ -82,6 +85,32 @@ export class ParticleSystem {
     this.bloodMesh.instanceMatrix.needsUpdate = true;
 
     this._dummy = new THREE.Object3D();
+
+    const wallImpactGeo = new THREE.CircleGeometry(1, 48);
+    for (let i = 0; i < MAX_WALL_IMPACTS; i++) {
+      const mesh = new THREE.Mesh(
+        wallImpactGeo,
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        }),
+      );
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.wallImpacts.push({
+        active: false,
+        mesh,
+        life: 0,
+        maxLife: 0,
+        size: 1,
+      });
+    }
   }
 
   _emitToPool(pool, position, count, options) {
@@ -280,6 +309,25 @@ export class ParticleSystem {
     });
   }
 
+  emitWallBounce(position, normal = null, size = 1.05) {
+    const impact = this.wallImpacts.find((entry) => !entry.active);
+    if (!impact) return;
+
+    const direction = normal?.clone?.() ?? new THREE.Vector3(0, 0, -1);
+    if (direction.lengthSq() < 1e-6) direction.set(0, 0, -1);
+    direction.normalize();
+
+    impact.active = true;
+    impact.life = 0.34;
+    impact.maxLife = impact.life;
+    impact.size = size;
+    impact.mesh.visible = true;
+    impact.mesh.position.copy(position);
+    impact.mesh.quaternion.setFromUnitVectors(ORIENT_FORWARD, direction);
+    impact.mesh.material.opacity = 0.42;
+    impact.mesh.scale.setScalar(size * 0.28);
+  }
+
   _updatePool(pool, mesh, colors, maxCount, dt) {
     for (let i = 0; i < maxCount; i++) {
       const p = pool[i];
@@ -337,10 +385,35 @@ export class ParticleSystem {
     this.activeCount = 0;
     this._updatePool(this.particles, this.mesh, this.colors, MAX_PARTICLES, dt);
     this._updatePool(this.bloodParticles, this.bloodMesh, this.bloodColors, MAX_BLOOD, dt);
+    this._updateWallImpacts(dt);
   }
 
   reset() {
     for (const p of this.particles) p.active = false;
     for (const p of this.bloodParticles) p.active = false;
+    for (const impact of this.wallImpacts) {
+      impact.active = false;
+      impact.mesh.visible = false;
+      impact.mesh.material.opacity = 0;
+    }
+  }
+
+  _updateWallImpacts(dt) {
+    for (const impact of this.wallImpacts) {
+      if (!impact.active) continue;
+
+      impact.life -= dt;
+      if (impact.life <= 0) {
+        impact.active = false;
+        impact.mesh.visible = false;
+        impact.mesh.material.opacity = 0;
+        continue;
+      }
+
+      const t = 1 - (impact.life / impact.maxLife);
+      const scale = impact.size * (0.28 + t * 1.15);
+      impact.mesh.scale.set(scale, scale, scale);
+      impact.mesh.material.opacity = 0.42 * Math.pow(1 - t, 1.35);
+    }
   }
 }

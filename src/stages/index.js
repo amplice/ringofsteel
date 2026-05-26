@@ -15,7 +15,7 @@ export const STAGE_DEFS = Object.freeze({
       fogColor: 0x111118,
       fogDensity: 0.04,
     }),
-    bounds: Object.freeze({ type: 'circle', radius: ARENA_RADIUS }),
+    bounds: Object.freeze({ type: 'circle', radius: ARENA_RADIUS, boundary: 'cliff' }),
   }),
   amphitheater: Object.freeze({
     id: 'amphitheater',
@@ -89,7 +89,7 @@ export const STAGE_DEFS = Object.freeze({
       roughness: 0.96,
       metalnessMax: 0.03,
     }),
-    bounds: Object.freeze({ type: 'circle', radius: AMPHITHEATER_PIT_RADIUS }),
+    bounds: Object.freeze({ type: 'circle', radius: AMPHITHEATER_PIT_RADIUS, boundary: 'wall' }),
   }),
   bamboo_clearing: Object.freeze({
     id: 'bamboo_clearing',
@@ -213,7 +213,7 @@ export const STAGE_DEFS = Object.freeze({
       fireflyColor: 0xdfff93,
       pollenColor: 0xd8d8a6,
     }),
-    bounds: Object.freeze({ type: 'circle', radius: BAMBOO_CLEARING_RADIUS }),
+    bounds: Object.freeze({ type: 'circle', radius: BAMBOO_CLEARING_RADIUS, boundary: 'wall' }),
   }),
   mountaintop: Object.freeze({
     id: 'mountaintop',
@@ -284,7 +284,7 @@ export const STAGE_DEFS = Object.freeze({
       cloudOpacity: 0.76,
       cloudY: -1.15,
     }),
-    bounds: Object.freeze({ type: 'circle', radius: MOUNTAINTOP_RADIUS }),
+    bounds: Object.freeze({ type: 'circle', radius: MOUNTAINTOP_RADIUS, boundary: 'cliff' }),
   }),
 });
 

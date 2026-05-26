@@ -4,6 +4,7 @@ export const DEFAULT_STAGE = 'test';
 export const AMPHITHEATER_PIT_RADIUS = 6.77;
 export const BAMBOO_CLEARING_RADIUS = 4.6;
 export const MOUNTAINTOP_RADIUS = 3.35;
+export const WOODEN_PIER_RADIUS = 4.15;
 
 export const STAGE_DEFS = Object.freeze({
   test: Object.freeze({
@@ -214,6 +215,58 @@ export const STAGE_DEFS = Object.freeze({
       pollenColor: 0xd8d8a6,
     }),
     bounds: Object.freeze({ type: 'circle', radius: BAMBOO_CLEARING_RADIUS, boundary: 'wall' }),
+  }),
+  wooden_pier: Object.freeze({
+    id: 'wooden_pier',
+    displayName: 'Wooden Pier',
+    description: 'Damaged dock platform over open water at sunset',
+    modelPath: '/stages/wooden_pier_sunset_v1.glb',
+    modelScale: 11,
+    modelYOffset: -0.44,
+    showBoundaryMarkers: false,
+    camera: Object.freeze({
+      maxRadius: 4.85,
+    }),
+    environment: Object.freeze({
+      background: 0xf0a061,
+      fogColor: 0xd47754,
+      fogDensity: 0.012,
+    }),
+    lighting: Object.freeze({
+      sun: Object.freeze({
+        color: 0xff9b55,
+        intensity: 1.65,
+        position: Object.freeze([-7.5, 5.4, -8.2]),
+      }),
+      hemisphere: Object.freeze({
+        skyColor: 0xffbd7a,
+        groundColor: 0x17324a,
+        intensity: 0.62,
+      }),
+      fill: Object.freeze({
+        color: 0x365f8f,
+        intensity: 0.18,
+      }),
+    }),
+    atmosphere: Object.freeze({
+      type: 'pier_sunset',
+      waterColor: 0x0b6685,
+      waterHighlightColor: 0xffaa62,
+      waterOpacity: 0.94,
+      waterY: -0.72,
+      hazeColor: 0xffc28a,
+      hazeOpacity: 0.28,
+      sunColor: 0xff8e45,
+      cloudColor: 0xffd0a0,
+      cloudOpacity: 0.34,
+    }),
+    materialMood: Object.freeze({
+      tint: 0xc98d5b,
+      tintStrength: 0.12,
+      roughness: 0.9,
+      metalnessMax: 0.05,
+    }),
+    bounds: Object.freeze({ type: 'circle', radius: WOODEN_PIER_RADIUS, boundary: 'cliff' }),
   }),
   mountaintop: Object.freeze({
     id: 'mountaintop',

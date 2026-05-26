@@ -4,5 +4,6 @@ export {
   DEFAULT_STAGE,
   MOUNTAINTOP_RADIUS,
   STAGE_DEFS,
+  WOODEN_PIER_RADIUS,
   normalizeStageId,
 } from '../stages/index.js';

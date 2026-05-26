@@ -13,20 +13,9 @@ export class Environment {
     const hemi = new THREE.HemisphereLight(0x8888aa, 0x333322, 0.6);
     this.scene.add(hemi);
 
-    // Main directional (sun-like, for shadows)
+    // Stage lighting owns shadows; this global light is only neutral fill.
     const dir = new THREE.DirectionalLight(0xffeedd, 1.2);
     dir.position.set(5, 10, 5);
-    dir.castShadow = true;
-    dir.shadow.mapSize.width = 2048;
-    dir.shadow.mapSize.height = 2048;
-    dir.shadow.camera.near = 1;
-    dir.shadow.camera.far = 30;
-    dir.shadow.camera.left = -12;
-    dir.shadow.camera.right = 12;
-    dir.shadow.camera.top = 12;
-    dir.shadow.camera.bottom = -12;
-    dir.shadow.bias = -0.00035;
-    dir.shadow.normalBias = 0.008;
     this.scene.add(dir);
 
     // Rim light (from behind)

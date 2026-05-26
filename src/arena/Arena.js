@@ -1,17 +1,20 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ARENA_RADIUS } from '../core/Constants.js';
 import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from './StageDefs.js';
+import { StageLoader } from './StageLoader.js';
 import { setCurrentArenaStage } from './ArenaBounds.js';
 
 export class Arena {
   constructor(scene, stageId = DEFAULT_STAGE) {
     this.scene = scene;
     this.group = new THREE.Group();
-    this.loader = new GLTFLoader();
     this.stageId = normalizeStageId(stageId);
     this._loadToken = 0;
     this._weather = null;
+    this._stageEffects = [];
+    this._lineEffects = [];
+    this._meshEffects = [];
+    this._shaderEffects = [];
     scene.add(this.group);
   }
 
@@ -35,9 +38,9 @@ export class Arena {
     }
 
     try {
-      const gltf = await this.loader.loadAsync(stage.modelPath);
+      const model = await StageLoader.loadStage(stage);
       if (token !== this._loadToken) return this.stageId;
-      await this._buildModelArena(gltf.scene, stage, token);
+      await this._buildModelArena(model.scene, stage, token);
       return normalized;
     } catch (error) {
       console.warn(`[arena] Failed to load stage '${normalized}', falling back to test arena`, error);
@@ -51,6 +54,11 @@ export class Arena {
   }
 
   update(dt) {
+    this._updateWeather(dt);
+    this._updateStageEffects(dt);
+  }
+
+  _updateWeather(dt) {
     if (!this._weather?.rain) return;
     const attr = this._weather.rain.geometry.getAttribute('position');
     const speed = this._weather.rainSpeed ?? 9.5;
@@ -80,6 +88,83 @@ export class Arena {
     attr.needsUpdate = true;
 
     this._updateLightning(dt);
+  }
+
+  _updateStageEffects(dt) {
+    for (const effect of this._lineEffects) {
+      const attr = effect.lines.geometry.getAttribute('position');
+      effect.time = (effect.time ?? 0) + dt;
+      for (let i = 0; i < attr.count; i += 2) {
+        const base = (i / 2) * 3;
+        let x = attr.getX(i);
+        let y = attr.getY(i);
+        let z = attr.getZ(i);
+        x += (effect.velocities[base] + Math.sin(effect.time * effect.swaySpeed + i) * effect.sway) * dt;
+        y += effect.velocities[base + 1] * dt;
+        z += (effect.velocities[base + 2] + Math.cos(effect.time * effect.swaySpeed + i * 1.7) * effect.sway) * dt;
+        if (
+          y < effect.bounds.minY || y > effect.bounds.maxY ||
+          Math.abs(x) > effect.bounds.x || Math.abs(z) > effect.bounds.z
+        ) {
+          x = (effect.rand() - 0.5) * effect.bounds.x * 2;
+          z = (effect.rand() - 0.5) * effect.bounds.z * 2;
+          y = effect.bounds.maxY - effect.rand() * effect.resetDepth;
+        }
+        const length = effect.lengths[i / 2];
+        attr.setXYZ(i, x, y, z);
+        attr.setXYZ(i + 1, x + length * 0.55, y - length, z + length * 0.16);
+      }
+      attr.needsUpdate = true;
+    }
+
+    for (const effect of this._stageEffects) {
+      const attr = effect.points.geometry.getAttribute('position');
+      effect.time = (effect.time ?? 0) + dt;
+      for (let i = 0; i < attr.count; i++) {
+        const base = i * 3;
+        let x = attr.getX(i);
+        let y = attr.getY(i);
+        let z = attr.getZ(i);
+        x += (effect.velocities[base] + Math.sin(effect.time * effect.swaySpeed + i) * effect.sway) * dt;
+        y += effect.velocities[base + 1] * dt;
+        z += (effect.velocities[base + 2] + Math.cos(effect.time * effect.swaySpeed + i * 1.7) * effect.sway) * dt;
+
+        if (
+          y < effect.bounds.minY || y > effect.bounds.maxY ||
+          Math.abs(x) > effect.bounds.x || Math.abs(z) > effect.bounds.z
+        ) {
+          x = (effect.rand() - 0.5) * effect.bounds.x * 2;
+          z = (effect.rand() - 0.5) * effect.bounds.z * 2;
+          y = effect.resetFromTop
+            ? effect.bounds.maxY - effect.rand() * effect.resetDepth
+            : effect.bounds.minY + effect.rand() * (effect.bounds.maxY - effect.bounds.minY);
+        }
+
+        attr.setXYZ(i, x, y, z);
+      }
+      attr.needsUpdate = true;
+    }
+
+    for (const effect of this._meshEffects) {
+      effect.time = (effect.time ?? 0) + dt;
+      if (effect.kind === 'heat_shimmer') {
+        const wave = Math.sin(effect.time * effect.speed + effect.phase);
+        effect.mesh.position.x = effect.basePosition.x + wave * effect.drift.x;
+        effect.mesh.position.y = effect.basePosition.y + Math.sin(effect.time * effect.speed * 0.73 + effect.phase) * effect.drift.y;
+        effect.mesh.position.z = effect.basePosition.z + Math.cos(effect.time * effect.speed * 0.61 + effect.phase) * effect.drift.z;
+        effect.mesh.material.opacity = THREE.MathUtils.clamp(effect.opacity + wave * effect.opacityPulse, 0, 1);
+        effect.mesh.scale.x = effect.baseScale.x * (1 + wave * effect.scalePulse);
+      }
+      if (effect.kind === 'sway_group') {
+        const wave = Math.sin(effect.time * effect.speed + effect.phase);
+        effect.mesh.rotation.x = effect.baseRotation.x + wave * effect.amountX;
+        effect.mesh.rotation.z = effect.baseRotation.z + Math.sin(effect.time * effect.speed * 0.77 + effect.phase) * effect.amountZ;
+      }
+    }
+
+    for (const effect of this._shaderEffects) {
+      effect.material.uniforms.uTime.value += dt;
+    }
   }
 
   _updateLightning(dt) {
@@ -114,6 +199,10 @@ export class Arena {
 
   _clearGroup() {
     this._weather = null;
+    this._stageEffects = [];
+    this._lineEffects = [];
+    this._meshEffects = [];
+    this._shaderEffects = [];
     while (this.group.children.length) {
       const child = this.group.children.pop();
       this._disposeObject(child);
@@ -134,12 +223,17 @@ export class Arena {
     });
   }
 
+  _isStageFeatureEnabled(stage, feature) {
+    return !feature || stage.features?.[feature] !== false;
+  }
+
   async _buildModelArena(model, stage, token) {
     const root = new THREE.Group();
     root.name = `stage_${stage.id}`;
     model.name = `${stage.id}_model`;
     model.scale.setScalar(stage.modelScale ?? 1);
     model.position.y = stage.modelYOffset ?? 0;
+    model.rotation.y = stage.modelRotationY ?? 0;
     model.traverse((child) => {
       if (!child.isMesh) return;
       child.castShadow = true;
@@ -149,6 +243,13 @@ export class Arena {
         if (!material) continue;
         material.roughness = Math.max(material.roughness ?? 0.8, 0.72);
         material.metalness = Math.min(material.metalness ?? 0, 0.12);
+        if (stage.materialMood) {
+          material.roughness = Math.max(material.roughness ?? 0.8, stage.materialMood.roughness ?? 0.9);
+          material.metalness = Math.min(material.metalness ?? 0, stage.materialMood.metalnessMax ?? 0.05);
+          if (stage.materialMood.tint && material.color) {
+            material.color.lerp(new THREE.Color(stage.materialMood.tint), stage.materialMood.tintStrength ?? 0.12);
+          }
+        }
       }
     });
     root.add(model);
@@ -187,7 +288,7 @@ export class Arena {
       root.add(hemi);
     }
 
-    if (lighting.sun) {
+    if (lighting.sun && this._isStageFeatureEnabled(stage, lighting.sun.feature)) {
       const sun = new THREE.DirectionalLight(lighting.sun.color, lighting.sun.intensity);
       sun.name = `${stage.id}_sun_light`;
       sun.position.set(...lighting.sun.position);
@@ -205,7 +306,7 @@ export class Arena {
       root.add(sun);
     }
 
-    if (lighting.fill) {
+    if (lighting.fill && this._isStageFeatureEnabled(stage, lighting.fill.feature)) {
       const fill = new THREE.AmbientLight(lighting.fill.color, lighting.fill.intensity);
       fill.name = `${stage.id}_ambient_fill`;
       root.add(fill);
@@ -285,15 +386,236 @@ export class Arena {
       this._addMountaintopClouds(root, stage);
       return;
     }
-    if (stage.atmosphere?.type !== 'moonlit_bamboo') return;
+    if (stage.atmosphere?.type === 'amphitheater_sun_dust') {
+      this._addAmphitheaterAtmosphere(root, stage);
+      return;
+    }
+    if (stage.atmosphere?.type !== 'moonlit_bamboo' && stage.atmosphere?.type !== 'bamboo_dawn') return;
 
     const atmosphere = stage.atmosphere;
-    const shafts = new THREE.Group();
-    shafts.name = `${stage.id}_moonlight_shafts`;
-    root.add(shafts);
+    if (this._isStageFeatureEnabled(stage, 'sunShafts')) {
+      const shafts = new THREE.Group();
+      shafts.name = `${stage.id}_moonlight_shafts`;
+      root.add(shafts);
+
+      const shaftMat = new THREE.MeshBasicMaterial({
+        color: atmosphere.shaftColor ?? 0xb9d8ff,
+        map: this._makeMoonlightShaftTexture(),
+        transparent: true,
+        opacity: atmosphere.shaftOpacity ?? 0.14,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      });
+
+      const shaftDefs = [
+        [-4.6, 4.95, -5.6, 1.45, 7.8, -0.66],
+        [-1.7, 5.25, -6.2, 1.1, 8.2, -0.54],
+        [1.7, 5.15, -6.0, 1.35, 7.6, -0.48],
+        [4.5, 4.65, -3.7, 0.95, 6.4, -0.58],
+        [-5.6, 4.5, -2.4, 0.9, 6.1, -0.68],
+      ];
+      for (const [x, y, z, width, height, tilt] of shaftDefs) {
+        const shaft = new THREE.Mesh(new THREE.PlaneGeometry(width, height), shaftMat.clone());
+        shaft.name = `${stage.id}_moonlight_shaft`;
+        shaft.position.set(x, y, z);
+        shaft.rotation.set(tilt, -0.42, -0.14);
+        shaft.renderOrder = -1;
+        shafts.add(shaft);
+      }
+    }
+
+    if (this._isStageFeatureEnabled(stage, 'groundGlow')) {
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: atmosphere.groundGlowColor ?? 0xc8e2ff,
+        transparent: true,
+        opacity: atmosphere.groundGlowOpacity ?? 0.035,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      });
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(5.6, 32), glowMat);
+      glow.name = `${stage.id}_moonlit_ground_glow`;
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.y = 0.035;
+      root.add(glow);
+    }
+
+    if (stage.atmosphere?.type === 'bamboo_dawn') {
+      this._addBambooAtmosphere(root, stage);
+    }
+  }
+
+  _addBambooAtmosphere(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+
+    if (this._isStageFeatureEnabled(stage, 'groundMist')) {
+      const mistMat = new THREE.MeshBasicMaterial({
+        color: atmosphere.mistColor ?? 0x9fcfa9,
+        map: this._makeSoftCloudTexture(),
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.NormalBlending,
+      });
+      for (const [x, z, sx, sz, rot, opacity] of [
+        [-3.4, -2.6, 5.8, 1.52, 0.12, 0.42],
+        [2.9, -1.75, 5.2, 1.42, -0.08, 0.38],
+        [0.0, 1.75, 6.4, 1.7, 0.04, 0.36],
+        [-1.8, 0.25, 7.2, 2.02, -0.02, 0.34],
+        [2.9, 2.15, 5.8, 1.46, 0.18, 0.32],
+        [-3.8, 2.45, 5.2, 1.3, -0.18, 0.31],
+        [0.6, -0.2, 7.6, 2.12, 0.0, 0.3],
+        [0.0, 0.0, 8.9, 2.4, 0.08, 0.24],
+      ]) {
+        const mist = new THREE.Mesh(new THREE.CircleGeometry(1, 32), mistMat.clone());
+        mist.name = `${stage.id}_ground_mist`;
+        mist.material.opacity = opacity;
+        mist.rotation.x = -Math.PI / 2;
+        mist.rotation.z = rot;
+        mist.position.set(x, 0.055, z);
+        mist.scale.set(sx, sz, 1);
+        mist.renderOrder = -1;
+        root.add(mist);
+        this._meshEffects.push({
+          kind: 'heat_shimmer',
+          mesh: mist,
+          basePosition: mist.position.clone(),
+          baseScale: mist.scale.clone(),
+          drift: new THREE.Vector3(0.045, 0, 0.025),
+          speed: 0.18 + sx * 0.015,
+          phase: x * 0.33 + z * 0.17,
+          opacity,
+          opacityPulse: opacity * 0.12,
+          scalePulse: 0.018,
+        });
+      }
+
+      const blanketMat = new THREE.MeshBasicMaterial({
+        color: atmosphere.mistColor ?? 0x9fcfa9,
+        map: this._makeSoftCloudTexture(),
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.NormalBlending,
+      });
+      const blanket = new THREE.Mesh(new THREE.CircleGeometry(1, 48), blanketMat);
+      blanket.name = `${stage.id}_mist_blanket`;
+      blanket.rotation.x = -Math.PI / 2;
+      blanket.position.y = 0.075;
+      blanket.scale.set(6.8, 5.7, 1);
+      blanket.renderOrder = -3;
+      root.add(blanket);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: blanket,
+        basePosition: blanket.position.clone(),
+        baseScale: blanket.scale.clone(),
+        drift: new THREE.Vector3(0.035, 0, 0.018),
+        speed: 0.12,
+        phase: 1.7,
+        opacity: blanket.material.opacity,
+        opacityPulse: blanket.material.opacity * 0.08,
+        scalePulse: 0.012,
+      });
+    }
+
+    if (this._isStageFeatureEnabled(stage, 'stoneLantern')) {
+      this._addBambooStoneLantern(root, stage);
+    }
+
+    if (this._isStageFeatureEnabled(stage, 'ambientMotion')) {
+      this._addBambooAmbientDrift(root, stage);
+    }
+  }
+
+  _addBambooAmbientDrift(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    if (this._isStageFeatureEnabled(stage, 'fireflies')) {
+      this._addDriftPoints(root, stage, {
+        name: 'fireflies',
+        count: 72,
+        seed: 0xf1ef1e,
+        color: atmosphere.fireflyColor ?? 0xdfff93,
+        size: 0.022,
+        opacity: 0.45,
+        soft: true,
+        additive: true,
+        bounds: { x: 4.7, z: 4.5, minY: 0.45, maxY: 2.8 },
+        velocity: { x: 0.018, y: 0.012, z: -0.008 },
+        jitter: { x: 0.06, y: 0.035, z: 0.06 },
+        sway: 0.24,
+        swaySpeed: 1.8,
+        resetFromTop: false,
+        resetDepth: 1,
+      });
+    }
+
+    this._addDriftLines(root, stage, {
+      name: 'bamboo_pollen_threads',
+      count: 34,
+      seed: 0xba0b4d,
+      color: atmosphere.pollenColor ?? 0xd8d8a6,
+      opacity: 0.16,
+      bounds: { x: 5.2, z: 5.0, minY: 0.65, maxY: 3.2 },
+      velocity: { x: 0.025, y: -0.015, z: -0.018 },
+      jitter: { x: 0.055, y: 0.025, z: 0.055 },
+      sway: 0.18,
+      swaySpeed: 0.9,
+      lengthMin: 0.04,
+      lengthMax: 0.12,
+      resetDepth: 0.9,
+    });
+  }
+
+  _addBambooStoneLantern(root, stage) {
+    const lantern = new THREE.Group();
+    lantern.name = `${stage.id}_stone_lantern_silhouette`;
+    lantern.position.set(-3.6, 0.04, -4.15);
+    lantern.rotation.y = 0.42;
+    root.add(lantern);
+
+    const stone = new THREE.MeshStandardMaterial({
+      color: 0x293020,
+      roughness: 0.96,
+      metalness: 0,
+      flatShading: true,
+    });
+    const warm = new THREE.MeshBasicMaterial({
+      color: 0xffb45b,
+      transparent: true,
+      opacity: 0.42,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+    const add = (mesh, x, y, z) => {
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      lantern.add(mesh);
+      return mesh;
+    };
+
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.55, 6), stone), 0, 0.28, 0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.12, 0.5), stone), 0, 0.62, 0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.36, 0.38), stone), 0, 0.85, 0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.11, 0.6), stone), 0, 1.07, 0);
+    const roof = add(new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.28, 4), stone), 0, 1.26, 0);
+    roof.rotation.y = Math.PI / 4;
+
+    const glow = add(new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.18), warm), 0, 0.86, -0.205);
+    glow.renderOrder = 2;
+  }
+
+  _addAmphitheaterAtmosphere(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    this._addAmphitheaterExteriorCity(root, stage);
+    this._addAmphitheaterSkyClouds(root, stage);
 
     const shaftMat = new THREE.MeshBasicMaterial({
-      color: atmosphere.shaftColor ?? 0xb9d8ff,
+      color: atmosphere.shaftColor ?? 0xffd18a,
       map: this._makeMoonlightShaftTexture(),
       transparent: true,
       opacity: atmosphere.shaftOpacity ?? 0.14,
@@ -301,36 +623,444 @@ export class Arena {
       side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending,
     });
-
-    const shaftDefs = [
-      [-4.0, 4.8, -5.8, 1.15, 7.1, -0.58],
-      [-1.1, 5.1, -6.5, 0.9, 7.8, -0.46],
-      [2.9, 4.9, -6.1, 1.25, 6.9, -0.38],
-      [4.9, 4.4, -3.2, 0.7, 5.8, -0.52],
-      [-5.2, 4.6, -2.8, 0.75, 6.2, -0.62],
-    ];
-    for (const [x, y, z, width, height, tilt] of shaftDefs) {
+    for (const [x, y, z, width, height, rx, ry, rz] of [
+      [-6.0, 5.25, -5.95, 1.9, 8.6, -0.82, 0.3, -0.2],
+      [-3.2, 5.65, -6.65, 1.25, 8.4, -0.76, 0.18, -0.06],
+      [-0.65, 5.95, -7.0, 1.55, 9.1, -0.72, 0.04, 0.02],
+      [2.35, 5.65, -6.3, 2.05, 8.9, -0.76, -0.1, 0.14],
+      [5.65, 5.15, -5.1, 1.45, 7.4, -0.84, -0.3, 0.26],
+      [-6.8, 4.3, -1.8, 0.9, 5.7, -0.9, 0.34, -0.3],
+      [6.5, 4.2, -1.25, 0.85, 5.4, -0.92, -0.36, 0.34],
+    ]) {
       const shaft = new THREE.Mesh(new THREE.PlaneGeometry(width, height), shaftMat.clone());
-      shaft.name = `${stage.id}_moonlight_shaft`;
+      shaft.name = `${stage.id}_sun_shaft`;
       shaft.position.set(x, y, z);
-      shaft.rotation.set(tilt, -0.34, -0.12);
+      shaft.rotation.set(rx, ry, rz);
       shaft.renderOrder = -1;
-      shafts.add(shaft);
+      root.add(shaft);
     }
 
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xc8e2ff,
+    const hazeMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.dustColor ?? 0xe0b26e,
+      map: this._makeSoftCloudTexture(),
       transparent: true,
-      opacity: 0.035,
+      opacity: atmosphere.hazeOpacity ?? 0.09,
       depthWrite: false,
       side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending,
     });
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(5.6, 32), glowMat);
-    glow.name = `${stage.id}_moonlit_ground_glow`;
-    glow.rotation.x = -Math.PI / 2;
-    glow.position.y = 0.035;
-    root.add(glow);
+    for (const [name, radius, y, sx, sz, opacity, rot] of [
+      ['sand_heat_haze_low', 7.4, 0.055, 1.0, 0.62, atmosphere.hazeOpacity ?? 0.15, 0],
+      ['sand_heat_haze_mid', 6.6, 0.14, 0.92, 0.52, (atmosphere.hazeOpacity ?? 0.15) * 0.82, 0.18],
+      ['sand_heat_haze_back', 5.2, 0.24, 0.7, 0.34, (atmosphere.hazeOpacity ?? 0.15) * 0.55, -0.12],
+    ]) {
+      const haze = new THREE.Mesh(new THREE.CircleGeometry(radius, 64), hazeMat.clone());
+      haze.name = `${stage.id}_${name}`;
+      haze.material.opacity = opacity;
+      haze.rotation.x = -Math.PI / 2;
+      haze.rotation.z = rot;
+      haze.position.y = y;
+      haze.scale.set(sx, sz, 1);
+      haze.renderOrder = -2;
+      root.add(haze);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: haze,
+        basePosition: haze.position.clone(),
+        baseScale: haze.scale.clone(),
+        drift: new THREE.Vector3(0.035, 0, 0.02),
+        speed: 0.55 + radius * 0.035,
+        phase: radius * 0.71,
+        opacity,
+        opacityPulse: opacity * 0.13,
+        scalePulse: 0.012,
+      });
+    }
+
+    const heatMat = this._makeHeatShimmerMaterial({
+      color: atmosphere.heatColor ?? 0xf7efe0,
+      opacity: atmosphere.heatOpacity ?? 0.075,
+      strength: atmosphere.heatStrength ?? 0.65,
+    });
+    const heatDefs = [
+      [0.0, 1.16, -5.45, 12.4, 2.85, 0.0, atmosphere.heatOpacity ?? 0.1],
+      [-4.2, 1.36, -3.75, 4.8, 2.25, 0.18, (atmosphere.heatOpacity ?? 0.1) * 0.72],
+      [4.35, 1.34, -3.65, 4.6, 2.2, -0.18, (atmosphere.heatOpacity ?? 0.1) * 0.68],
+    ];
+    for (const [x, y, z, width, height, rotY, opacity] of heatDefs) {
+      const heat = new THREE.Mesh(new THREE.PlaneGeometry(width, height), heatMat.clone());
+      heat.name = `${stage.id}_rising_heat_shimmer`;
+      heat.material.uniforms.uOpacity.value = opacity;
+      heat.position.set(x, y, z);
+      heat.rotation.set(-0.04, rotY, 0);
+      heat.renderOrder = 1;
+      root.add(heat);
+      this._shaderEffects.push({ material: heat.material });
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: heat,
+        basePosition: heat.position.clone(),
+        baseScale: heat.scale.clone(),
+        drift: new THREE.Vector3(0.08, 0.035, 0.025),
+        speed: 0.9 + Math.abs(x) * 0.05,
+        phase: x * 0.63 + z * 0.19,
+        opacity,
+        opacityPulse: opacity * 0.22,
+        scalePulse: 0.025,
+      });
+    }
+
+    this._addDriftPoints(root, stage, {
+      name: 'gold_dust',
+      count: 170,
+      seed: 0xd05700,
+      color: atmosphere.dustColor ?? 0xe0b26e,
+      size: 0.032,
+      opacity: atmosphere.dustOpacity ?? 0.22,
+      soft: true,
+      additive: true,
+      bounds: { x: 7.1, z: 6.2, minY: 0.25, maxY: 4.4 },
+      velocity: { x: 0.035, y: 0.22, z: -0.015 },
+      jitter: { x: 0.1, y: 0.07, z: 0.1 },
+      sway: 0.11,
+      swaySpeed: 0.95,
+      resetFromTop: false,
+      resetDepth: 1,
+    });
+  }
+
+  _addAmphitheaterSkyClouds(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const sky = new THREE.Group();
+    sky.name = `${stage.id}_open_sky_clouds`;
+    root.add(sky);
+
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.cloudColor ?? 0xf4ead6,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.cloudOpacity ?? 0.48,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.cloudShadowColor ?? 0xc8b492,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.cloudShadowOpacity ?? 0.2,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+
+    const cloudDefs = [
+      [-11.0, 5.9, -14.0, 5.5, 1.05, -0.06],
+      [-5.7, 6.15, -15.2, 4.3, 0.86, 0.05],
+      [0.2, 6.35, -16.2, 6.0, 1.05, 0.0],
+      [6.9, 6.1, -14.8, 4.9, 0.92, 0.08],
+      [11.8, 5.82, -13.4, 4.1, 0.76, -0.08],
+      [-16.8, 5.6, -4.2, 4.1, 0.82, 0.18],
+      [16.6, 5.7, -3.8, 4.3, 0.86, -0.14],
+      [-15.0, 5.92, 7.0, 3.6, 0.72, -0.22],
+      [15.3, 5.9, 6.5, 3.9, 0.76, 0.2],
+      [-4.0, 5.5, 15.5, 4.0, 0.76, 0.12],
+      [4.2, 5.65, 15.2, 4.4, 0.82, -0.12],
+    ];
+    for (const [x, y, z, sx, sy, rot] of cloudDefs) {
+      const cloud = new THREE.Mesh(new THREE.CircleGeometry(1, 32), cloudMat.clone());
+      cloud.name = `${stage.id}_soft_sky_cloud`;
+      cloud.position.set(x, y, z);
+      cloud.scale.set(sx, sy, 1);
+      cloud.rotation.set(-0.12, 0, rot);
+      cloud.renderOrder = -5;
+      sky.add(cloud);
+
+      const shade = new THREE.Mesh(new THREE.CircleGeometry(1, 28), shadowMat.clone());
+      shade.name = `${stage.id}_soft_sky_cloud_shadow`;
+      shade.position.set(x + sx * 0.18, y - sy * 0.28, z + 0.04);
+      shade.scale.set(sx * 0.75, sy * 0.58, 1);
+      shade.rotation.copy(cloud.rotation);
+      shade.renderOrder = -6;
+      sky.add(shade);
+
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: cloud,
+        basePosition: cloud.position.clone(),
+        baseScale: cloud.scale.clone(),
+        drift: new THREE.Vector3(0.018, 0.004, 0.01),
+        speed: 0.08,
+        phase: x * 0.17 + z * 0.11,
+        opacity: cloud.material.opacity,
+        opacityPulse: 0.018,
+        scalePulse: 0.01,
+      });
+    }
+  }
+
+  _addAmphitheaterExteriorCity(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const city = new THREE.Group();
+    city.name = `${stage.id}_exterior_city`;
+    root.add(city);
+
+    const stoneMat = new THREE.MeshLambertMaterial({
+      color: atmosphere.exteriorCityColor ?? 0xb49a74,
+      transparent: true,
+      opacity: atmosphere.exteriorCityOpacity ?? 0.78,
+      depthWrite: true,
+      depthTest: true,
+      fog: true,
+    });
+    const shadeMat = new THREE.MeshLambertMaterial({
+      color: atmosphere.exteriorCityShadowColor ?? 0x6f5840,
+      transparent: true,
+      opacity: atmosphere.exteriorCityShadowOpacity ?? 0.52,
+      depthWrite: true,
+      depthTest: true,
+      fog: true,
+    });
+    const roofMat = new THREE.MeshLambertMaterial({
+      color: atmosphere.exteriorCityRoofColor ?? 0x8a6144,
+      transparent: true,
+      opacity: atmosphere.exteriorCityOpacity ?? 0.78,
+      depthWrite: true,
+      depthTest: true,
+      fog: true,
+    });
+
+    const placeOnRing = (mesh, angle, radius, y, radialDepth = 0) => {
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      mesh.position.set(x, y, z);
+      mesh.rotation.y = -angle + Math.PI / 2;
+      if (radialDepth) {
+        mesh.position.x += Math.cos(angle) * radialDepth;
+        mesh.position.z += Math.sin(angle) * radialDepth;
+      }
+      city.add(mesh);
+      return mesh;
+    };
+
+    const addBlock = (angle, radius, y, width, height, depth, material = stoneMat) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material.clone());
+      mesh.name = `${stage.id}_exterior_city_block`;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      return placeOnRing(mesh, angle, radius, y + height * 0.5);
+    };
+
+    const addTower = (angle, radius, y, height, bodyRadius, material = stoneMat) => {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(bodyRadius * 0.85, bodyRadius, height, 8), material.clone());
+      tower.name = `${stage.id}_exterior_city_tower`;
+      placeOnRing(tower, angle, radius, y + height * 0.5);
+
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(bodyRadius * 1.35, bodyRadius * 1.2, 8), roofMat.clone());
+      cap.name = `${stage.id}_exterior_city_tower_roof`;
+      placeOnRing(cap, angle, radius, y + height + bodyRadius * 0.6);
+      return tower;
+    };
+
+    const addDome = (angle, radius, y, domeRadius, stretch = 1.0) => {
+      addBlock(angle, radius, y, domeRadius * 1.65, domeRadius * 0.7, domeRadius * 1.25, stoneMat);
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(domeRadius, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        roofMat.clone(),
+      );
+      dome.name = `${stage.id}_exterior_city_dome`;
+      dome.scale.x = stretch;
+      return placeOnRing(dome, angle, radius, y + domeRadius * 0.7);
+    };
+
+    const radius = atmosphere.exteriorCityRadius ?? 18.4;
+    const baseY = atmosphere.exteriorCityBaseY ?? 4.45;
+    const farSide = -Math.PI / 2;
+    const skyline = [
+      [-0.92, 2.6, 3.0, 1.9, 0.4],
+      [-0.74, 1.9, 4.0, 1.45, 0.3],
+      [-0.56, 2.9, 3.3, 2.0, 0.45],
+      [-0.38, 2.1, 4.45, 1.55, 0.28],
+      [-0.2, 3.2, 3.25, 2.1, 0.42],
+      [0.0, 2.4, 4.2, 1.6, 0.25],
+      [0.2, 3.4, 3.4, 2.2, 0.42],
+      [0.39, 2.1, 4.55, 1.5, 0.28],
+      [0.58, 2.8, 3.2, 1.9, 0.38],
+      [0.76, 1.95, 3.9, 1.45, 0.28],
+      [0.94, 2.7, 3.1, 1.85, 0.36],
+    ];
+    for (const [angleOffset, width, height, depth, offset] of skyline) {
+      const angle = farSide + angleOffset;
+      addBlock(angle, radius + offset, baseY, width, height, depth);
+      addBlock(angle + 0.025, radius + offset - 0.06, baseY + height * 0.08, width * 0.38, height * 0.74, depth * 1.04, shadeMat);
+    }
+
+    const lowerBaseY = atmosphere.exteriorCityLowerBaseY ?? 1.05;
+    const lowerRadius = atmosphere.exteriorCityLowerRadius ?? (radius + 0.25);
+    const lowerSkyline = [
+      [-0.96, 2.8, 3.9, 1.5],
+      [-0.74, 2.1, 4.6, 1.28],
+      [-0.5, 3.0, 4.05, 1.5],
+      [-0.25, 2.3, 4.85, 1.28],
+      [0.0, 3.2, 4.15, 1.5],
+      [0.25, 2.2, 4.7, 1.28],
+      [0.5, 2.95, 4.0, 1.5],
+      [0.74, 2.1, 4.5, 1.28],
+      [0.96, 2.6, 3.85, 1.4],
+    ];
+    for (const [angleOffset, width, height, depth] of lowerSkyline) {
+      const angle = farSide + angleOffset;
+      addBlock(angle, lowerRadius, lowerBaseY, width, height, depth);
+      addBlock(angle + 0.02, lowerRadius - 0.08, lowerBaseY + height * 0.1, width * 0.34, height * 0.7, depth * 1.05, shadeMat);
+    }
+
+    for (const [angleOffset, height, bodyRadius] of [
+      [-0.82, 5.6, 0.34],
+      [-0.46, 6.1, 0.3],
+      [-0.08, 5.8, 0.36],
+      [0.34, 6.2, 0.32],
+      [0.78, 5.4, 0.3],
+    ]) {
+      addTower(farSide + angleOffset, radius + 0.55, baseY, height, bodyRadius);
+    }
+
+    for (const [angleOffset, domeRadius, stretch] of [
+      [-0.62, 1.05, 1.25],
+      [-0.18, 1.25, 1.1],
+      [0.26, 1.0, 1.35],
+      [0.68, 0.9, 1.2],
+    ]) {
+      addDome(farSide + angleOffset, radius + 0.95, baseY + 1.35, domeRadius, stretch);
+    }
+
+    const hazeMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.exteriorCityHazeColor ?? 0xf2d2a0,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.exteriorCityHazeOpacity ?? 0.18,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: true,
+    });
+    for (const [angleOffset, y, sx, sy] of [
+      [-0.68, 6.65, 4.8, 0.9],
+      [0.0, 6.95, 6.0, 1.0],
+      [0.68, 6.7, 4.6, 0.86],
+    ]) {
+      const haze = new THREE.Mesh(new THREE.CircleGeometry(1, 28), hazeMat.clone());
+      haze.name = `${stage.id}_exterior_city_heat_haze`;
+      haze.scale.set(sx, sy, 1);
+      placeOnRing(haze, farSide + angleOffset, radius - 0.5, y, -0.35);
+      haze.rotation.x = -0.08;
+      haze.renderOrder = -4;
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: haze,
+        basePosition: haze.position.clone(),
+        baseScale: haze.scale.clone(),
+        drift: new THREE.Vector3(0.025, 0.01, 0.02),
+        speed: 0.18,
+        phase: angleOffset * 4.3,
+        opacity: haze.material.opacity,
+        opacityPulse: haze.material.opacity * 0.12,
+        scalePulse: 0.012,
+      });
+    }
+  }
+
+  _addDriftPoints(root, stage, options) {
+    const rand = this._makeRand(this._hashString(`${stage.id}:${options.name}:${options.seed}`));
+    const positions = new Float32Array(options.count * 3);
+    const velocities = new Float32Array(options.count * 3);
+    for (let i = 0; i < options.count; i++) {
+      const base = i * 3;
+      positions[base] = (rand() - 0.5) * options.bounds.x * 2;
+      positions[base + 1] = options.bounds.minY + rand() * (options.bounds.maxY - options.bounds.minY);
+      positions[base + 2] = (rand() - 0.5) * options.bounds.z * 2;
+      velocities[base] = (options.velocity.x ?? 0) + (rand() - 0.5) * (options.jitter.x ?? 0);
+      velocities[base + 1] = (options.velocity.y ?? 0) + (rand() - 0.5) * (options.jitter.y ?? 0);
+      velocities[base + 2] = (options.velocity.z ?? 0) + (rand() - 0.5) * (options.jitter.z ?? 0);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    const material = new THREE.PointsMaterial({
+      color: options.color,
+      size: options.size ?? 0.05,
+      map: options.soft ? this._makeDustMoteTexture() : null,
+      transparent: true,
+      opacity: options.opacity ?? 0.4,
+      depthWrite: false,
+      alphaTest: options.soft ? 0.02 : 0,
+      blending: options.additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    });
+    const points = new THREE.Points(geometry, material);
+    points.name = `${stage.id}_${options.name}`;
+    root.add(points);
+    this._stageEffects.push({
+      points,
+      velocities,
+      bounds: options.bounds,
+      sway: options.sway ?? 0,
+      swaySpeed: options.swaySpeed ?? 1,
+      resetFromTop: options.resetFromTop ?? false,
+      resetDepth: options.resetDepth ?? 1,
+      rand,
+      time: rand() * 10,
+    });
+  }
+
+  _addDriftLines(root, stage, options) {
+    const rand = this._makeRand(this._hashString(`${stage.id}:${options.name}:${options.seed}`));
+    const positions = new Float32Array(options.count * 2 * 3);
+    const velocities = new Float32Array(options.count * 3);
+    const lengths = new Float32Array(options.count);
+    for (let i = 0; i < options.count; i++) {
+      const leafBase = i * 3;
+      const pointBase = i * 6;
+      const x = (rand() - 0.5) * options.bounds.x * 2;
+      const y = options.bounds.minY + rand() * (options.bounds.maxY - options.bounds.minY);
+      const z = (rand() - 0.5) * options.bounds.z * 2;
+      const length = (options.lengthMin ?? 0.08) + rand() * ((options.lengthMax ?? 0.16) - (options.lengthMin ?? 0.08));
+      positions[pointBase] = x;
+      positions[pointBase + 1] = y;
+      positions[pointBase + 2] = z;
+      positions[pointBase + 3] = x + length * 0.55;
+      positions[pointBase + 4] = y - length;
+      positions[pointBase + 5] = z + length * 0.16;
+      velocities[leafBase] = (options.velocity.x ?? 0) + (rand() - 0.5) * (options.jitter.x ?? 0);
+      velocities[leafBase + 1] = (options.velocity.y ?? 0) + (rand() - 0.5) * (options.jitter.y ?? 0);
+      velocities[leafBase + 2] = (options.velocity.z ?? 0) + (rand() - 0.5) * (options.jitter.z ?? 0);
+      lengths[i] = length;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    const lines = new THREE.LineSegments(
+      geometry,
+      new THREE.LineBasicMaterial({
+        color: options.color,
+        transparent: true,
+        opacity: options.opacity ?? 0.3,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+      }),
+    );
+    lines.name = `${stage.id}_${options.name}`;
+    root.add(lines);
+    this._lineEffects.push({
+      lines,
+      velocities,
+      lengths,
+      bounds: options.bounds,
+      sway: options.sway ?? 0,
+      swaySpeed: options.swaySpeed ?? 1,
+      resetDepth: options.resetDepth ?? 1,
+      rand,
+      time: rand() * 10,
+    });
   }
 
   _makeMoonlightShaftTexture() {
@@ -361,6 +1091,25 @@ export class Arena {
         ctx.fillRect(rand() * width, rand() * height, 2 + rand() * 14, height * (0.12 + rand() * 0.32));
       }
       ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
+  _makeDustMoteTexture() {
+    return this._makeCanvasTexture(64, 64, (ctx, width, height) => {
+      const gradient = ctx.createRadialGradient(
+        width * 0.5,
+        height * 0.5,
+        0,
+        width * 0.5,
+        height * 0.5,
+        width * 0.5,
+      );
+      gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+      gradient.addColorStop(0.42, 'rgba(255,255,255,0.52)');
+      gradient.addColorStop(0.78, 'rgba(255,255,255,0.12)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
     });
   }
 
@@ -561,6 +1310,142 @@ export class Arena {
     });
   }
 
+  _makeHeatShimmerMaterial({ color = 0xffcf88, opacity = 0.2, strength = 1.0 } = {}) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color(color) },
+        uOpacity: { value: opacity },
+        uStrength: { value: strength },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        uniform float uTime;
+        uniform float uStrength;
+        void main() {
+          vUv = uv;
+          vec3 pos = position;
+          float slow = sin(uv.y * 7.0 + sin(uv.x * 4.0 + uTime * 0.45) * 1.3 + uTime * 0.8);
+          float fine = sin(uv.y * 24.0 + uv.x * 5.0 + uTime * 1.55);
+          pos.x += (slow * 0.010 + fine * 0.003) * uv.y * uStrength;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        uniform float uStrength;
+        varying vec2 vUv;
+
+        float heatHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        void main() {
+          float edgeFade = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
+          float verticalFade = smoothstep(0.02, 0.2, vUv.y) * smoothstep(1.0, 0.22, 1.0 - vUv.y);
+          float bend = sin(vUv.x * 4.2 + uTime * 0.5) * 1.15;
+          float slowBand = sin(vUv.y * 8.0 + bend + uTime * 0.9);
+          float ripple = sin(vUv.y * 31.0 + vUv.x * 8.0 + uTime * 1.8);
+          float band = smoothstep(0.15, 0.92, slowBand * 0.48 + ripple * 0.16 + 0.52);
+          float noise = heatHash(floor(vUv * vec2(10.0, 8.0)) + floor(uTime * 0.8));
+          float alpha = band * edgeFade * verticalFade * (0.82 + noise * 0.08) * uOpacity * uStrength;
+          gl_FragColor = vec4(uColor, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+    });
+  }
+
+  _makeHeatWaveTexture() {
+    return this._makeCanvasTexture(128, 256, (ctx, width, height) => {
+      const fade = ctx.createLinearGradient(0, 0, 0, height);
+      fade.addColorStop(0, 'rgba(255,255,255,0)');
+      fade.addColorStop(0.18, 'rgba(255,255,255,0.22)');
+      fade.addColorStop(0.52, 'rgba(255,255,255,0.38)');
+      fade.addColorStop(0.84, 'rgba(255,255,255,0.12)');
+      fade.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 0, width, height);
+
+      const rand = this._makeRand(0x8e47a13);
+      for (let i = 0; i < 18; i++) {
+        const x = rand() * width;
+        const amp = 4 + rand() * 8;
+        const phase = rand() * Math.PI * 2;
+        ctx.strokeStyle = `rgba(255,255,255,${0.06 + rand() * 0.1})`;
+        ctx.lineWidth = 2 + rand() * 3;
+        ctx.beginPath();
+        for (let y = 0; y <= height; y += 8) {
+          const px = x + Math.sin(y * 0.055 + phase) * amp;
+          if (y === 0) ctx.moveTo(px, y);
+          else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = `rgba(0,0,0,${0.04 + rand() * 0.08})`;
+        ctx.fillRect(rand() * width, rand() * height, 4 + rand() * 14, 18 + rand() * 60);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
+  _makeBambooLeafLitterTexture() {
+    return this._makeCanvasTexture(512, 512, (ctx, width, height) => {
+      const rand = this._makeRand(0xbab0011);
+      ctx.fillStyle = '#4b3a24';
+      ctx.fillRect(0, 0, width, height);
+
+      for (let i = 0; i < 2200; i++) {
+        const x = rand() * width;
+        const y = rand() * height;
+        const r = 0.6 + rand() * 2.4;
+        const tone = rand();
+        ctx.fillStyle = tone > 0.72
+          ? `rgba(128, 104, 54, ${0.16 + rand() * 0.16})`
+          : tone > 0.38
+            ? `rgba(63, 78, 36, ${0.1 + rand() * 0.14})`
+            : `rgba(27, 23, 15, ${0.09 + rand() * 0.12})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = 0; i < 190; i++) {
+        const x = rand() * width;
+        const y = rand() * height;
+        const len = 10 + rand() * 34;
+        const angle = rand() * Math.PI;
+        const w = 0.7 + rand() * 1.4;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.strokeStyle = rand() > 0.45
+          ? `rgba(135, 117, 63, ${0.22 + rand() * 0.24})`
+          : `rgba(39, 54, 29, ${0.18 + rand() * 0.2})`;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(-len * 0.5, 0);
+        ctx.quadraticCurveTo(0, (rand() - 0.5) * 5, len * 0.5, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const vignette = ctx.createRadialGradient(width * 0.5, height * 0.5, width * 0.08, width * 0.5, height * 0.5, width * 0.64);
+      vignette.addColorStop(0, 'rgba(255, 226, 156, 0.1)');
+      vignette.addColorStop(0.72, 'rgba(0,0,0,0)');
+      vignette.addColorStop(1, 'rgba(0,0,0,0.22)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, width, height);
+    });
+  }
+
   async _addModelStageDecor(root, stage, token) {
     if (!stage.decorModels?.length) return;
 
@@ -569,10 +1454,11 @@ export class Arena {
     root.add(decorRoot);
 
     for (const decor of stage.decorModels) {
+      if (!this._isStageFeatureEnabled(stage, decor.feature)) continue;
       try {
-        const gltf = await this.loader.loadAsync(decor.path);
+        const model = await StageLoader.loadModel(decor.path);
         if (token !== this._loadToken) return;
-        this._addDecorScatter(decorRoot, gltf.scene, decor, stage);
+        this._addDecorScatter(decorRoot, model.scene, decor, stage);
       } catch (error) {
         console.warn(`[arena] Failed to load decor '${decor.path}' for stage '${stage.id}'`, error);
       }
@@ -645,6 +1531,17 @@ export class Arena {
         ? -angle + Math.PI / 2 + (rand() - 0.5) * rotationJitter
         : rand() * Math.PI * 2;
       root.add(clone);
+      if (decor.sway && this._isStageFeatureEnabled(stage, decor.swayFeature)) {
+        this._meshEffects.push({
+          kind: 'sway_group',
+          mesh: clone,
+          baseRotation: clone.rotation.clone(),
+          speed: decor.swaySpeed ?? 0.18,
+          phase: i * 1.73 + r * 0.11,
+          amountX: decor.swayX ?? 0.008,
+          amountZ: decor.swayZ ?? 0.012,
+        });
+      }
     }
   }
 
@@ -666,6 +1563,17 @@ export class Arena {
         placement.rotationZ ?? 0,
       );
       root.add(clone);
+      if (decor.sway && this._isStageFeatureEnabled(stage, decor.swayFeature)) {
+        this._meshEffects.push({
+          kind: 'sway_group',
+          mesh: clone,
+          baseRotation: clone.rotation.clone(),
+          speed: decor.swaySpeed ?? 0.18,
+          phase: i * 1.73,
+          amountX: decor.swayX ?? 0.006,
+          amountZ: decor.swayZ ?? 0.01,
+        });
+      }
     }
   }
 
@@ -681,9 +1589,11 @@ export class Arena {
 
   _addPitFloor(stage) {
     if (!stage.pitFloor) return;
+    if (!this._isStageFeatureEnabled(stage, stage.pitFloor.feature)) return;
     const floorGeo = new THREE.CircleGeometry(stage.pitFloor.radius ?? ARENA_RADIUS, 96);
     const floorMat = new THREE.MeshStandardMaterial({
       color: stage.pitFloor.color ?? 0x8b7354,
+      map: stage.pitFloor.texture === 'bamboo_leaf_litter' ? this._makeBambooLeafLitterTexture() : null,
       roughness: 0.92,
       metalness: 0.02,
     });

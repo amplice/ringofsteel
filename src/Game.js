@@ -3,6 +3,7 @@ import { Renderer } from './core/Renderer.js';
 import { Clock } from './core/Clock.js';
 import { InputManager } from './core/InputManager.js';
 import { Arena } from './arena/Arena.js';
+import { StageLoader } from './arena/StageLoader.js';
 import { Environment } from './arena/Environment.js';
 import { CameraController } from './camera/CameraController.js';
 import { Fighter } from './entities/Fighter.js';
@@ -22,7 +23,7 @@ import { OnlineSession } from './net/OnlineSession.js';
 import { SoundManager } from './audio/SoundManager.js';
 import { listAudioAssets } from './audio/AudioCatalog.js';
 import { GameAudio } from './audio/GameAudio.js';
-import { DEFAULT_STAGE, normalizeStageId } from './arena/StageDefs.js';
+import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from './arena/StageDefs.js';
 import {
   GameState, HitResult,
   FIGHT_START_DISTANCE, ROUNDS_TO_WIN, ROUND_INTRO_DURATION,
@@ -121,15 +122,29 @@ export class Game {
     const charEntries = Object.entries(CHARACTER_DEFS);
     for (let i = 0; i < charEntries.length; i++) {
       const [id, def] = charEntries[i];
-      const progressBase = 0.2 + (i / Math.max(charEntries.length, 1)) * 0.7;
+      const progressBase = 0.2 + (i / Math.max(charEntries.length, 1)) * 0.52;
       this.ui.showLoading(progressBase, `Loading ${def.displayName}...`);
       try {
         this._charCache[id] = await ModelLoader.loadCharacter(def);
       } catch (err) {
         console.warn(`Failed to load character '${id}':`, err);
       }
-      const progressDone = 0.2 + ((i + 1) / Math.max(charEntries.length, 1)) * 0.7;
+      const progressDone = 0.2 + ((i + 1) / Math.max(charEntries.length, 1)) * 0.52;
       this.ui.showLoading(progressDone, `Loaded ${def.displayName}`);
+    }
+
+    const stageEntries = Object.entries(STAGE_DEFS).filter(([, stage]) => StageLoader.getAssetPaths(stage).length);
+    for (let i = 0; i < stageEntries.length; i++) {
+      const [, stage] = stageEntries[i];
+      const progressBase = 0.74 + (i / Math.max(stageEntries.length, 1)) * 0.18;
+      this.ui.showLoading(progressBase, `Loading ${stage.displayName}...`);
+      try {
+        await StageLoader.preloadStage(stage);
+      } catch (err) {
+        console.warn(`Failed to preload stage '${stage.id}':`, err);
+      }
+      const progressDone = 0.74 + ((i + 1) / Math.max(stageEntries.length, 1)) * 0.18;
+      this.ui.showLoading(progressDone, `Loaded ${stage.displayName}`);
     }
     this.ui.showLoading(0.95, 'Finalizing interface...');
     HumanAIMatchRecorder.installWindowApi();

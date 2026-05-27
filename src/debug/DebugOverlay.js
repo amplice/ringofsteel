@@ -96,7 +96,7 @@ export class DebugOverlay {
     lines.push(`Debug Overlay  [${DEBUG_OPTIONS.toggleKey}]`);
     lines.push(`state=${data.gameState} frame=${data.frameCount} timeScale=${this._fmt(data.timeScale, 2)} rawDt=${this._fmt(data.rawDelta, 4)} steps=${data.steps} timer=${this._fmt(data.stateTimer, 3)}`);
     lines.push(`mode=${data.mode} difficulty=${data.difficulty} round=${data.currentRound} score=${data.p1Score}-${data.p2Score} hitstop=${data.screen.hitstopFrames} freeze=${data.screen.onHitstop}`);
-    lines.push(`camera killCam=${data.camera.killCamActive} phase=${data.camera.killCamPhase} orbit=${this._fmt(data.camera.orbitAngle, 2)} shake=${this._fmt(data.camera.shakeIntensity, 3)} killTime=${this._fmt(data.camera.killCamTime, 2)}`);
+    lines.push(`camera killCam=${data.camera.killCamActive} manual=${data.camera.debugManual} phase=${data.camera.killCamPhase} orbit=${this._fmt(data.camera.orbitAngle, 2)} shake=${this._fmt(data.camera.shakeIntensity, 3)} killTime=${this._fmt(data.camera.killCamTime, 2)}`);
     lines.push(`distance=${this._fmt(data.distance, 3)} animSandbox=${data.animSandbox}`);
 
     if (data.ai) {

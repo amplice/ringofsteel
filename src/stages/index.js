@@ -4,7 +4,7 @@ export const DEFAULT_STAGE = 'test';
 export const AMPHITHEATER_PIT_RADIUS = 6.77;
 export const BAMBOO_CLEARING_RADIUS = 4.6;
 export const MOUNTAINTOP_RADIUS = 3.35;
-export const WOODEN_PIER_RADIUS = 4.15;
+export const WOODEN_PIER_RADIUS = 3.55;
 
 export const STAGE_DEFS = Object.freeze({
   test: Object.freeze({
@@ -221,12 +221,117 @@ export const STAGE_DEFS = Object.freeze({
     displayName: 'Wooden Pier',
     description: 'Damaged dock platform over open water at sunset',
     modelPath: '/stages/wooden_pier_sunset_v1.glb',
-    modelScale: 11,
-    modelYOffset: -0.44,
+    modelScale: 9.35,
+    modelRotationY: 1.5707963267948966,
+    modelYOffset: 0.24,
     showBoundaryMarkers: false,
     camera: Object.freeze({
-      maxRadius: 4.85,
+      maxRadius: 4.25,
     }),
+    decorModels: Object.freeze([
+      Object.freeze({
+        path: '/stages/wooden_ships_background.glb',
+        mode: 'placements',
+        materialTint: 0x6e7d82,
+        materialOpacity: 0.36,
+        materialStyle: 'matte',
+        castShadow: false,
+        receiveShadow: false,
+        placements: Object.freeze([
+          Object.freeze({
+            position: Object.freeze([-16, 0.49, -21]),
+            rotationY: 0.92,
+            scale: Object.freeze([2.6, 2.35, 2.9]),
+            drift: Object.freeze({ x: 0.42, y: 0.01, z: 0.16, yaw: 0.02, speed: 0.075, bobSpeed: 0.22, phase: 0.4 }),
+          }),
+          Object.freeze({
+            position: Object.freeze([22, 0.25, -29]),
+            rotationY: -0.72,
+            scale: Object.freeze([1.75, 1.6, 1.95]),
+          }),
+        ]),
+      }),
+      Object.freeze({
+        path: '/stages/wooden_sailboat_background.glb',
+        mode: 'placements',
+        materialTint: 0x8f8170,
+        materialOpacity: 0.42,
+        materialStyle: 'matte',
+        castShadow: false,
+        receiveShadow: false,
+        placements: Object.freeze([
+          Object.freeze({
+            position: Object.freeze([-9, 0.23, -32]),
+            rotationY: 0.34,
+            scale: Object.freeze([1.25, 1.18, 1.35]),
+          }),
+          Object.freeze({
+            position: Object.freeze([24, 0.35, -21]),
+            rotationY: -0.18,
+            scale: Object.freeze([1.55, 1.48, 1.68]),
+            drift: Object.freeze({ x: -0.32, y: 0.012, z: 0.1, yaw: 0.024, speed: 0.064, bobSpeed: 0.2, phase: 2.1 }),
+          }),
+          Object.freeze({
+            position: Object.freeze([18, 0.16, -12]),
+            rotationY: -1.18,
+            scale: Object.freeze([1.1, 1.02, 1.18]),
+          }),
+        ]),
+      }),
+      Object.freeze({
+        path: '/stages/pier_island_background.glb',
+        mode: 'placements',
+        materialTint: 0x7c896b,
+        materialOpacity: 0.94,
+        castShadow: false,
+        receiveShadow: false,
+        placements: Object.freeze([
+          Object.freeze({
+            position: Object.freeze([0, -0.12, 18]),
+            rotationY: 0.1,
+            scale: Object.freeze([40, 2.0, 15]),
+            waterShadow: Object.freeze({
+              scale: Object.freeze([46, 12]),
+              offset: Object.freeze([0, 0, -1.2]),
+              rotationZ: 0.04,
+              opacity: 0.2,
+            }),
+          }),
+        ]),
+      }),
+      Object.freeze({
+        path: '/stages/pier_island_background.glb',
+        mode: 'placements',
+        materialTint: 0x5f7f73,
+        materialOpacity: 0.52,
+        castShadow: false,
+        receiveShadow: false,
+        placements: Object.freeze([
+          Object.freeze({
+            position: Object.freeze([1, 0.06, -38]),
+            rotationY: -0.34,
+            scale: Object.freeze([9.4, 2.4, 5.0]),
+            waterShadow: Object.freeze({
+              scale: Object.freeze([13.5, 5.2]),
+              offset: Object.freeze([0.3, 0, 1.6]),
+              rotationZ: -0.18,
+              opacity: 0.36,
+            }),
+          }),
+          Object.freeze({
+            position: Object.freeze([9, 0.04, -41]),
+            rotationY: 0.18,
+            scale: Object.freeze([6.6, 2.0, 3.8]),
+            waterShadow: Object.freeze({
+              scale: Object.freeze([9.2, 3.8]),
+              offset: Object.freeze([-0.2, 0, 1.3]),
+              rotationZ: 0.12,
+              opacity: 0.32,
+            }),
+          }),
+        ]),
+      }),
+    ]),
     environment: Object.freeze({
       background: 0xf0a061,
       fogColor: 0xd47754,
@@ -250,15 +355,15 @@ export const STAGE_DEFS = Object.freeze({
     }),
     atmosphere: Object.freeze({
       type: 'pier_sunset',
-      waterColor: 0x0b6685,
-      waterHighlightColor: 0xffaa62,
-      waterOpacity: 0.94,
-      waterY: -1.35,
+      waterColor: 0x5bbddd,
+      waterHighlightColor: 0xd3f4ff,
+      waterHorizonColor: 0xf6c895,
+      waterOpacity: 1.0,
+      waterY: -0.3,
       hazeColor: 0xffc28a,
-      hazeOpacity: 0.28,
+      horizonHazeOpacity: 0.5,
+      horizonY: 0.25,
       sunColor: 0xff8e45,
-      cloudColor: 0xffd0a0,
-      cloudOpacity: 0.34,
     }),
     materialMood: Object.freeze({
       tint: 0xc98d5b,

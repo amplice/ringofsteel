@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { lerp, clamp } from '../utils/MathUtils.js';
 import { getCurrentArenaStage, getStageCameraBounds } from '../arena/ArenaBounds.js';
+import { DEBUG_OPTIONS } from '../core/Constants.js';
 
 const _bodyA = new THREE.Vector3();
 const _bodyB = new THREE.Vector3();
+const _manualOffset = new THREE.Vector3();
 
 export class CameraController {
   constructor() {
@@ -31,7 +33,39 @@ export class CameraController {
     this.killCamTime = 0;
     this.killCamPhase = 'freeze'; // 'freeze' | 'zoom' | 'orbit'
 
+    this.debugManualCameraActive = false;
+    this._debugCameraDragging = false;
+    this._debugCameraLastX = 0;
+    this._debugCameraLastY = 0;
+    this._debugCameraYaw = 0;
+    this._debugCameraPitch = 0.45;
+    this._debugCameraDistance = 7;
+    this._debugCameraTarget = new THREE.Vector3(0, 1, 0);
+
+    this._onPointerDown = (event) => this._handleDebugPointerDown(event);
+    this._onPointerMove = (event) => this._handleDebugPointerMove(event);
+    this._onPointerUp = () => {
+      this._debugCameraDragging = false;
+    };
+    this._onWheel = (event) => this._handleDebugWheel(event);
+    this._onContextMenu = (event) => {
+      if (this._isDebugCameraAllowed()) event.preventDefault();
+    };
+    this._onKeyDown = (event) => {
+      if (event.code === 'Escape' && this.debugManualCameraActive) {
+        this.debugManualCameraActive = false;
+        this._debugCameraDragging = false;
+        this._needsSnap = true;
+      }
+    };
+
     window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('pointerdown', this._onPointerDown);
+    window.addEventListener('pointermove', this._onPointerMove);
+    window.addEventListener('pointerup', this._onPointerUp);
+    window.addEventListener('wheel', this._onWheel, { passive: false });
+    window.addEventListener('contextmenu', this._onContextMenu);
+    window.addEventListener('keydown', this._onKeyDown);
   }
 
   onResize() {
@@ -54,6 +88,16 @@ export class CameraController {
     const midX = (_bodyA.x + _bodyB.x) / 2;
     const midY = (fighter1.position.y + fighter2.position.y) / 2 + 1.0;
     const midZ = (_bodyA.z + _bodyB.z) / 2;
+
+    if (this.debugManualCameraActive) {
+      if (!this._isDebugCameraAllowed()) {
+        this.debugManualCameraActive = false;
+        this._needsSnap = true;
+      } else {
+        this._updateDebugManualCamera(midX, midY, midZ);
+        return;
+      }
+    }
 
     // Distance-based zoom
     const dist = fighter1.distanceTo(fighter2);
@@ -126,6 +170,62 @@ export class CameraController {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     return a + diff * t;
+  }
+
+  _isDebugCameraAllowed() {
+    if (!DEBUG_OPTIONS.persistToggle) {
+      return DEBUG_OPTIONS.overlayEnabled;
+    }
+    return window.localStorage.getItem(DEBUG_OPTIONS.storageKey) === 'true';
+  }
+
+  _syncDebugCameraFromCurrentView() {
+    _manualOffset.copy(this.camera.position).sub(this.currentLookAt);
+    const distance = _manualOffset.length();
+    if (distance > 0.001) {
+      this._debugCameraDistance = clamp(distance, 2, 18);
+      this._debugCameraYaw = Math.atan2(_manualOffset.x, _manualOffset.z);
+      this._debugCameraPitch = clamp(Math.asin(_manualOffset.y / distance), -0.35, 1.25);
+    }
+  }
+
+  _handleDebugPointerDown(event) {
+    if (event.button !== 2 || !this._isDebugCameraAllowed()) return;
+    event.preventDefault();
+    this._syncDebugCameraFromCurrentView();
+    this.debugManualCameraActive = true;
+    this._debugCameraDragging = true;
+    this._debugCameraLastX = event.clientX;
+    this._debugCameraLastY = event.clientY;
+  }
+
+  _handleDebugPointerMove(event) {
+    if (!this._debugCameraDragging || !this.debugManualCameraActive || !this._isDebugCameraAllowed()) return;
+    event.preventDefault();
+    const dx = event.clientX - this._debugCameraLastX;
+    const dy = event.clientY - this._debugCameraLastY;
+    this._debugCameraLastX = event.clientX;
+    this._debugCameraLastY = event.clientY;
+    this._debugCameraYaw -= dx * 0.006;
+    this._debugCameraPitch = clamp(this._debugCameraPitch - dy * 0.004, -0.35, 1.25);
+  }
+
+  _handleDebugWheel(event) {
+    if (!this.debugManualCameraActive || !this._isDebugCameraAllowed()) return;
+    event.preventDefault();
+    this._debugCameraDistance = clamp(this._debugCameraDistance * (1 + event.deltaY * 0.0015), 2, 18);
+  }
+
+  _updateDebugManualCamera(midX, midY, midZ) {
+    this._debugCameraTarget.set(midX, midY, midZ);
+    const cosPitch = Math.cos(this._debugCameraPitch);
+    this.camera.position.set(
+      this._debugCameraTarget.x + Math.sin(this._debugCameraYaw) * cosPitch * this._debugCameraDistance,
+      this._debugCameraTarget.y + Math.sin(this._debugCameraPitch) * this._debugCameraDistance,
+      this._debugCameraTarget.z + Math.cos(this._debugCameraYaw) * cosPitch * this._debugCameraDistance,
+    );
+    this.currentLookAt.copy(this._debugCameraTarget);
+    this.camera.lookAt(this._debugCameraTarget);
   }
 
   _updateKillCam(dt) {

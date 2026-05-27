@@ -1277,6 +1277,7 @@ export class Game {
         orbitAngle: this.cameraController.orbitAngle,
         shakeIntensity: this.cameraController.shakeIntensity,
         killCamTime: this.cameraController.killCamTime,
+        debugManual: this.cameraController.debugManualCameraActive,
       },
       ai: this.aiController?.getDebugSnapshot() ?? null,
       ai1: this.aiController1?.getDebugSnapshot() ?? null,

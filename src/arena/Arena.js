@@ -160,6 +160,14 @@ export class Arena {
         effect.mesh.rotation.x = effect.baseRotation.x + wave * effect.amountX;
         effect.mesh.rotation.z = effect.baseRotation.z + Math.sin(effect.time * effect.speed * 0.77 + effect.phase) * effect.amountZ;
       }
+      if (effect.kind === 'slow_drift_group') {
+        const wave = Math.sin(effect.time * effect.speed + effect.phase);
+        const cross = Math.sin(effect.time * effect.speed * 0.61 + effect.phase * 1.7);
+        effect.mesh.position.x = effect.basePosition.x + wave * effect.amountX;
+        effect.mesh.position.y = effect.basePosition.y + Math.sin(effect.time * effect.bobSpeed + effect.phase) * effect.amountY;
+        effect.mesh.position.z = effect.basePosition.z + cross * effect.amountZ;
+        effect.mesh.rotation.y = effect.baseRotation.y + wave * effect.amountYaw;
+      }
     }
 
     for (const effect of this._shaderEffects) {
@@ -617,10 +625,11 @@ export class Arena {
     const atmosphere = stage.atmosphere ?? {};
     const waterY = atmosphere.waterY ?? -0.72;
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(88, 88, 96, 96),
+      new THREE.PlaneGeometry(320, 320, 180, 180),
       this._makePierWaterMaterial({
         color: atmosphere.waterColor ?? 0x194766,
         highlight: atmosphere.waterHighlightColor ?? 0xffb66d,
+        horizonColor: atmosphere.waterHorizonColor ?? 0xf6c895,
         opacity: atmosphere.waterOpacity ?? 0.72,
         strength: 1.0,
       }),
@@ -632,6 +641,16 @@ export class Arena {
     water.renderOrder = -8;
     root.add(water);
     this._shaderEffects.push({ material: water.material });
+
+    const horizon = new THREE.Mesh(
+      new THREE.CylinderGeometry(46, 46, 11, 96, 1, true),
+      this._makePierHorizonHazeMaterial(atmosphere.horizonHazeOpacity ?? 0.5),
+    );
+    horizon.name = `${stage.id}_soft_horizon_haze`;
+    horizon.position.y = atmosphere.horizonY ?? 0.9;
+    horizon.renderOrder = 4;
+    root.add(horizon);
+    this._shaderEffects.push({ material: horizon.material });
 
     const sunMat = new THREE.MeshBasicMaterial({
       color: atmosphere.sunColor ?? 0xff8e45,
@@ -648,88 +667,6 @@ export class Arena {
     sun.scale.set(3.3, 3.3, 1);
     sun.renderOrder = -10;
     root.add(sun);
-
-    const hazeMat = new THREE.MeshBasicMaterial({
-      color: atmosphere.hazeColor ?? 0xffc28a,
-      map: this._makeSoftCloudTexture(),
-      transparent: true,
-      opacity: atmosphere.hazeOpacity ?? 0.28,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      fog: false,
-    });
-    for (const [x, y, z, sx, sy, opacity, rot] of [
-      [-8.2, 3.6, -25.5, 9.4, 2.2, atmosphere.hazeOpacity ?? 0.28, -0.04],
-      [2.9, 3.95, -27.5, 8.2, 1.75, (atmosphere.hazeOpacity ?? 0.28) * 0.58, 0.08],
-      [-0.8, 1.5, -18.6, 16.0, 1.05, (atmosphere.hazeOpacity ?? 0.28) * 0.42, 0.0],
-    ]) {
-      const haze = new THREE.Mesh(new THREE.CircleGeometry(1, 32), hazeMat.clone());
-      haze.name = `${stage.id}_sunset_haze`;
-      haze.material.opacity = opacity;
-      haze.position.set(x, y, z);
-      haze.scale.set(sx, sy, 1);
-      haze.rotation.z = rot;
-      haze.renderOrder = -9;
-      root.add(haze);
-    }
-
-    const cloudMat = new THREE.MeshBasicMaterial({
-      color: atmosphere.cloudColor ?? 0xffd0a0,
-      map: this._makeSoftCloudTexture(),
-      transparent: true,
-      opacity: atmosphere.cloudOpacity ?? 0.34,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      fog: false,
-    });
-    for (const [x, y, z, sx, sy, rot] of [
-      [-15.5, 7.4, -30, 4.6, 1.0, -0.08],
-      [-11.8, 7.65, -30.2, 3.1, 0.72, 0.04],
-      [8.5, 7.1, -29.0, 4.2, 0.82, 0.12],
-      [12.4, 7.32, -28.6, 2.8, 0.62, -0.03],
-    ]) {
-      const cloud = new THREE.Mesh(new THREE.CircleGeometry(1, 24), cloudMat.clone());
-      cloud.name = `${stage.id}_sunset_cloud`;
-      cloud.position.set(x, y, z);
-      cloud.scale.set(sx, sy, 1);
-      cloud.rotation.z = rot;
-      cloud.renderOrder = -10;
-      root.add(cloud);
-    }
-
-    const glintMat = new THREE.MeshBasicMaterial({
-      color: atmosphere.waterHighlightColor ?? 0xffb66d,
-      transparent: true,
-      opacity: 0.2,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-    });
-    const rand = this._makeRand(this._hashString(`${stage.id}:water_glints`));
-    for (let i = 0; i < 36; i++) {
-      const angle = rand() * Math.PI * 2;
-      const radius = 6.6 + rand() * 24;
-      const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.9 + rand() * 1.35, 0.025), glintMat.clone());
-      glint.name = `${stage.id}_water_glint`;
-      glint.material.opacity = 0.08 + rand() * 0.16;
-      glint.position.set(Math.cos(angle) * radius, waterY + 0.035, Math.sin(angle) * radius);
-      glint.rotation.set(-Math.PI / 2, 0, angle + (rand() - 0.5) * 0.55);
-      glint.renderOrder = -6;
-      root.add(glint);
-      this._meshEffects.push({
-        kind: 'heat_shimmer',
-        mesh: glint,
-        basePosition: glint.position.clone(),
-        baseScale: glint.scale.clone(),
-        drift: new THREE.Vector3((rand() - 0.5) * 0.06, 0, (rand() - 0.5) * 0.06),
-        speed: 0.22 + rand() * 0.28,
-        phase: rand() * Math.PI * 2,
-        opacity: glint.material.opacity,
-        opacityPulse: glint.material.opacity * 0.36,
-        scalePulse: 0.08,
-      });
-    }
 
     this._addDriftPoints(root, stage, {
       name: 'salt_mist',
@@ -1502,27 +1439,38 @@ export class Arena {
     });
   }
 
-  _makePierWaterMaterial({ color = 0x194766, highlight = 0xffb66d, opacity = 0.72, strength = 1.0 } = {}) {
+  _makePierWaterMaterial({
+    color = 0x194766,
+    highlight = 0xffb66d,
+    horizonColor = 0xf6c895,
+    opacity = 0.72,
+    strength = 1.0,
+  } = {}) {
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uWaterColor: { value: new THREE.Color(color) },
         uHighlightColor: { value: new THREE.Color(highlight) },
+        uHorizonColor: { value: new THREE.Color(horizonColor) },
         uOpacity: { value: opacity },
         uStrength: { value: strength },
       },
       vertexShader: `
         varying vec2 vUv;
+        varying vec2 vPlanePos;
         varying float vWave;
         uniform float uTime;
         uniform float uStrength;
         void main() {
           vUv = uv;
           vec3 pos = position;
+          vPlanePos = pos.xy;
           float broad = sin(pos.x * 0.42 + uTime * 0.55) + sin(pos.y * 0.36 - uTime * 0.38);
           float tight = sin((pos.x + pos.y) * 1.15 + uTime * 0.9);
           vWave = broad * 0.5 + tight * 0.25;
-          pos.z += vWave * 0.022 * uStrength;
+          float edge = max(abs(pos.x), abs(pos.y));
+          float edgeLift = smoothstep(110.0, 160.0, edge);
+          pos.z += (vWave * 0.024 + sin(pos.x * 0.13 + pos.y * 0.09) * edgeLift * 0.08) * uStrength;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
       `,
@@ -1530,26 +1478,87 @@ export class Arena {
         uniform float uTime;
         uniform vec3 uWaterColor;
         uniform vec3 uHighlightColor;
+        uniform vec3 uHorizonColor;
         uniform float uOpacity;
         varying vec2 vUv;
+        varying vec2 vPlanePos;
         varying float vWave;
 
         void main() {
           float horizon = smoothstep(0.45, 1.0, vUv.y);
-          float rippleA = sin(vUv.x * 118.0 + vUv.y * 21.0 + uTime * 1.15) * 0.34;
-          float rippleB = sin(vUv.y * 74.0 - vUv.x * 15.0 - uTime * 0.85) * 0.22;
-          float ripple = rippleA + rippleB + 0.5;
-          float band = smoothstep(0.8, 1.08, ripple + vWave * 0.08 + horizon * 0.12);
-          vec3 water = mix(uWaterColor, uHighlightColor, band * 0.14 + horizon * 0.025);
-          float edgeFade = smoothstep(0.0, 0.08, vUv.x) * smoothstep(1.0, 0.92, vUv.x);
-          float alpha = uOpacity * (0.95 + band * 0.04) * edgeFade;
-          gl_FragColor = vec4(water, max(alpha, 0.98));
+          float ripple = sin((vUv.x * 36.0 + vUv.y * 18.0) + uTime * 0.7) * 0.5 + 0.5;
+          vec3 water = mix(uWaterColor, uHighlightColor, ripple * 0.025 + horizon * 0.035);
+          float edgeDist = min(
+            min(vUv.x, 1.0 - vUv.x),
+            min(vUv.y, 1.0 - vUv.y)
+          );
+          float edgeNoise = sin(vUv.x * 34.0 + uTime * 0.12) * 0.02
+            + sin(vUv.x * 91.0 - uTime * 0.08) * 0.012
+            + sin(vUv.y * 47.0 + uTime * 0.1) * 0.01;
+          float edgeFade = smoothstep(0.035, 0.42, edgeDist + edgeNoise);
+          float horizonWobble = sin(vUv.x * 18.0 + uTime * 0.05) * 0.018
+            + sin(vUv.x * 43.0 - uTime * 0.04) * 0.008;
+          float farHorizonFade = 1.0 - smoothstep(0.62 + horizonWobble, 0.76 + horizonWobble, vUv.y);
+          float farEdge = max(
+            max(smoothstep(0.76, 1.0, vUv.y), smoothstep(0.24, 0.0, vUv.y)),
+            max(smoothstep(0.76, 1.0, vUv.x), smoothstep(0.24, 0.0, vUv.x))
+          );
+          vec3 horizonMist = mix(uHighlightColor, uHorizonColor, 0.58);
+          water = mix(water, horizonMist, farEdge * 0.58);
+          float radial = length(vPlanePos);
+          float angle = atan(vPlanePos.y, vPlanePos.x);
+          float distanceWobble = sin(angle * 5.0 + uTime * 0.05) * 2.2
+            + sin(angle * 13.0 - uTime * 0.04) * 1.1;
+          float distanceFade = 1.0 - smoothstep(26.0 + distanceWobble, 48.0 + distanceWobble, radial);
+          float alpha = uOpacity * min(min(edgeFade, farHorizonFade), distanceFade);
+          gl_FragColor = vec4(water, alpha);
         }
       `,
-      transparent: false,
-      depthWrite: true,
+      transparent: true,
+      depthWrite: false,
       side: THREE.DoubleSide,
       blending: THREE.NormalBlending,
+    });
+  }
+
+  _makePierHorizonHazeMaterial(opacity = 0.68) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: opacity },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          float wobble = sin(vUv.x * 28.0 + uTime * 0.08) * 0.026
+            + sin(vUv.x * 63.0 - uTime * 0.06) * 0.014;
+          float center = 0.52 + wobble;
+          float band = smoothstep(center - 0.24, center - 0.05, vUv.y)
+            * smoothstep(center + 0.28, center + 0.06, vUv.y);
+          float brokenEdge = 0.84 + sin(vUv.x * 43.0 + uTime * 0.05) * 0.08;
+          float warmMix = smoothstep(0.42, 0.68, vUv.y);
+          vec3 seaMist = vec3(0.62, 0.84, 0.88);
+          vec3 sunsetMist = vec3(1.0, 0.76, 0.5);
+          vec3 color = mix(seaMist, sunsetMist, warmMix);
+          gl_FragColor = vec4(color, band * brokenEdge * uOpacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.BackSide,
+      blending: THREE.NormalBlending,
+      fog: false,
     });
   }
 
@@ -1585,6 +1594,48 @@ export class Arena {
         ctx.fillRect(rand() * width, rand() * height, 4 + rand() * 14, 18 + rand() * 60);
       }
       ctx.globalCompositeOperation = 'source-over';
+    });
+  }
+
+  _makeUnderwaterBlobTexture(seed = 0x51a900) {
+    return this._makeCanvasTexture(256, 256, (ctx, width, height) => {
+      const rand = this._makeRand(seed);
+      ctx.clearRect(0, 0, width, height);
+      const gradient = ctx.createRadialGradient(
+        width * 0.5,
+        height * 0.5,
+        width * 0.05,
+        width * 0.5,
+        height * 0.5,
+        width * 0.5,
+      );
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.72)');
+      gradient.addColorStop(0.54, 'rgba(255, 255, 255, 0.34)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      for (let i = 0; i < 34; i++) {
+        const angle = (i / 34) * Math.PI * 2;
+        const radius = width * (0.36 + rand() * 0.12);
+        const x = width * 0.5 + Math.cos(angle) * radius;
+        const y = height * 0.5 + Math.sin(angle) * radius * (0.78 + rand() * 0.2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      for (let i = 0; i < 7; i++) {
+        const x = width * (0.28 + rand() * 0.44);
+        const y = height * (0.28 + rand() * 0.44);
+        const r = width * (0.08 + rand() * 0.13);
+        const soft = ctx.createRadialGradient(x, y, 0, x, y, r);
+        soft.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+        soft.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = soft;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
   }
 
@@ -1660,8 +1711,8 @@ export class Arena {
   _addDecorScatter(root, source, decor, stage) {
     source.traverse((child) => {
       if (!child.isMesh) return;
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = decor.castShadow ?? true;
+      child.receiveShadow = decor.receiveShadow ?? true;
       if (decor.materialTint || decor.materialOpacity != null) {
         const wasArray = Array.isArray(child.material);
         const materials = wasArray ? child.material : [child.material];
@@ -1755,6 +1806,24 @@ export class Arena {
         placement.rotationZ ?? 0,
       );
       root.add(clone);
+      if (placement.waterShadow) {
+        this._addPlacementWaterShadow(root, stage, placement, i);
+      }
+      if (placement.drift) {
+        this._meshEffects.push({
+          kind: 'slow_drift_group',
+          mesh: clone,
+          basePosition: clone.position.clone(),
+          baseRotation: clone.rotation.clone(),
+          speed: placement.drift.speed ?? 0.06,
+          bobSpeed: placement.drift.bobSpeed ?? 0.18,
+          phase: placement.drift.phase ?? i * 1.43,
+          amountX: placement.drift.x ?? 0.25,
+          amountY: placement.drift.y ?? 0.012,
+          amountZ: placement.drift.z ?? 0.12,
+          amountYaw: placement.drift.yaw ?? 0.018,
+        });
+      }
       if (decor.sway && this._isStageFeatureEnabled(stage, decor.swayFeature)) {
         this._meshEffects.push({
           kind: 'sway_group',
@@ -1767,6 +1836,38 @@ export class Arena {
         });
       }
     }
+  }
+
+  _addPlacementWaterShadow(root, stage, placement, index) {
+    const waterShadow = placement.waterShadow;
+    const position = placement.position ?? [0, 0, 0];
+    const offset = waterShadow.offset ?? [0, 0, 0];
+    const scale = waterShadow.scale ?? [1, 1];
+    const texture = this._makeUnderwaterBlobTexture(
+      this._hashString(`${stage.id}:water_shadow:${index}:${position.join(',')}`),
+    );
+    const material = new THREE.MeshBasicMaterial({
+      color: waterShadow.color ?? 0x083746,
+      map: texture,
+      transparent: true,
+      opacity: waterShadow.opacity ?? 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: true,
+    });
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 48), material);
+    shadow.name = `${stage.id}_underwater_mass_${index}`;
+    shadow.position.set(
+      (position[0] ?? 0) + (offset[0] ?? 0),
+      waterShadow.y ?? ((stage.atmosphere?.waterY ?? -0.3) + 0.014),
+      (position[2] ?? 0) + (offset[2] ?? 0),
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.rotation.z = waterShadow.rotationZ ?? placement.rotationY ?? 0;
+    shadow.scale.set(scale[0] ?? 1, scale[1] ?? scale[0] ?? 1, 1);
+    shadow.renderOrder = -5;
+    root.add(shadow);
   }
 
   _hashString(value) {

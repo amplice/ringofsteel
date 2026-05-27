@@ -633,25 +633,6 @@ export class Arena {
     root.add(water);
     this._shaderEffects.push({ material: water.material });
 
-    const deckTexture = this._makePierDeckTexture();
-    deckTexture.repeat.set(2.8, 2.25);
-    const deck = new THREE.Mesh(
-      this._makePierDeckFillGeometry(),
-      new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        map: deckTexture,
-        roughness: 0.92,
-        metalness: 0.02,
-        side: THREE.DoubleSide,
-      }),
-    );
-    deck.name = `${stage.id}_playable_deck_fill`;
-    deck.rotation.x = -Math.PI / 2;
-    deck.position.set(0, -0.045, -0.42);
-    deck.receiveShadow = true;
-    deck.renderOrder = -1;
-    root.add(deck);
-
     const sunMat = new THREE.MeshBasicMaterial({
       color: atmosphere.sunColor ?? 0xff8e45,
       transparent: true,
@@ -1569,69 +1550,6 @@ export class Arena {
       depthWrite: true,
       side: THREE.DoubleSide,
       blending: THREE.NormalBlending,
-    });
-  }
-
-  _makePierDeckFillGeometry() {
-    const shape = new THREE.Shape();
-    shape.moveTo(-3.42, 2.98);
-    shape.lineTo(3.42, 2.98);
-    shape.lineTo(3.42, -2.36);
-    shape.lineTo(2.54, -2.58);
-    shape.lineTo(1.44, -2.42);
-    shape.lineTo(0.38, -2.68);
-    shape.lineTo(-0.58, -2.46);
-    shape.lineTo(-1.7, -2.64);
-    shape.lineTo(-2.62, -2.4);
-    shape.lineTo(-3.42, -2.56);
-    shape.lineTo(-3.42, 2.98);
-    return new THREE.ShapeGeometry(shape);
-  }
-
-  _makePierDeckTexture() {
-    return this._makeCanvasTexture(512, 512, (ctx, width, height) => {
-      const rand = this._makeRand(0xd0c1f10);
-      ctx.fillStyle = '#5c3a25';
-      ctx.fillRect(0, 0, width, height);
-
-      const plankWidth = 34;
-      for (let x = 0; x < width + plankWidth; x += plankWidth) {
-        const tone = rand();
-        ctx.fillStyle = tone > 0.55
-          ? this._colorStyle(0x81512e, 0.22)
-          : this._colorStyle(0x352318, 0.2);
-        ctx.fillRect(x, 0, plankWidth - 2, height);
-
-        ctx.strokeStyle = this._colorStyle(0x2b1a12, 0.34);
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x + plankWidth - 1, 0);
-        ctx.lineTo(x + plankWidth - 1, height);
-        ctx.stroke();
-      }
-
-      for (let i = 0; i < 950; i++) {
-        const x = rand() * width;
-        const y = rand() * height;
-        const len = 12 + rand() * 42;
-        ctx.strokeStyle = rand() > 0.48
-          ? this._colorStyle(0xa9703d, 0.1)
-          : this._colorStyle(0x21160f, 0.12);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + (rand() - 0.5) * 6, y + len);
-        ctx.stroke();
-      }
-
-      for (let y = 46; y < height; y += 92) {
-        ctx.strokeStyle = this._colorStyle(0x2d1c14, 0.18);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, y + (rand() - 0.5) * 8);
-        ctx.lineTo(width, y + (rand() - 0.5) * 8);
-        ctx.stroke();
-      }
     });
   }
 

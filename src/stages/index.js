@@ -253,7 +253,7 @@ export const STAGE_DEFS = Object.freeze({
       waterColor: 0x0b6685,
       waterHighlightColor: 0xffaa62,
       waterOpacity: 0.94,
-      waterY: -0.72,
+      waterY: -1.35,
       hazeColor: 0xffc28a,
       hazeOpacity: 0.28,
       sunColor: 0xff8e45,

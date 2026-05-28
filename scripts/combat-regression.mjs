@@ -3,10 +3,16 @@ import assert from 'node:assert/strict';
 
 import { FighterSim } from '../src/sim/FighterSim.js';
 import { MatchSim } from '../src/sim/MatchSim.js';
+import { PlannerAIController } from '../src/ai/PlannerAIController.js';
 import { HitResolver } from '../src/combat/HitResolver.js';
 import { CHARACTER_DEFS } from '../src/entities/CharacterDefs.js';
 import { getImpactSlideScale, getImpactStunScale } from '../src/combat/CombatTuning.js';
 import { AUTHORITATIVE_TRACKS } from '../src/data/authoritativeTracks.js';
+import {
+  clampPointToArena,
+  getArenaEdgeDistance,
+  isPointInsideArena,
+} from '../src/arena/ArenaBounds.js';
 import {
   AttackType,
   FighterState,
@@ -152,6 +158,29 @@ function testRingOutResolution() {
   assert.equal(sim.killReason, 'ring_out', 'ring-out should report the correct kill reason');
 }
 
+function testRectangularPierBoundary() {
+  assert.equal(isPointInsideArena(4.03, 2.67, 'wooden_pier'), true, 'pier corner should be inside the rectangular deck');
+  assert.equal(isPointInsideArena(4.3, 2.67, 'wooden_pier'), false, 'pier x edge should reject points past the deck');
+  assert.equal(isPointInsideArena(0, 2.86, 'wooden_pier'), false, 'pier z edge should reject points past the deck');
+  assert.ok(getArenaEdgeDistance(3.95, 0, 'wooden_pier') < 0.2, 'pier edge distance should use rectangle sides');
+
+  const pos = { x: 5.0, z: 3.0 };
+  clampPointToArena(pos, 'wooden_pier', 0.3);
+  approxEqual(pos.x, 3.74);
+  approxEqual(pos.z, 2.38);
+
+  const sim = new MatchSim({
+    fighter1: createFighter('spearman', 0),
+    fighter2: createFighter('knight', 1),
+    stageId: 'wooden_pier',
+  });
+  sim.startRound();
+  sim.fighter1.position.set(0, 0, 3.4);
+  sim._checkRingOut();
+  assert.equal(sim.roundOver, true, 'pier rectangular cliff should ring out past the platform edge plus margin');
+  assert.equal(sim.killReason, 'ring_out', 'pier rectangular cliff should report ring-out');
+}
+
 function testWallBoundaryBounce() {
   const sim = new MatchSim({
     fighter1: createFighter('spearman', 0),
@@ -234,6 +263,39 @@ function testSimultaneousControllerScheduling() {
   );
 }
 
+function testSpearmanPlannerPressuresPassiveTarget() {
+  const sim = new MatchSim({
+    fighter1: createFighter('spearman', 0),
+    fighter2: createFighter('knight', 1),
+  });
+  const controller = new PlannerAIController('spearman_heavy_bully');
+  sim.startRound(4.8);
+
+  let firstAttackFrame = null;
+  let firstAttackDistance = null;
+  let hitFrame = null;
+
+  while (!sim.roundOver && sim.frameCount < 180) {
+    const result = sim.step(FRAME_DURATION, {
+      controller1: (fighter, opponent, innerSim, dt) => controller.update(fighter, opponent, innerSim.frameCount, dt),
+    });
+
+    if (firstAttackFrame == null && sim.fighter1.state === FighterState.ATTACK_ACTIVE) {
+      firstAttackFrame = sim.frameCount;
+      firstAttackDistance = sim.fighter1.distanceTo(sim.fighter2);
+    }
+
+    if (result.events.some((event) => event.type === 'combat_result' && event.attackerIndex === 0)) {
+      hitFrame = sim.frameCount;
+    }
+  }
+
+  assert.ok(firstAttackFrame != null, 'spearman planner should attack a passive target');
+  assert.ok(firstAttackFrame <= 150, 'spearman planner should not stall while walking into range');
+  assert.ok(firstAttackDistance >= 1.85, 'spearman planner should commit before point-blank range');
+  assert.ok(hitFrame != null, 'spearman passive pressure should produce a real hit');
+}
+
 function testSimultaneousBodyHitsClash() {
   const hitResolver = {
     checkWeaponClash: () => false,
@@ -263,10 +325,12 @@ const TESTS = [
   ['clash resolution', testClashResolution],
   ['block push distance', testBlockPushDistance],
   ['ring-out resolution', testRingOutResolution],
+  ['rectangular pier boundary', testRectangularPierBoundary],
   ['wall boundary bounce', testWallBoundaryBounce],
   ['authoritative track sync', testAuthoritativeTrackSync],
   ['contact windows', testContactWindows],
   ['simultaneous controller scheduling', testSimultaneousControllerScheduling],
+  ['spearman planner passive pressure', testSpearmanPlannerPressuresPassiveTarget],
   ['simultaneous body hits', testSimultaneousBodyHitsClash],
 ];
 

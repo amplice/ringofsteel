@@ -554,17 +554,22 @@ export class MatchSim {
     if (!contact) return;
 
     if (!WALL_BOUNCE_STATES.has(fighter.state) || this._wallBounceCooldownFrames[fighter.playerIndex] > 0) {
-      fighter.position.x = contact.normalX * contact.limit;
-      fighter.position.z = contact.normalZ * contact.limit;
+      fighter.position.x = contact.targetX;
+      fighter.position.z = contact.targetZ;
       return;
     }
 
-    const targetRadius = Math.max(
-      0.2,
-      contact.radius - WALL_BOUNCE_INSET - WALL_BOUNCE_INWARD_DISTANCE,
-    );
-    fighter.position.x = contact.normalX * targetRadius;
-    fighter.position.z = contact.normalZ * targetRadius;
+    if (typeof contact.radius === 'number') {
+      const targetRadius = Math.max(
+        0.2,
+        contact.radius - WALL_BOUNCE_INSET - WALL_BOUNCE_INWARD_DISTANCE,
+      );
+      fighter.position.x = contact.normalX * targetRadius;
+      fighter.position.z = contact.normalZ * targetRadius;
+    } else {
+      fighter.position.x = contact.targetX - contact.normalX * WALL_BOUNCE_INWARD_DISTANCE;
+      fighter.position.z = contact.targetZ - contact.normalZ * WALL_BOUNCE_INWARD_DISTANCE;
+    }
     fighter.slideMult = Math.min(fighter.slideMult || 1, 0.25);
     fighter.blockPushRemaining = 0;
     fighter.fsm.stateDuration = Math.max(

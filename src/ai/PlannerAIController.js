@@ -248,7 +248,7 @@ export class PlannerAIController extends AIController {
     } else if (classId === 'ronin') {
       this._applyRoninCandidateFilters(actions, opponent, context);
     } else if (classId === 'spearman') {
-      this._applySpearmanCandidateFilters(actions, opponent, context);
+      this._applySpearmanCandidateFilters(actions, fighter, opponent, context);
     } else if (classId === 'huscarl') {
       this._applyHuscarlCandidateFilters(actions, opponent, context);
     }
@@ -421,13 +421,22 @@ export class PlannerAIController extends AIController {
     this.currentAction = null;
   }
 
-  _applySpearmanCandidateFilters(actions, opponent, context) {
+  _applySpearmanCandidateFilters(actions, fighter, opponent, context) {
     const { dist, opponentClassId, blocking, vulnerable, recentClash, motionRead } = context;
     const rushClass = opponentClassId === 'ronin' || opponentClassId === 'huscarl';
     const opponentBusy = opponent.fsm.isAttacking || blocking || vulnerable || recentClash;
 
     const sidestepLockoutRange = opponentClassId === 'huscarl' ? 3.0 : 2.2;
     const advanceLockoutRange = opponentClassId === 'huscarl' ? 2.25 : 1.9;
+    const quickCommitReach = this._getAttackDecisionReach(fighter, AttackType.QUICK) - 0.03;
+    const heavyCommitReach = this._getAttackDecisionReach(fighter, AttackType.HEAVY) - 0.06;
+    const thrustCommitReach = this._getAttackDecisionReach(fighter, AttackType.THRUST) - 0.03;
+
+    if (!opponentBusy) {
+      if (dist > quickCommitReach + 0.02) actions.delete('quickAttack');
+      if (dist > heavyCommitReach + 0.02) actions.delete('heavyAttack');
+      if (dist > thrustCommitReach + 0.02) actions.delete('thrustAttack');
+    }
 
     if (rushClass && !opponentBusy && dist <= sidestepLockoutRange) {
       actions.delete('sidestepUp');
@@ -1270,17 +1279,20 @@ export class PlannerAIController extends AIController {
   }
 
   _getActionPriorBias(classId, action, context) {
-    const { dist, opponentClassId, blocking, recentBlock, blockRatio, vulnerable, defensiveNeed, motionRead, stableLane, recentClash } = context;
+    const { dist, opponentClassId, blocking, recentBlock, blockRatio, vulnerable, defensiveNeed, passiveTarget, motionRead, stableLane, recentClash } = context;
+    const passivePressure = passiveTarget && stableLane;
     const profileBias = this._getProfileActionBias(action);
     switch (classId) {
       case 'spearman':
         switch (action) {
           case 'block':
             return (defensiveNeed ? -0.02 : -0.24) +
+              (passiveTarget ? -0.18 : 0) +
               ((opponentClassId === 'ronin' || opponentClassId === 'huscarl') && dist > 1.75 ? -0.18 : 0) +
               profileBias;
           case 'moveForward':
             return (motionRead.recentApproach ? 0.18 : 0.1) +
+              (passivePressure && dist <= 2.42 ? -0.5 : 0) +
               ((opponentClassId === 'ronin' || opponentClassId === 'huscarl') && dist < 2.35 ? -0.32 : 0) +
               profileBias;
           case 'moveBack':
@@ -1298,14 +1310,17 @@ export class PlannerAIController extends AIController {
               profileBias;
           case 'quickAttack':
             return (dist <= 1.8 || vulnerable ? 0.08 : -0.2) +
+              (passivePressure && dist <= 1.82 ? 0.28 : 0) +
               ((opponentClassId === 'ronin' || opponentClassId === 'huscarl') && dist >= 1.45 && dist <= 2.2 ? 0.24 : 0) +
               profileBias;
           case 'thrustAttack':
             return ((stableLane && dist <= 2.0) || blocking || vulnerable || recentClash ? 0.06 : -0.22) +
+              (passivePressure && dist <= 2.36 ? 0.38 : 0) +
               ((opponentClassId === 'ronin' || opponentClassId === 'huscarl') && stableLane && dist >= 1.9 && dist <= 2.75 ? 0.34 : 0) +
               profileBias;
           case 'heavyAttack':
             return ((blocking || vulnerable || recentClash) ? 0.06 : -0.26) +
+              (passivePressure && dist <= 2.1 ? 0.18 : 0) +
               ((opponentClassId === 'ronin' || opponentClassId === 'huscarl') && !blocking && !vulnerable ? -0.22 : 0) +
               profileBias;
           default:

@@ -630,6 +630,8 @@ export class Arena {
         color: atmosphere.waterColor ?? 0x194766,
         highlight: atmosphere.waterHighlightColor ?? 0xffb66d,
         horizonColor: atmosphere.waterHorizonColor ?? 0xf6c895,
+        causticColor: atmosphere.waterCausticColor ?? 0xe9ffff,
+        causticStrength: atmosphere.waterCausticStrength ?? 0.34,
         opacity: atmosphere.waterOpacity ?? 0.72,
         strength: 1.0,
       }),
@@ -641,6 +643,16 @@ export class Arena {
     water.renderOrder = -8;
     root.add(water);
     this._shaderEffects.push({ material: water.material });
+
+    const skyHaze = new THREE.Mesh(
+      new THREE.CylinderGeometry(58, 58, 19, 96, 1, true),
+      this._makePierSkyGradientMaterial(atmosphere.skyHazeOpacity ?? 0.38),
+    );
+    skyHaze.name = `${stage.id}_sunset_sky_haze`;
+    skyHaze.position.y = atmosphere.skyHazeY ?? 4.7;
+    skyHaze.renderOrder = -12;
+    root.add(skyHaze);
+    this._shaderEffects.push({ material: skyHaze.material });
 
     const horizon = new THREE.Mesh(
       new THREE.CylinderGeometry(46, 46, 11, 96, 1, true),
@@ -668,16 +680,19 @@ export class Arena {
     sun.renderOrder = -10;
     root.add(sun);
 
+    this._addPierSunReflection(root, stage, waterY);
+    this._addPierSunsetClouds(root, stage);
+
     this._addDriftPoints(root, stage, {
       name: 'salt_mist',
-      count: 70,
+      count: 112,
       seed: 0x51a7d0,
       color: atmosphere.hazeColor ?? 0xffc28a,
-      size: 0.025,
-      opacity: 0.16,
+      size: 0.028,
+      opacity: atmosphere.mistOpacity ?? 0.18,
       soft: true,
       additive: true,
-      bounds: { x: 7.2, z: 6.4, minY: waterY + 0.28, maxY: 1.55 },
+      bounds: { x: 9.4, z: 8.0, minY: waterY + 0.22, maxY: 1.75 },
       velocity: { x: 0.022, y: 0.04, z: -0.018 },
       jitter: { x: 0.055, y: 0.035, z: 0.055 },
       sway: 0.08,
@@ -685,6 +700,83 @@ export class Arena {
       resetFromTop: false,
       resetDepth: 0.8,
     });
+
+    this._addDriftLines(root, stage, {
+      name: 'sea_breeze_threads',
+      count: 34,
+      seed: 0x51eab7,
+      color: atmosphere.seaBreezeColor ?? 0xd8fbff,
+      opacity: atmosphere.seaBreezeOpacity ?? 0.12,
+      bounds: { x: 19, z: 34, minY: waterY + 0.05, maxY: waterY + 0.34 },
+      velocity: { x: 0.05, y: 0.005, z: -0.018 },
+      jitter: { x: 0.075, y: 0.01, z: 0.06 },
+      sway: 0.13,
+      swaySpeed: 0.74,
+      lengthMin: 0.24,
+      lengthMax: 0.68,
+      resetDepth: 0.6,
+    });
+  }
+
+  _addPierSunReflection(root, stage, waterY) {
+    const atmosphere = stage.atmosphere ?? {};
+    const reflection = new THREE.Mesh(
+      new THREE.PlaneGeometry(6.8, 34, 8, 72),
+      this._makePierSunReflectionMaterial({
+        color: atmosphere.reflectionColor ?? 0xffe2a0,
+        opacity: atmosphere.reflectionOpacity ?? 0.3,
+      }),
+    );
+    reflection.name = `${stage.id}_broken_sun_reflection`;
+    reflection.position.set(-4.5, waterY + 0.032, -17.5);
+    reflection.rotation.x = -Math.PI / 2;
+    reflection.rotation.z = -0.1;
+    reflection.renderOrder = -4;
+    root.add(reflection);
+    this._shaderEffects.push({ material: reflection.material });
+  }
+
+  _addPierSunsetClouds(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.cloudColor ?? 0xffc7a3,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.cloudOpacity ?? 0.18,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: false,
+    });
+
+    for (const [x, y, z, sx, sy, rot, opacity, phase] of [
+      [-18.5, 6.3, -35.5, 6.4, 1.25, -0.08, 0.18, 0.3],
+      [-11.2, 5.9, -34.0, 4.0, 0.86, 0.04, 0.13, 1.7],
+      [11.5, 6.1, -36.0, 6.1, 1.08, 0.1, 0.16, 2.6],
+      [17.2, 5.75, -34.4, 3.8, 0.74, -0.05, 0.11, 3.4],
+      [-1.8, 2.35, -30.0, 15.0, 1.05, 0.0, 0.12, 4.1],
+    ]) {
+      const cloud = new THREE.Mesh(new THREE.CircleGeometry(1, 32), cloudMat.clone());
+      cloud.name = `${stage.id}_sunset_cloud_bank`;
+      cloud.material.opacity = opacity;
+      cloud.position.set(x, y, z);
+      cloud.scale.set(sx, sy, 1);
+      cloud.rotation.z = rot;
+      cloud.renderOrder = -11;
+      root.add(cloud);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: cloud,
+        basePosition: cloud.position.clone(),
+        baseScale: cloud.scale.clone(),
+        drift: new THREE.Vector3(0.08, 0.012, 0),
+        speed: 0.055,
+        phase,
+        opacity,
+        opacityPulse: opacity * 0.1,
+        scalePulse: 0.012,
+      });
+    }
   }
 
   _addAmphitheaterAtmosphere(root, stage) {
@@ -1443,6 +1535,8 @@ export class Arena {
     color = 0x194766,
     highlight = 0xffb66d,
     horizonColor = 0xf6c895,
+    causticColor = 0xe9ffff,
+    causticStrength = 0.34,
     opacity = 0.72,
     strength = 1.0,
   } = {}) {
@@ -1452,6 +1546,8 @@ export class Arena {
         uWaterColor: { value: new THREE.Color(color) },
         uHighlightColor: { value: new THREE.Color(highlight) },
         uHorizonColor: { value: new THREE.Color(horizonColor) },
+        uCausticColor: { value: new THREE.Color(causticColor) },
+        uCausticStrength: { value: causticStrength },
         uOpacity: { value: opacity },
         uStrength: { value: strength },
       },
@@ -1467,10 +1563,12 @@ export class Arena {
           vPlanePos = pos.xy;
           float broad = sin(pos.x * 0.42 + uTime * 0.55) + sin(pos.y * 0.36 - uTime * 0.38);
           float tight = sin((pos.x + pos.y) * 1.15 + uTime * 0.9);
-          vWave = broad * 0.5 + tight * 0.25;
+          float longWave = sin(pos.x * 0.18 + pos.y * 0.11 + uTime * 0.42)
+            + sin(pos.x * -0.12 + pos.y * 0.2 - uTime * 0.33);
+          vWave = broad * 0.42 + tight * 0.2 + longWave * 0.24;
           float edge = max(abs(pos.x), abs(pos.y));
           float edgeLift = smoothstep(110.0, 160.0, edge);
-          pos.z += (vWave * 0.024 + sin(pos.x * 0.13 + pos.y * 0.09) * edgeLift * 0.08) * uStrength;
+          pos.z += (vWave * 0.036 + sin(pos.x * 0.13 + pos.y * 0.09) * edgeLift * 0.08) * uStrength;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
         }
       `,
@@ -1479,15 +1577,61 @@ export class Arena {
         uniform vec3 uWaterColor;
         uniform vec3 uHighlightColor;
         uniform vec3 uHorizonColor;
+        uniform vec3 uCausticColor;
+        uniform float uCausticStrength;
         uniform float uOpacity;
         varying vec2 vUv;
         varying vec2 vPlanePos;
         varying float vWave;
 
+        vec2 random2(vec2 p) {
+          return fract(sin(vec2(
+            dot(p, vec2(127.1, 311.7)),
+            dot(p, vec2(269.5, 183.3))
+          )) * 43758.5453123);
+        }
+
+        float cellularDelta(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          float closest = 8.0;
+          float second = 8.0;
+          for (int y = -1; y <= 1; y++) {
+            for (int x = -1; x <= 1; x++) {
+              vec2 neighbor = vec2(float(x), float(y));
+              vec2 point = random2(i + neighbor);
+              point = 0.5 + 0.5 * sin(uTime * 0.34 + point * 6.2831853 + vec2(0.0, 1.7));
+              float dist = length(neighbor + point - f);
+              if (dist < closest) {
+                second = closest;
+                closest = dist;
+              } else if (dist < second) {
+                second = dist;
+              }
+            }
+          }
+          return second - closest;
+        }
+
         void main() {
           float horizon = smoothstep(0.45, 1.0, vUv.y);
+          float radial = length(vPlanePos);
+          float surfaceMask = smoothstep(3.3, 8.5, radial)
+            * (1.0 - smoothstep(24.0, 42.0, radial))
+            * (1.0 - horizon * 0.58);
+          vec2 flow = vPlanePos * 0.86 + vec2(uTime * 0.055, -uTime * 0.034);
+          flow += vec2(
+            sin(vPlanePos.y * 0.18 + uTime * 0.28),
+            cos(vPlanePos.x * 0.16 - uTime * 0.22)
+          ) * 0.12;
+          float causticA = 1.0 - smoothstep(0.018, 0.08, cellularDelta(flow));
+          float causticB = 1.0 - smoothstep(0.014, 0.058, cellularDelta(flow * 2.12 + vec2(4.1, -2.7)));
+          float caustic = clamp(causticA * 0.48 + causticB * 0.2, 0.0, 1.0);
+          caustic *= caustic;
           float ripple = sin((vUv.x * 36.0 + vUv.y * 18.0) + uTime * 0.7) * 0.5 + 0.5;
-          vec3 water = mix(uWaterColor, uHighlightColor, ripple * 0.025 + horizon * 0.035);
+          float waveLight = clamp(vWave * 0.08 + 0.05, 0.0, 0.14);
+          vec3 water = mix(uWaterColor, uHighlightColor, ripple * 0.035 + horizon * 0.05 + waveLight);
+          water = mix(water, uCausticColor, caustic * uCausticStrength * surfaceMask);
           float edgeDist = min(
             min(vUv.x, 1.0 - vUv.x),
             min(vUv.y, 1.0 - vUv.y)
@@ -1505,7 +1649,6 @@ export class Arena {
           );
           vec3 horizonMist = mix(uHighlightColor, uHorizonColor, 0.58);
           water = mix(water, horizonMist, farEdge * 0.58);
-          float radial = length(vPlanePos);
           float angle = atan(vPlanePos.y, vPlanePos.x);
           float distanceWobble = sin(angle * 5.0 + uTime * 0.05) * 2.2
             + sin(angle * 13.0 - uTime * 0.04) * 1.1;
@@ -1518,6 +1661,98 @@ export class Arena {
       depthWrite: false,
       side: THREE.DoubleSide,
       blending: THREE.NormalBlending,
+    });
+  }
+
+  _makePierSkyGradientMaterial(opacity = 0.38) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: opacity },
+        uTime: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        uniform float uTime;
+        varying vec2 vUv;
+
+        void main() {
+          float y = vUv.y;
+          float horizon = smoothstep(0.24, 0.58, y);
+          float upperFade = 1.0 - smoothstep(0.72, 1.0, y);
+          float lowerFade = smoothstep(0.02, 0.2, y);
+          float band = lowerFade * upperFade;
+          float grain = sin(vUv.x * 117.0 + y * 41.0 + uTime * 0.035)
+            * sin(vUv.x * 29.0 - y * 73.0)
+            * 0.006;
+          vec3 peach = vec3(1.0, 0.58, 0.32);
+          vec3 rose = vec3(0.86, 0.42, 0.46);
+          vec3 sea = vec3(0.38, 0.78, 0.88);
+          vec3 color = mix(sea, peach, horizon);
+          color = mix(color, rose, smoothstep(0.62, 0.92, y) * 0.26);
+          gl_FragColor = vec4(color + grain, band * uOpacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.BackSide,
+      blending: THREE.NormalBlending,
+      fog: false,
+    });
+  }
+
+  _makePierSunReflectionMaterial({ color = 0xffe2a0, opacity = 0.3 } = {}) {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color(color) },
+        uOpacity: { value: opacity },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        uniform float uTime;
+        void main() {
+          vUv = uv;
+          vec3 pos = position;
+          pos.x += sin(uv.y * 13.0 + uTime * 0.7) * 0.035 * smoothstep(0.1, 1.0, uv.y);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying vec2 vUv;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(113.5, 271.9))) * 43758.5453123);
+        }
+
+        void main() {
+          float center = exp(-pow((vUv.x - 0.5) * 5.25, 2.0));
+          float endFade = smoothstep(0.04, 0.18, vUv.y) * smoothstep(1.0, 0.34, vUv.y);
+          float brokenA = sin(vUv.y * 126.0 + uTime * 2.4 + sin(vUv.x * 23.0) * 1.6) * 0.5 + 0.5;
+          float brokenB = sin(vUv.y * 47.0 - uTime * 1.1 + vUv.x * 12.0) * 0.5 + 0.5;
+          float noise = hash(floor(vec2(vUv.x * 26.0, vUv.y * 72.0 + uTime * 1.4)));
+          float shimmer = smoothstep(0.78, 1.08, brokenA + brokenB * 0.18 + noise * 0.18);
+          float widthPulse = 0.82 + sin(vUv.y * 13.0 + uTime * 0.8) * 0.08;
+          float alpha = center * widthPulse * endFade * (0.03 + shimmer * 0.6) * uOpacity;
+          gl_FragColor = vec4(uColor * (0.88 + shimmer * 0.2), alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      fog: false,
     });
   }
 

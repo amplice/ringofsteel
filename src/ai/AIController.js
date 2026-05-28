@@ -764,6 +764,7 @@ export class AIController {
           break;
         case 'pressure':
           scores.quickAttack = (scores.quickAttack || 0) + 0.08;
+          scores.thrustAttack = (scores.thrustAttack || 0) + 0.16;
           scores.heavyAttack = spearmanHeavyCommitAllowed ? (scores.heavyAttack || 0) + 0.1 : 0;
           break;
         case 'reset':
@@ -897,6 +898,12 @@ export class AIController {
       nextIntent = 'hold_line';
     } else if (opponent.state === FighterState.BLOCK || opponent.state === FighterState.BLOCK_STUN) {
       nextIntent = closeRange ? 'pressure' : 'hold_line';
+    } else if (
+      motionRead.passiveTarget &&
+      engagement.forwardDot >= 0.9 &&
+      dist <= this._getAttackDecisionReach(fighter, AttackType.THRUST) + 0.08
+    ) {
+      nextIntent = 'pressure';
     } else if (motionRead.recentApproach && engagement.forwardDot >= 0.9 && dist <= this._getAttackDecisionReach(fighter, AttackType.THRUST) - 0.04) {
       nextIntent = 'intercept';
     } else if (closeRange && engagement.forwardDot >= ATTACK_FRONT_DOT_STRONG) {
@@ -949,18 +956,18 @@ export class AIController {
     if (getFighterClassId(fighter) === 'spearman') {
       switch (attackType) {
         case AttackType.QUICK:
-          decisionReach = attack.aiRange - 0.42;
+          decisionReach = attack.aiRange - 0.24;
           break;
         case AttackType.HEAVY:
-          decisionReach = attack.aiRange - 0.5;
+          decisionReach = attack.aiRange - 0.22;
           break;
         case AttackType.THRUST:
-          decisionReach = attack.aiRange - 0.56;
+          decisionReach = attack.aiRange - 0.18;
           break;
         default:
           break;
       }
-      decisionReach = Math.max(attack.aiRange * 0.62, decisionReach);
+      decisionReach = Math.max(attack.aiRange * 0.72, decisionReach);
     }
 
     return decisionReach;

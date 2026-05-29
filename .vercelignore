@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.git/
+.local/
+.vercel/
+
+*.blend
+*.blend1
+selfplay-debug.log
+tmp_*
+.tmp_*
+
+analysis/
+art/
+screenshots/
+
+# Stale local stage exports; only referenced stage assets should deploy.
+public/stages/amphitheater_model3_textured_v1.glb
+public/stages/amphitheater_textured_v1.glb
+public/stages/amphitheater_textured_v2.glb
+public/stages/amphitheater_textured_v3.glb
+public/stages/ancient_amphitheater_open_mid_v1.glb

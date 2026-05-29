@@ -84,7 +84,7 @@ export const spearman = defineCharacter('spearman', {
     towardTarget: 0.001,
     relativeSpeed: 0.002,
   },
-  modelYOffset: -0.02,
+  modelYOffset: -0.055,
   modelRotationX: -0.02,
   idleDuringStepCooldown: true,
   walkSpeedMult: 0.5,

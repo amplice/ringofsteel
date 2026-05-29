@@ -25,7 +25,7 @@ export const STAGE_DEFS = Object.freeze({
     modelPath: '/stages/ancient_amphitheater_manual_patch_v1.glb',
     modelScale: 32,
     modelRotationY: 1.5707963267948966,
-    modelYOffset: 4.65,
+    modelYOffset: 4.594,
     showBoundaryMarkers: false,
     camera: Object.freeze({
       maxRadius: 5.8,
@@ -102,7 +102,7 @@ export const STAGE_DEFS = Object.freeze({
     description: 'Small clearing enclosed by dense bamboo',
     modelPath: '/stages/bamboo_courtyard_raw.glb',
     modelScale: 19.5,
-    modelYOffset: 2.78,
+    modelYOffset: 2.8,
     showBoundaryMarkers: false,
     features: Object.freeze({
       dawnSideLight: true,
@@ -411,7 +411,7 @@ export const STAGE_DEFS = Object.freeze({
     description: 'Tiny storm-lashed summit above distant mountains',
     modelPath: '/stages/mountaintop_rock_pillar_raw.glb',
     modelScale: 11,
-    modelYOffset: -3.62,
+    modelYOffset: -3.515,
     showBoundaryMarkers: false,
     camera: Object.freeze({
       maxRadius: 5.4,

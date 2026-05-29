@@ -85,6 +85,7 @@ export const huscarl = defineCharacter('huscarl', {
     towardTarget: 0.004,
     relativeSpeed: 0.0055,
   },
+  modelYOffset: 0.01,
   modelScale: 0.845,
   idleDuringStepCooldown: true,
   walkSpeedMult: 0.7,

@@ -10,7 +10,9 @@ import { getImpactSlideScale, getImpactStunScale } from '../src/combat/CombatTun
 import { AUTHORITATIVE_TRACKS } from '../src/data/authoritativeTracks.js';
 import {
   clampPointToArena,
+  getArenaBounds,
   getArenaEdgeDistance,
+  getStageBoundaryMode,
   isPointInsideArena,
 } from '../src/arena/ArenaBounds.js';
 import {
@@ -27,7 +29,12 @@ import {
   PARRY_WINDOW_FRAMES,
   WALL_BOUNCE_STUN_FRAMES,
 } from '../src/core/Constants.js';
-import { AMPHITHEATER_PIT_RADIUS } from '../src/arena/StageDefs.js';
+import {
+  AMPHITHEATER_PIT_RADIUS,
+  BAMBOO_CLEARING_RADIUS,
+  MOUNTAINTOP_RADIUS,
+  STAGE_DEFS,
+} from '../src/arena/StageDefs.js';
 
 const ATTACK_CLIPS = {
   [AttackType.QUICK]: 'attack_quick',
@@ -158,6 +165,44 @@ function testRingOutResolution() {
   assert.equal(sim.killReason, 'ring_out', 'ring-out should report the correct kill reason');
 }
 
+function testStageBoundaryModes() {
+  const expectedModes = {
+    test: 'cliff',
+    mountaintop: 'cliff',
+    wooden_pier: 'cliff',
+    amphitheater: 'wall',
+    bamboo_clearing: 'wall',
+  };
+
+  for (const [stageId, mode] of Object.entries(expectedModes)) {
+    assert.ok(STAGE_DEFS[stageId], `stage '${stageId}' should be registered`);
+    assert.equal(getStageBoundaryMode(stageId), mode, `${stageId} should use ${mode} boundaries`);
+  }
+}
+
+function testNamedCliffRingOuts() {
+  const cliffStages = [
+    ['test', ARENA_RADIUS + 0.6, 0],
+    ['mountaintop', MOUNTAINTOP_RADIUS + 0.6, 0],
+    ['wooden_pier', 0, getArenaBounds('wooden_pier').maxZ + 0.6],
+  ];
+
+  for (const [stageId, x, z] of cliffStages) {
+    const sim = new MatchSim({
+      fighter1: createFighter('spearman', 0),
+      fighter2: createFighter('knight', 1),
+      stageId,
+    });
+    sim.startRound();
+    sim.fighter1.position.set(x, 0, z);
+    sim._checkRingOut();
+
+    assert.equal(sim.roundOver, true, `${stageId} cliff boundary should ring out outside its edge`);
+    assert.equal(sim.winner, 2, `${stageId} cliff ring-out should award the opponent`);
+    assert.equal(sim.killReason, 'ring_out', `${stageId} cliff ring-out should report ring_out`);
+  }
+}
+
 function testRectangularPierBoundary() {
   assert.equal(isPointInsideArena(4.03, 2.67, 'wooden_pier'), true, 'pier corner should be inside the rectangular deck');
   assert.equal(isPointInsideArena(4.3, 2.67, 'wooden_pier'), false, 'pier x edge should reject points past the deck');
@@ -182,23 +227,30 @@ function testRectangularPierBoundary() {
 }
 
 function testWallBoundaryBounce() {
-  const sim = new MatchSim({
-    fighter1: createFighter('spearman', 0),
-    fighter2: createFighter('knight', 1),
-    stageId: 'amphitheater',
-  });
-  sim.startRound();
-  sim.fighter1.fsm.applyHitStun(8);
-  sim.fighter1.position.set(AMPHITHEATER_PIT_RADIUS + 0.1, 0, 0);
-  sim._handleWallBoundaryBounces();
+  const wallStages = [
+    ['amphitheater', AMPHITHEATER_PIT_RADIUS],
+    ['bamboo_clearing', BAMBOO_CLEARING_RADIUS],
+  ];
 
-  assert.equal(sim.roundOver, false, 'wall boundary should not ring out');
-  assert.equal(sim.events[0]?.type, 'wall_bounce', 'wall boundary should emit bounce event');
-  assert.ok(sim.fighter1.position.x < AMPHITHEATER_PIT_RADIUS, 'wall bounce should push fighter back inside');
-  assert.ok(
-    sim.fighter1.fsm.stateDuration >= sim.fighter1.fsm.stateFrames + WALL_BOUNCE_STUN_FRAMES,
-    'wall bounce should leave the slammed fighter vulnerable',
-  );
+  for (const [stageId, radius] of wallStages) {
+    const sim = new MatchSim({
+      fighter1: createFighter('spearman', 0),
+      fighter2: createFighter('knight', 1),
+      stageId,
+    });
+    sim.startRound();
+    sim.fighter1.fsm.applyHitStun(8);
+    sim.fighter1.position.set(radius + 0.1, 0, 0);
+    sim._handleWallBoundaryBounces();
+
+    assert.equal(sim.roundOver, false, `${stageId} wall boundary should not ring out`);
+    assert.equal(sim.events[0]?.type, 'wall_bounce', `${stageId} wall boundary should emit bounce event`);
+    assert.ok(sim.fighter1.position.x < radius, `${stageId} wall bounce should push fighter back inside`);
+    assert.ok(
+      sim.fighter1.fsm.stateDuration >= sim.fighter1.fsm.stateFrames + WALL_BOUNCE_STUN_FRAMES,
+      `${stageId} wall bounce should leave the slammed fighter vulnerable`,
+    );
+  }
 }
 
 function testAuthoritativeTrackSync() {
@@ -325,6 +377,8 @@ const TESTS = [
   ['clash resolution', testClashResolution],
   ['block push distance', testBlockPushDistance],
   ['ring-out resolution', testRingOutResolution],
+  ['stage boundary modes', testStageBoundaryModes],
+  ['named cliff ring-outs', testNamedCliffRingOuts],
   ['rectangular pier boundary', testRectangularPierBoundary],
   ['wall boundary bounce', testWallBoundaryBounce],
   ['authoritative track sync', testAuthoritativeTrackSync],

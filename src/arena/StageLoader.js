@@ -15,16 +15,30 @@ export class StageLoader {
 
   static async preloadStage(stageDef) {
     const paths = StageLoader.getAssetPaths(stageDef);
-    await Promise.all(paths.map((path) => StageLoader._loadGLTF(path)));
+    const assets = await Promise.all(paths.map(async (path) => {
+      const gltf = await StageLoader._loadGLTF(path);
+      return {
+        path,
+        scene: gltf.scene,
+        animations: gltf.animations ?? [],
+      };
+    }));
+    return {
+      stageId: stageDef?.id ?? null,
+      paths,
+      assets,
+    };
   }
 
   static async preloadStages(stageDefs, onProgress = null) {
     const entries = Object.entries(stageDefs);
+    const cache = {};
     for (let i = 0; i < entries.length; i++) {
       const [id, stage] = entries[i];
       onProgress?.({ id, stage, index: i, total: entries.length });
-      await StageLoader.preloadStage(stage);
+      cache[id] = await StageLoader.preloadStage(stage);
     }
+    return cache;
   }
 
   static async loadStage(stageDef) {

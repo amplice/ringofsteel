@@ -86,6 +86,7 @@ export class Game {
     this.onlinePendingMatchResult = null;
     this.onlinePingMs = null;
     this._charCache = {};
+    this._stageCache = {};
 
     this.gameState = GameState.TITLE;
     this.stateTimer = 0;
@@ -133,15 +134,21 @@ export class Game {
       this.ui.showLoading(progressDone, `Loaded ${def.displayName}`);
     }
 
-    const stageEntries = Object.entries(STAGE_DEFS).filter(([, stage]) => StageLoader.getAssetPaths(stage).length);
+    const stageEntries = Object.entries(STAGE_DEFS);
     for (let i = 0; i < stageEntries.length; i++) {
-      const [, stage] = stageEntries[i];
+      const [id, stage] = stageEntries[i];
       const progressBase = 0.74 + (i / Math.max(stageEntries.length, 1)) * 0.18;
       this.ui.showLoading(progressBase, `Loading ${stage.displayName}...`);
       try {
-        await StageLoader.preloadStage(stage);
+        this._stageCache[id] = await StageLoader.preloadStage(stage);
       } catch (err) {
         console.warn(`Failed to preload stage '${stage.id}':`, err);
+        this._stageCache[id] = {
+          stageId: id,
+          paths: StageLoader.getAssetPaths(stage),
+          assets: [],
+          failed: true,
+        };
       }
       const progressDone = 0.74 + ((i + 1) / Math.max(stageEntries.length, 1)) * 0.18;
       this.ui.showLoading(progressDone, `Loaded ${stage.displayName}`);

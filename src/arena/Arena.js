@@ -461,6 +461,14 @@ export class Arena {
   _addBambooAtmosphere(root, stage) {
     const atmosphere = stage.atmosphere ?? {};
 
+    if (this._isStageFeatureEnabled(stage, 'backgroundHaze')) {
+      this._addBambooBackgroundHaze(root, stage);
+    }
+
+    if (this._isStageFeatureEnabled(stage, 'canopyShadows')) {
+      this._addBambooCanopyShadows(root, stage);
+    }
+
     if (this._isStageFeatureEnabled(stage, 'groundMist')) {
       const mistMat = new THREE.MeshBasicMaterial({
         color: atmosphere.mistColor ?? 0x9fcfa9,
@@ -543,6 +551,93 @@ export class Arena {
     }
   }
 
+  _addBambooBackgroundHaze(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const hazeMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.backgroundHazeColor ?? 0xd0e4b8,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.backgroundHazeOpacity ?? 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: true,
+    });
+
+    for (const [x, y, z, sx, sy, rotY, rotZ, opacity, phase] of [
+      [0.0, 2.4, -7.1, 7.6, 2.5, 0, 0.02, 1.0, 0.2],
+      [-5.25, 2.0, -4.9, 3.4, 1.9, 0.28, -0.12, 0.74, 1.1],
+      [5.15, 2.05, -4.65, 3.6, 2.0, -0.25, 0.14, 0.78, 2.0],
+      [-6.2, 1.55, 1.8, 2.9, 1.55, 0.62, 0.18, 0.56, 2.8],
+      [6.05, 1.6, 1.55, 2.8, 1.5, -0.58, -0.16, 0.52, 3.4],
+    ]) {
+      const haze = new THREE.Mesh(new THREE.CircleGeometry(1, 32), hazeMat.clone());
+      haze.name = `${stage.id}_bamboo_depth_haze`;
+      haze.material.opacity *= opacity;
+      haze.position.set(x, y, z);
+      haze.scale.set(sx, sy, 1);
+      haze.rotation.set(0, rotY, rotZ);
+      haze.renderOrder = -5;
+      root.add(haze);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: haze,
+        basePosition: haze.position.clone(),
+        baseScale: haze.scale.clone(),
+        drift: new THREE.Vector3(0.035, 0.012, 0.02),
+        speed: 0.08,
+        phase,
+        opacity: haze.material.opacity,
+        opacityPulse: haze.material.opacity * 0.12,
+        scalePulse: 0.01,
+      });
+    }
+  }
+
+  _addBambooCanopyShadows(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.canopyShadowColor ?? 0x0f2418,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.canopyShadowOpacity ?? 0.14,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: true,
+    });
+
+    for (const [x, z, sx, sz, rot, opacity, phase] of [
+      [-3.6, -1.9, 3.6, 1.05, -0.24, 0.82, 0.5],
+      [3.5, -1.45, 3.35, 0.95, 0.18, 0.72, 1.7],
+      [-2.8, 2.45, 3.7, 1.02, 0.12, 0.66, 2.6],
+      [3.1, 2.15, 3.2, 0.9, -0.18, 0.58, 3.2],
+      [0.0, 0.35, 5.25, 1.5, 0.04, 0.48, 4.1],
+    ]) {
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 36), shadowMat.clone());
+      shadow.name = `${stage.id}_canopy_shadow_pool`;
+      shadow.material.opacity *= opacity;
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.rotation.z = rot;
+      shadow.position.set(x, 0.068, z);
+      shadow.scale.set(sx, sz, 1);
+      shadow.renderOrder = -2;
+      root.add(shadow);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: shadow,
+        basePosition: shadow.position.clone(),
+        baseScale: shadow.scale.clone(),
+        drift: new THREE.Vector3(0.018, 0, 0.015),
+        speed: 0.06,
+        phase,
+        opacity: shadow.material.opacity,
+        opacityPulse: shadow.material.opacity * 0.08,
+        scalePulse: 0.012,
+      });
+    }
+  }
+
   _addBambooAmbientDrift(root, stage) {
     const atmosphere = stage.atmosphere ?? {};
     if (this._isStageFeatureEnabled(stage, 'fireflies')) {
@@ -580,6 +675,24 @@ export class Arena {
       lengthMax: 0.12,
       resetDepth: 0.9,
     });
+
+    if (this._isStageFeatureEnabled(stage, 'leafDrift')) {
+      this._addDriftLines(root, stage, {
+        name: 'falling_bamboo_leaves',
+        count: 58,
+        seed: 0x1eaf1e,
+        color: atmosphere.fallingLeafColor ?? 0xb9a55c,
+        opacity: atmosphere.fallingLeafOpacity ?? 0.22,
+        bounds: { x: 5.1, z: 4.9, minY: 0.95, maxY: 4.2 },
+        velocity: { x: 0.018, y: -0.11, z: -0.022 },
+        jitter: { x: 0.09, y: 0.045, z: 0.08 },
+        sway: 0.32,
+        swaySpeed: 0.72,
+        lengthMin: 0.08,
+        lengthMax: 0.2,
+        resetDepth: 1.1,
+      });
+    }
   }
 
   _addBambooStoneLantern(root, stage) {
@@ -619,6 +732,29 @@ export class Arena {
 
     const glow = add(new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.18), warm), 0, 0.86, -0.205);
     glow.renderOrder = 2;
+
+    const atmosphere = stage.atmosphere ?? {};
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.lanternGlowColor ?? 0xffa65a,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.lanternGlowOpacity ?? 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+    const halo = new THREE.Mesh(new THREE.CircleGeometry(1, 36), haloMat);
+    halo.name = `${stage.id}_stone_lantern_ground_halo`;
+    halo.position.set(lantern.position.x, 0.07, lantern.position.z);
+    halo.rotation.x = -Math.PI / 2;
+    halo.scale.set(1.25, 0.82, 1);
+    halo.renderOrder = -1;
+    root.add(halo);
+
+    const lanternLight = new THREE.PointLight(atmosphere.lanternGlowColor ?? 0xffa65a, 0.42, 4.2, 2.2);
+    lanternLight.name = `${stage.id}_stone_lantern_warm_light`;
+    lanternLight.position.set(lantern.position.x, 0.86, lantern.position.z - 0.08);
+    root.add(lanternLight);
   }
 
   _addPierSunsetAtmosphere(root, stage) {
@@ -783,6 +919,8 @@ export class Arena {
     const atmosphere = stage.atmosphere ?? {};
     this._addAmphitheaterExteriorCity(root, stage);
     this._addAmphitheaterSkyClouds(root, stage);
+    this._addAmphitheaterSunGlare(root, stage);
+    this._addAmphitheaterRimDetails(root, stage);
 
     const shaftMat = new THREE.MeshBasicMaterial({
       color: atmosphere.shaftColor ?? 0xffd18a,
@@ -897,6 +1035,150 @@ export class Arena {
       resetFromTop: false,
       resetDepth: 1,
     });
+
+    this._addDriftLines(root, stage, {
+      name: 'sand_wind_threads',
+      count: 62,
+      seed: 0xa5d057,
+      color: atmosphere.windLineColor ?? 0xffdfaa,
+      opacity: atmosphere.windLineOpacity ?? 0.12,
+      bounds: { x: 7.3, z: 6.2, minY: 0.28, maxY: 2.2 },
+      velocity: { x: 0.14, y: 0.018, z: -0.035 },
+      jitter: { x: 0.09, y: 0.03, z: 0.08 },
+      sway: 0.12,
+      swaySpeed: 0.66,
+      lengthMin: 0.16,
+      lengthMax: 0.42,
+      resetDepth: 0.9,
+    });
+  }
+
+  _addAmphitheaterSunGlare(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const glareMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.sunGlareColor ?? 0xffe1aa,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.sunGlareOpacity ?? 0.16,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      fog: false,
+    });
+
+    for (const [x, y, z, sx, sy, rot, opacity, phase] of [
+      [-5.8, 6.1, -12.4, 7.2, 2.0, -0.08, 1.0, 0.4],
+      [5.0, 5.75, -11.8, 5.4, 1.55, 0.14, 0.58, 1.9],
+      [0.0, 4.3, -10.2, 11.0, 1.3, 0.02, 0.42, 2.7],
+    ]) {
+      const glare = new THREE.Mesh(new THREE.CircleGeometry(1, 36), glareMat.clone());
+      glare.name = `${stage.id}_high_sun_glare`;
+      glare.material.opacity *= opacity;
+      glare.position.set(x, y, z);
+      glare.scale.set(sx, sy, 1);
+      glare.rotation.z = rot;
+      glare.renderOrder = -8;
+      root.add(glare);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: glare,
+        basePosition: glare.position.clone(),
+        baseScale: glare.scale.clone(),
+        drift: new THREE.Vector3(0.035, 0.008, 0),
+        speed: 0.05,
+        phase,
+        opacity: glare.material.opacity,
+        opacityPulse: glare.material.opacity * 0.1,
+        scalePulse: 0.01,
+      });
+    }
+  }
+
+  _addAmphitheaterRimDetails(root, stage) {
+    const atmosphere = stage.atmosphere ?? {};
+    const shadeMat = new THREE.MeshBasicMaterial({
+      color: atmosphere.rimShadeColor ?? 0x5c3c25,
+      map: this._makeSoftCloudTexture(),
+      transparent: true,
+      opacity: atmosphere.rimShadeOpacity ?? 0.12,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      blending: THREE.NormalBlending,
+      fog: true,
+    });
+
+    for (const [x, z, sx, sz, rot, opacity, phase] of [
+      [-4.8, -3.4, 4.6, 1.2, -0.18, 1.0, 0.8],
+      [4.6, -3.2, 4.4, 1.15, 0.14, 0.86, 1.9],
+      [-5.1, 2.6, 3.8, 0.98, 0.22, 0.72, 2.7],
+      [5.0, 2.45, 3.8, 0.98, -0.2, 0.68, 3.5],
+      [0.0, 4.9, 6.7, 1.55, 0.04, 0.58, 4.4],
+    ]) {
+      const shade = new THREE.Mesh(new THREE.CircleGeometry(1, 36), shadeMat.clone());
+      shade.name = `${stage.id}_rim_shadow_pool`;
+      shade.material.opacity *= opacity;
+      shade.rotation.x = -Math.PI / 2;
+      shade.rotation.z = rot;
+      shade.position.set(x, 0.052, z);
+      shade.scale.set(sx, sz, 1);
+      shade.renderOrder = -3;
+      root.add(shade);
+      this._meshEffects.push({
+        kind: 'heat_shimmer',
+        mesh: shade,
+        basePosition: shade.position.clone(),
+        baseScale: shade.scale.clone(),
+        drift: new THREE.Vector3(0.025, 0, 0.018),
+        speed: 0.09,
+        phase,
+        opacity: shade.material.opacity,
+        opacityPulse: shade.material.opacity * 0.12,
+        scalePulse: 0.01,
+      });
+    }
+
+    const bannerMats = [
+      new THREE.MeshBasicMaterial({
+        color: atmosphere.bannerRedColor ?? 0x8e2f25,
+        transparent: true,
+        opacity: atmosphere.bannerOpacity ?? 0.66,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        fog: true,
+      }),
+      new THREE.MeshBasicMaterial({
+        color: atmosphere.bannerBlueColor ?? 0x23446b,
+        transparent: true,
+        opacity: Math.max(0, (atmosphere.bannerOpacity ?? 0.66) - 0.06),
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        fog: true,
+      }),
+    ];
+
+    const farSide = -Math.PI / 2;
+    const radius = 13.6;
+    for (let i = 0; i < 10; i++) {
+      const angle = farSide - 0.92 + i * 0.205;
+      const width = i % 3 === 0 ? 0.72 : 0.56;
+      const height = 0.72 + (i % 4) * 0.08;
+      const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, height), bannerMats[i % 2].clone());
+      banner.name = `${stage.id}_rim_cloth_banner`;
+      banner.position.set(Math.cos(angle) * radius, 3.95 + (i % 2) * 0.18, Math.sin(angle) * radius);
+      banner.rotation.y = -angle + Math.PI / 2;
+      banner.rotation.z = (i % 2 ? -1 : 1) * 0.035;
+      banner.renderOrder = -2;
+      root.add(banner);
+      this._meshEffects.push({
+        kind: 'sway_group',
+        mesh: banner,
+        baseRotation: banner.rotation.clone(),
+        speed: 0.36 + i * 0.012,
+        phase: i * 0.9,
+        amountX: 0.012,
+        amountZ: 0.018,
+      });
+    }
   }
 
   _addAmphitheaterSkyClouds(root, stage) {

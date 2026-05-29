@@ -13,6 +13,7 @@ tmp_*
 analysis/
 art/
 screenshots/
+audio/review/
 
 # Stale local stage exports; only referenced stage assets should deploy.
 public/stages/amphitheater_model3_textured_v1.glb

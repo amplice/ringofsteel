@@ -87,11 +87,6 @@ export const STAGE_DEFS = Object.freeze({
       rimShadeOpacity: 0.12,
       sunGlareColor: 0xffe1aa,
       sunGlareOpacity: 0.18,
-      windLineColor: 0xffdfaa,
-      windLineOpacity: 0.13,
-      bannerRedColor: 0x8e2f25,
-      bannerBlueColor: 0x23446b,
-      bannerOpacity: 0.68,
     }),
     materialMood: Object.freeze({
       tint: 0xb99567,

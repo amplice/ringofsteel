@@ -1035,22 +1035,6 @@ export class Arena {
       resetFromTop: false,
       resetDepth: 1,
     });
-
-    this._addDriftLines(root, stage, {
-      name: 'sand_wind_threads',
-      count: 62,
-      seed: 0xa5d057,
-      color: atmosphere.windLineColor ?? 0xffdfaa,
-      opacity: atmosphere.windLineOpacity ?? 0.12,
-      bounds: { x: 7.3, z: 6.2, minY: 0.28, maxY: 2.2 },
-      velocity: { x: 0.14, y: 0.018, z: -0.035 },
-      jitter: { x: 0.09, y: 0.03, z: 0.08 },
-      sway: 0.12,
-      swaySpeed: 0.66,
-      lengthMin: 0.16,
-      lengthMax: 0.42,
-      resetDepth: 0.9,
-    });
   }
 
   _addAmphitheaterSunGlare(root, stage) {
@@ -1134,49 +1118,6 @@ export class Arena {
         opacity: shade.material.opacity,
         opacityPulse: shade.material.opacity * 0.12,
         scalePulse: 0.01,
-      });
-    }
-
-    const bannerMats = [
-      new THREE.MeshBasicMaterial({
-        color: atmosphere.bannerRedColor ?? 0x8e2f25,
-        transparent: true,
-        opacity: atmosphere.bannerOpacity ?? 0.66,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        fog: true,
-      }),
-      new THREE.MeshBasicMaterial({
-        color: atmosphere.bannerBlueColor ?? 0x23446b,
-        transparent: true,
-        opacity: Math.max(0, (atmosphere.bannerOpacity ?? 0.66) - 0.06),
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        fog: true,
-      }),
-    ];
-
-    const farSide = -Math.PI / 2;
-    const radius = 13.6;
-    for (let i = 0; i < 10; i++) {
-      const angle = farSide - 0.92 + i * 0.205;
-      const width = i % 3 === 0 ? 0.72 : 0.56;
-      const height = 0.72 + (i % 4) * 0.08;
-      const banner = new THREE.Mesh(new THREE.PlaneGeometry(width, height), bannerMats[i % 2].clone());
-      banner.name = `${stage.id}_rim_cloth_banner`;
-      banner.position.set(Math.cos(angle) * radius, 3.95 + (i % 2) * 0.18, Math.sin(angle) * radius);
-      banner.rotation.y = -angle + Math.PI / 2;
-      banner.rotation.z = (i % 2 ? -1 : 1) * 0.035;
-      banner.renderOrder = -2;
-      root.add(banner);
-      this._meshEffects.push({
-        kind: 'sway_group',
-        mesh: banner,
-        baseRotation: banner.rotation.clone(),
-        speed: 0.36 + i * 0.012,
-        phase: i * 0.9,
-        amountX: 0.012,
-        amountZ: 0.018,
       });
     }
   }

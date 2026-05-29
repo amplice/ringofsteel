@@ -3,6 +3,8 @@ export function getDefaultMultiplayerWsUrl() {
     return import.meta.env.VITE_MULTIPLAYER_WS_URL;
   }
 
+  const productionWsUrl = 'wss://ringofsteel-production.up.railway.app/ws';
+
   if (typeof window === 'undefined') {
     return 'ws://127.0.0.1:3010/ws';
   }
@@ -11,6 +13,10 @@ export function getDefaultMultiplayerWsUrl() {
 
   if (import.meta.env?.DEV) {
     return `${protocol}://${window.location.hostname}:3010/ws`;
+  }
+
+  if (window.location.protocol === 'https:' || window.location.hostname.endsWith('.vercel.app')) {
+    return productionWsUrl;
   }
 
   if (window.location.port) {

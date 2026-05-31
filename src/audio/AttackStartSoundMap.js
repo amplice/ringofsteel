@@ -19,11 +19,6 @@ export const ATTACK_START_SOUND_MAP = Object.freeze({
     heavy: '/audio/attack-start/spearman-heavy.wav',
     thrust: '/audio/attack-start/spearman-thrust.ogg',
   }),
-  glaivier: Object.freeze({
-    quick: '/audio/attack-start/spearman-quick.wav',
-    heavy: '/audio/attack-start/spearman-heavy.wav',
-    thrust: '/audio/attack-start/spearman-thrust.ogg',
-  }),
 });
 
 export function getAttackStartSoundId(charId, attackType) {

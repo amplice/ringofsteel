@@ -93,8 +93,6 @@ export function defineCharacter(charId, def) {
     weaponHitRadius: def.weapon.tuning.hitRadius,
     weaponClashRadius: def.weapon.tuning.hitRadius,
     weaponHitMode: def.weapon.tuning.hitMode,
-    weaponHitSegmentStart: def.weapon.tuning.hitSegmentStart,
-    weaponHitSegmentEnd: def.weapon.tuning.hitSegmentEnd,
   });
 }
 

@@ -51,11 +51,6 @@ const AI_DIFFICULTY_PROFILE_MAP = Object.freeze({
     medium: 'huscarl_raider',
     hard: DEFAULT_HARD_AI_PROFILES.huscarl,
   }),
-  glaivier: Object.freeze({
-    easy: 'glaivier_press',
-    medium: 'glaivier_guard',
-    hard: DEFAULT_HARD_AI_PROFILES.glaivier,
-  }),
 });
 
 

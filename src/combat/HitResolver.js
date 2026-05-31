@@ -14,6 +14,8 @@ const _lineDir = new THREE.Vector3();
 const _toPoint = new THREE.Vector3();
 const _closest = new THREE.Vector3();
 const _candidatePoint = new THREE.Vector3();
+const _hitSegStart = new THREE.Vector3();
+const _hitSegEnd = new THREE.Vector3();
 const _segP1 = new THREE.Vector3();
 const _segQ1 = new THREE.Vector3();
 const _segP2 = new THREE.Vector3();
@@ -81,6 +83,20 @@ export class HitResolver {
     return getDefaultWeaponHitRadius(fighter.weaponType);
   }
 
+  _getOffensiveWeaponSegment(fighter, base, tip, startTarget = _hitSegStart, endTarget = _hitSegEnd) {
+    const rawStart = fighter.charDef?.weaponHitSegmentStart;
+    const rawEnd = fighter.charDef?.weaponHitSegmentEnd;
+    if (typeof rawStart !== 'number' && typeof rawEnd !== 'number') {
+      return { start: base, end: tip, startT: 0, endT: 1 };
+    }
+
+    const startT = THREE.MathUtils.clamp(typeof rawStart === 'number' ? rawStart : 0, 0, 1);
+    const endT = THREE.MathUtils.clamp(typeof rawEnd === 'number' ? rawEnd : 1, startT, 1);
+    startTarget.lerpVectors(base, tip, startT);
+    endTarget.lerpVectors(base, tip, endT);
+    return { start: startTarget, end: endTarget, startT, endT };
+  }
+
   checkWeaponOverlap(attacker, defender) {
     const tip = attacker.getWeaponTipWorldPosition(new THREE.Vector3());
     const base = attacker.getWeaponBaseWorldPosition(new THREE.Vector3());
@@ -97,9 +113,10 @@ export class HitResolver {
       ) <= hitRadius;
     }
 
+    const segment = this._getOffensiveWeaponSegment(attacker, base, tip);
     return this._distToVerticalCylinder(
-      base,
-      tip,
+      segment.start,
+      segment.end,
       _defenderCenter,
       HURT_CYLINDER.radius,
       HURT_CYLINDER.height,
@@ -184,7 +201,9 @@ export class HitResolver {
       towardTarget = attacker.getTipRelativeVelocityToward(_defenderCenter);
       relativeSpeed = attacker.getTipRelativeSpeed();
     } else {
-      const contactT = this._closestPointParamOnSegment(_defenderCenter, base, tip);
+      const segment = this._getOffensiveWeaponSegment(attacker, base, tip);
+      const localT = this._closestPointParamOnSegment(_defenderCenter, segment.start, segment.end);
+      const contactT = segment.startT + ((segment.endT - segment.startT) * localT);
       collision.contactT = contactT;
       towardTarget = attacker.getWeaponPointVelocityToward(_defenderCenter, contactT, true);
       relativeSpeed = attacker.getWeaponPointSpeed(contactT, true);
@@ -201,13 +220,16 @@ export class HitResolver {
         HURT_CYLINDER.radius,
         HURT_CYLINDER.height,
       )
-      : this._distToVerticalCylinder(
-        base,
-        tip,
-        _defenderCenter,
-        HURT_CYLINDER.radius,
-        HURT_CYLINDER.height,
-      );
+      : (() => {
+        const segment = this._getOffensiveWeaponSegment(attacker, base, tip);
+        return this._distToVerticalCylinder(
+          segment.start,
+          segment.end,
+          _defenderCenter,
+          HURT_CYLINDER.radius,
+          HURT_CYLINDER.height,
+        );
+      })();
     collision.distance = dist;
     collision.segmentHit = dist <= hitRadius;
     collision.lastCheckResult = collision.segmentHit ? 'cylinder_hit' : 'out_of_range';

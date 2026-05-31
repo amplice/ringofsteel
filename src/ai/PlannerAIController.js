@@ -77,7 +77,7 @@ export class PlannerAIController extends AIController {
   _makeDecision(fighter, opponent, dt, frameCount, p) {
     const classId = getFighterClassId(fighter);
     const canPlan =
-      (classId === 'spearman' || classId === 'ronin' || classId === 'knight' || classId === 'huscarl') &&
+      (classId === 'spearman' || classId === 'ronin' || classId === 'knight' || classId === 'huscarl' || classId === 'glaivier') &&
       fighter?.fsm?.isActionable &&
       fighter.state !== FighterState.PARRY_SUCCESS;
 
@@ -251,6 +251,8 @@ export class PlannerAIController extends AIController {
       this._applySpearmanCandidateFilters(actions, fighter, opponent, context);
     } else if (classId === 'huscarl') {
       this._applyHuscarlCandidateFilters(actions, opponent, context);
+    } else if (classId === 'glaivier') {
+      this._applyGlaivierCandidateFilters(actions, fighter, opponent, context);
     }
     this._applyPassiveTargetCandidateFilters(actions, context);
 
@@ -504,6 +506,27 @@ export class PlannerAIController extends AIController {
       if (!vulnerable && !blocking && !motionRead.recentApproach && this._random() < 0.2) actions.delete('quickAttack');
     }
 
+    if (opponentClassId === 'glaivier') {
+      if (!opponentBusy && dist > 2.15 && !motionRead.recentApproach) {
+        actions.delete('quickAttack');
+        actions.delete('heavyAttack');
+      }
+      if (!opponentBusy && dist > 2.45 && !motionRead.recentApproach) {
+        actions.delete('thrustAttack');
+      }
+      if (!opponentBusy && dist >= 1.58 && dist <= 2.25) {
+        actions.delete('moveBack');
+        actions.delete('backstep');
+      }
+      if (!opponentBusy && dist <= 1.65) {
+        actions.delete('sidestepUp');
+        actions.delete('sidestepDown');
+      }
+      if (!opponentBusy && dist < 1.42) {
+        actions.delete('thrustAttack');
+      }
+    }
+
     if (opponentClassId !== 'huscarl') return;
 
     if (!opponentBusy && dist <= 2.1 && dist > 1.45) {
@@ -571,6 +594,43 @@ export class PlannerAIController extends AIController {
 
     if (dist > 1.95 && !opponent.fsm.isAttacking && !blocking && !vulnerable) {
       actions.delete('block');
+    }
+  }
+
+  _applyGlaivierCandidateFilters(actions, fighter, opponent, context) {
+    const { dist, opponentClassId, blocking, vulnerable, recentClash, defensiveNeed, motionRead, edgeDistance } = context;
+    const opponentBusy = opponent.fsm.isAttacking || blocking || vulnerable || recentClash;
+    const quickCommitReach = this._getAttackDecisionReach(fighter, AttackType.QUICK) - 0.04;
+    const heavyCommitReach = this._getAttackDecisionReach(fighter, AttackType.HEAVY) - 0.06;
+    const thrustCommitReach = this._getAttackDecisionReach(fighter, AttackType.THRUST) - 0.03;
+
+    if (!opponentBusy) {
+      if (dist > quickCommitReach + 0.04) actions.delete('quickAttack');
+      if (dist > heavyCommitReach + 0.04) actions.delete('heavyAttack');
+      if (dist > thrustCommitReach + 0.04) actions.delete('thrustAttack');
+    }
+
+    if (dist < 1.35 && !vulnerable && !blocking) {
+      actions.delete('thrustAttack');
+    }
+
+    if (dist <= 1.55 && !opponentBusy) {
+      actions.delete('moveForward');
+    }
+
+    if (edgeDistance < 1.6 && !defensiveNeed) {
+      actions.delete('moveBack');
+      actions.delete('backstep');
+    }
+
+    if ((opponentClassId === 'huscarl' || opponentClassId === 'ronin') && !opponentBusy && dist <= 2.0) {
+      actions.delete('sidestepUp');
+      actions.delete('sidestepDown');
+    }
+
+    if (opponentClassId === 'spearman' && !opponentBusy && dist > 2.15 && !motionRead.recentApproach) {
+      actions.delete('quickAttack');
+      actions.delete('heavyAttack');
     }
   }
 
@@ -1331,37 +1391,47 @@ export class PlannerAIController extends AIController {
           case 'block':
             return (defensiveNeed ? 0.02 : (opponentClassId === 'knight' ? -0.1 : -0.28)) +
               (opponentClassId === 'huscarl' && dist <= 2.15 ? 0.18 : 0) +
+              (opponentClassId === 'glaivier' && dist > 2.1 && !defensiveNeed ? -0.18 : 0) +
               profileBias;
           case 'moveForward':
-            return 0.12 + (opponentClassId === 'huscarl' && dist < 2.65 ? -0.42 : 0) + profileBias;
+            return 0.12 +
+              (opponentClassId === 'huscarl' && dist < 2.65 ? -0.42 : 0) +
+              (opponentClassId === 'glaivier' && dist > 1.55 ? 0.28 : 0) +
+              profileBias;
           case 'moveBack':
             return (opponentClassId === 'knight' ? 0.2 : 0.08) +
               (opponentClassId === 'huscarl' && dist < 2.55 ? 0.36 : 0) +
+              (opponentClassId === 'glaivier' && !defensiveNeed ? -0.3 : 0) +
               profileBias;
           case 'sidestepUp':
           case 'sidestepDown':
             return (opponentClassId === 'knight' ? -0.02 : 0.2) +
               (opponentClassId === 'huscarl' && dist < 2.45 ? -0.3 : 0) +
+              (opponentClassId === 'glaivier' && dist >= 1.65 && dist <= 2.45 ? 0.1 : 0) +
               profileBias;
           case 'backstep':
             return (defensiveNeed ? 0.08 : (opponentClassId === 'knight' ? 0.12 : -0.04)) +
               (opponentClassId === 'huscarl' && dist < 2.35 ? 0.4 : 0) +
+              (opponentClassId === 'glaivier' && !defensiveNeed ? -0.26 : 0) +
               profileBias;
           case 'quickAttack':
             return (dist <= 1.85 || vulnerable ? 0.1 : -0.1) +
               (vulnerable && dist <= 2.05 ? 0.45 : 0) +
               (opponentClassId === 'huscarl' && dist >= 1.65 && dist <= 2.22 ? 0.18 : 0) +
+              (opponentClassId === 'glaivier' && dist <= 1.75 ? 0.22 : 0) +
               profileBias;
           case 'thrustAttack':
             return ((stableLane && dist <= 2.1) || blocking || vulnerable ? 0.04 : -0.1) +
               (vulnerable && dist <= 2.45 ? 0.42 : 0) +
               ((opponentClassId === 'knight' && dist >= 1.65 && dist <= 2.05) ? -0.04 : 0) +
               ((opponentClassId === 'huscarl' && dist >= 1.8 && dist <= 2.42) ? 0.2 : 0) +
+              ((opponentClassId === 'glaivier' && stableLane && dist >= 1.55 && dist <= 2.1) ? 0.18 : 0) +
               profileBias;
           case 'heavyAttack':
             return (blocking || vulnerable || recentClash ? 0.08 : -0.08) +
               (vulnerable && dist <= 2.2 ? 0.28 : 0) +
               (opponentClassId === 'knight' ? -0.04 : 0) +
+              (opponentClassId === 'glaivier' && !blocking && !vulnerable && dist > 1.7 ? -0.16 : 0) +
               profileBias;
           default:
             return profileBias;
@@ -1423,6 +1493,38 @@ export class PlannerAIController extends AIController {
             return ((blocking || vulnerable || recentClash) ? 0.2 : -0.24) + profileBias;
           case 'idle':
             return -0.24 + profileBias;
+          default:
+            return profileBias;
+        }
+      case 'glaivier':
+        switch (action) {
+          case 'block':
+            return (defensiveNeed ? 0.02 : -0.18) + (passiveTarget ? -0.16 : 0) + profileBias;
+          case 'moveForward':
+            return (dist > 1.75 ? 0.16 : -0.1) +
+              (passivePressure && dist <= 2.15 ? -0.24 : 0) +
+              profileBias;
+          case 'moveBack':
+            return (defensiveNeed && dist < 1.85 ? 0.08 : -0.12) + profileBias;
+          case 'sidestepUp':
+          case 'sidestepDown':
+            return (motionRead.recentLateralThreat || defensiveNeed ? 0.02 : -0.08) + profileBias;
+          case 'backstep':
+            return (defensiveNeed && dist < 1.85 ? 0.04 : -0.18) + profileBias;
+          case 'quickAttack':
+            return (dist <= 1.9 || vulnerable ? 0.12 : -0.14) +
+              (passivePressure && dist <= 1.9 ? 0.18 : 0) +
+              profileBias;
+          case 'thrustAttack':
+            return ((stableLane && dist <= 2.35) || vulnerable || blocking ? 0.12 : -0.12) +
+              (passivePressure && dist <= 2.35 ? 0.2 : 0) +
+              profileBias;
+          case 'heavyAttack':
+            return ((blocking || vulnerable || recentClash) ? 0.18 : -0.12) +
+              (motionRead.recentApproach && dist <= 2.15 ? 0.1 : 0) +
+              profileBias;
+          case 'idle':
+            return -0.2 + profileBias;
           default:
             return profileBias;
         }

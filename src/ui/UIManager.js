@@ -71,10 +71,10 @@ export class UIManager {
     this.hud.show();
   }
 
-  showVictory(winner, p1Score, p2Score) {
+  showVictory(winner, p1Score, p2Score, detail = {}) {
     this.hud.hide();
     this._blurActiveEditable();
-    this.victory.show(winner, p1Score, p2Score);
+    this.victory.show(winner, p1Score, p2Score, detail);
   }
 
   async showAnimPlayer() {

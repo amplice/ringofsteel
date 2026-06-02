@@ -91,6 +91,11 @@ export class ScreenEffects {
       const angle = (i / count) * Math.PI * 2;
       const line = document.createElement('div');
       line.className = 'line';
+      if (i % 5 === 0) {
+        line.classList.add('hot');
+      } else if (i % 5 === 2) {
+        line.classList.add('cool');
+      }
 
       // Random length and distance from center
       const innerDist = 200 + Math.random() * 150;

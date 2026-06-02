@@ -1,11 +1,28 @@
+import * as THREE from 'three';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CHARACTER_DEFS, DEFAULT_CHAR } from '../entities/CharacterDefs.js';
 import { getDefaultMultiplayerWsUrl } from '../net/NetConfig.js';
 import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
+
+const PREVIEW_FRONT_YAW = {
+  spearman: Math.PI / 2,
+  ronin: Math.PI / 2,
+  knight: Math.PI / 2,
+  huscarl: Math.PI / 2,
+};
+
+const HERO_FRONT_YAW = {
+  spearman: 0,
+  ronin: 0,
+  knight: 0,
+  huscarl: 0,
+};
 
 export class CharacterSelect {
   constructor() {
     this.el = document.getElementById('select-screen');
     this.onConfirm = null;
+    this.onStagePreview = null;
 
     this.mode = 'ai';
     this.difficulty = 'medium';
@@ -30,6 +47,18 @@ export class CharacterSelect {
     this.p2Container = document.getElementById('p2-char-options');
     this.p1Heading = document.getElementById('p1-char-heading');
     this.p2Heading = document.getElementById('p2-char-heading');
+    this.p1VersusSide = document.getElementById('p1-versus-side');
+    this.p2VersusSide = document.getElementById('p2-versus-side');
+    this.p1VersusName = document.getElementById('p1-versus-name');
+    this.p2VersusName = document.getElementById('p2-versus-name');
+    this.p1VersusWeapon = document.getElementById('p1-versus-weapon');
+    this.p2VersusWeapon = document.getElementById('p2-versus-weapon');
+    this.p1VersusImg = document.getElementById('p1-versus-img');
+    this.p2VersusImg = document.getElementById('p2-versus-img');
+    this.p1HeroRole = document.getElementById('p1-hero-role');
+    this.p2HeroRole = document.getElementById('p2-hero-role');
+    this.p1HeroName = document.getElementById('p1-hero-name');
+    this.p2HeroName = document.getElementById('p2-hero-name');
     this.p2Column = this.p2Heading?.closest('.char-select-column') ?? null;
     this.startBtn = document.getElementById('start-fight-btn');
     this.controlsBtn = document.getElementById('controls-btn');
@@ -45,6 +74,15 @@ export class CharacterSelect {
     this.onOnlineQuickMatch = null;
     this.onOnlineRefresh = null;
     this.onOnlineJoinPublic = null;
+    this._previewCache = null;
+    this._previewImages = new Map();
+    this._previewRenderer = null;
+    this._heroPreviews = {
+      p1: this._createHeroPreview('p1-hero-canvas'),
+      p2: this._createHeroPreview('p2-hero-canvas'),
+    };
+    this._heroPreviewFrame = 0;
+    this._heroPreviewLastTime = 0;
 
     if (this.onlineServerUrl && !this.onlineServerUrl.value) {
       this.onlineServerUrl.value = getDefaultMultiplayerWsUrl();
@@ -54,7 +92,20 @@ export class CharacterSelect {
     this._buildStageButtons();
     this._buildCharButtons();
     this._updateModeUI();
+    this._updateVersusPreview();
     this.clearOnlineLobbyInfo();
+  }
+
+  setCharacterPreviewCache(cache) {
+    this._previewCache = cache || null;
+    this._renderCharacterPreviewImages();
+    this._updateHeroPreviewCharacter('p1', this.p1Char, true);
+    this._updateHeroPreviewCharacter('p2', this.p2Char, true);
+  }
+
+  getCharacterPreviewImages() {
+    this._renderCharacterPreviewImages();
+    return new Map(this._previewImages);
   }
 
   _setupButtons() {
@@ -159,10 +210,23 @@ export class CharacterSelect {
   }
 
   _createCharButton(id, label, playerIndex) {
+    const def = CHARACTER_DEFS[id];
+    const weapon = def?.weapon?.stats;
     const btn = document.createElement('button');
-    btn.className = 'select-btn';
+    btn.className = 'select-btn char-card-btn';
     btn.dataset.char = id;
-    btn.textContent = label.toUpperCase();
+    btn.innerHTML = `
+      <span class="char-card-copy">
+        <span class="card-kicker">P${playerIndex} LOADOUT</span>
+        <span class="char-card-name">${this._escapeHtml(label).toUpperCase()}</span>
+        <span class="char-card-weapon">${this._escapeHtml(weapon?.name ?? 'Weapon').toUpperCase()}</span>
+        <span class="char-card-note">${this._escapeHtml(weapon?.description ?? 'One clean hit ends the round.')}</span>
+      </span>
+      <span class="char-card-portrait">
+        <img alt="" data-char-preview="${this._escapeHtml(id)}" />
+        <span class="char-card-silhouette">${this._escapeHtml(label.slice(0, 1)).toUpperCase()}</span>
+      </span>
+    `;
 
     const isActive = playerIndex === 1 ? id === this.p1Char : id === this.p2Char;
     if (isActive) btn.classList.add('active');
@@ -176,15 +240,352 @@ export class CharacterSelect {
       } else {
         this.p2Char = id;
       }
+      this._updateVersusPreview();
+      this._updateHeroPreviewCharacter(playerIndex === 1 ? 'p1' : 'p2', id);
     });
 
     return btn;
+  }
+
+  _createHeroPreview(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x000000, 0);
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0xffdfb0, 1.2));
+    const key = new THREE.DirectionalLight(0xffe0a4, 2.4);
+    key.position.set(2.5, 3.4, 4.2);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x77aaff, 1.25);
+    fill.position.set(-2.6, 2.4, 3.2);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xff7058, 1.15);
+    rim.position.set(0, 2.0, -3.5);
+    scene.add(rim);
+
+    return {
+      canvas,
+      renderer,
+      scene,
+      camera: new THREE.OrthographicCamera(-1.1, 1.1, 1.68, -1.36, 0.1, 20),
+      root: null,
+      mixer: null,
+      actions: [],
+      actionIndex: -1,
+      actionTimer: 0,
+      charId: null,
+    };
+  }
+
+  _updateHeroPreviewCharacter(slot, charId, force = false) {
+    const preview = this._heroPreviews?.[slot];
+    if (!preview || !this._previewCache) return;
+    const resolvedId = CHARACTER_DEFS[charId] ? charId : DEFAULT_CHAR;
+    if (!force && preview.charId === resolvedId) return;
+    const data = this._previewCache[resolvedId];
+    if (!data?.model) return;
+
+    if (preview.root) {
+      preview.scene.remove(preview.root);
+    }
+
+    const root = SkeletonUtils.clone(data.model);
+    root.rotation.y = HERO_FRONT_YAW[resolvedId] ?? PREVIEW_FRONT_YAW[resolvedId] ?? 0;
+    root.traverse((child) => {
+      if (!child.isMesh) return;
+      child.frustumCulled = false;
+      child.castShadow = false;
+      child.receiveShadow = false;
+      if (!child.material) return;
+      const cloneMaterial = (mat) => {
+        const cloned = mat.clone();
+        cloned.metalness = Math.min(cloned.metalness ?? 0, 0.18);
+        cloned.roughness = Math.max(cloned.roughness ?? 0.72, 0.78);
+        return cloned;
+      };
+      child.material = Array.isArray(child.material)
+        ? child.material.map(cloneMaterial)
+        : cloneMaterial(child.material);
+    });
+    preview.scene.add(root);
+
+    const mixer = new THREE.AnimationMixer(root);
+    const idleClip = data.clips?.idle || Object.values(data.clips || {})[0];
+    const actions = idleClip ? [mixer.clipAction(idleClip)] : [];
+
+    this._fitHeroModel(preview, root);
+
+    preview.root = root;
+    preview.mixer = mixer;
+    preview.actions = actions;
+    preview.actionIndex = 0;
+    preview.actionTimer = 0;
+    preview.charId = resolvedId;
+    const idle = preview.actions[0];
+    if (idle) {
+      idle.reset();
+      idle.setLoop(THREE.LoopRepeat, Infinity);
+      idle.clampWhenFinished = false;
+      idle.enabled = true;
+      idle.play();
+    }
+  }
+
+  _fitHeroModel(preview, root) {
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y > 0) {
+      root.scale.multiplyScalar(1.82 / size.y);
+    }
+    const scaledBox = new THREE.Box3().setFromObject(root);
+    const center = scaledBox.getCenter(new THREE.Vector3());
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= scaledBox.min.y;
+
+    preview.camera.position.set(0, 1.14, 7);
+    preview.camera.lookAt(0, 1.14, 0);
+    preview.camera.updateProjectionMatrix();
+    this._resizeHeroPreview(preview);
+    this._centerPreviewBodyInFrame(preview.renderer, preview.scene, preview.camera, root);
+  }
+
+  _startHeroPreviewLoop() {
+    if (this._heroPreviewFrame) return;
+    this._heroPreviewLastTime = performance.now();
+    const tick = (now) => {
+      this._heroPreviewFrame = requestAnimationFrame(tick);
+      const dt = Math.min((now - this._heroPreviewLastTime) / 1000, 0.05);
+      this._heroPreviewLastTime = now;
+      this._updateHeroPreviews(dt);
+    };
+    this._heroPreviewFrame = requestAnimationFrame(tick);
+  }
+
+  _stopHeroPreviewLoop() {
+    if (!this._heroPreviewFrame) return;
+    cancelAnimationFrame(this._heroPreviewFrame);
+    this._heroPreviewFrame = 0;
+  }
+
+  _updateHeroPreviews(dt) {
+    for (const preview of Object.values(this._heroPreviews)) {
+      if (!preview?.renderer || !preview.root) continue;
+      this._resizeHeroPreview(preview);
+      preview.mixer?.update(dt);
+      preview.renderer.render(preview.scene, preview.camera);
+    }
+  }
+
+  _resizeHeroPreview(preview) {
+    const width = Math.max(1, Math.floor(preview.canvas.clientWidth));
+    const height = Math.max(1, Math.floor(preview.canvas.clientHeight));
+    const pixelRatio = preview.renderer.getPixelRatio();
+    if (
+      preview.canvas.width !== Math.floor(width * pixelRatio) ||
+      preview.canvas.height !== Math.floor(height * pixelRatio)
+    ) {
+      preview.renderer.setSize(width, height, false);
+    }
+    const aspect = width / height;
+    const viewHeight = 3.72;
+    const viewWidth = viewHeight * aspect;
+    preview.camera.left = -viewWidth / 2;
+    preview.camera.right = viewWidth / 2;
+    preview.camera.top = 1.92;
+    preview.camera.bottom = -1.8;
+    preview.camera.updateProjectionMatrix();
+  }
+
+  _renderCharacterPreviewImages() {
+    if (!this._previewCache) return;
+
+    for (const id of Object.keys(CHARACTER_DEFS)) {
+      if (this._previewImages.has(id)) continue;
+      const data = this._previewCache[id];
+      if (!data?.model) continue;
+      try {
+        const image = this._renderPreviewImage(id, data);
+        if (image) this._previewImages.set(id, image);
+      } catch (err) {
+        console.warn(`[ui] failed to render character preview '${id}'`, err);
+      }
+    }
+
+    for (const img of this.el.querySelectorAll('img[data-char-preview]')) {
+      const src = this._previewImages.get(img.dataset.charPreview);
+      if (!src) continue;
+      img.src = src;
+      img.classList.add('ready');
+    }
+    this._updateVersusPreview();
+  }
+
+  _renderPreviewImage(id, data) {
+    const renderer = this._getPreviewRenderer();
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
+
+    scene.add(new THREE.AmbientLight(0xffdfb0, 1.25));
+    const key = new THREE.DirectionalLight(0xffe0a4, 2.2);
+    key.position.set(2.4, 3.0, 3.1);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(id === 'ronin' ? 0x74b8ff : 0x8fc3ff, 1.65);
+    rim.position.set(-2.4, 2.0, -2.4);
+    scene.add(rim);
+
+    const root = SkeletonUtils.clone(data.model);
+    root.rotation.y = PREVIEW_FRONT_YAW[id] ?? 0;
+    root.traverse((child) => {
+      if (child.isMesh) {
+        child.frustumCulled = false;
+        child.castShadow = false;
+        child.receiveShadow = false;
+        if (child.material) {
+          const applyMat = (mat) => {
+            const cloned = mat.clone();
+            cloned.metalness = Math.min(cloned.metalness ?? 0, 0.22);
+            cloned.roughness = Math.max(cloned.roughness ?? 0.72, 0.78);
+            return cloned;
+          };
+          child.material = Array.isArray(child.material)
+            ? child.material.map(applyMat)
+            : applyMat(child.material);
+        }
+      }
+    });
+    scene.add(root);
+
+    const mixer = new THREE.AnimationMixer(root);
+    const idle = data.clips?.idle || Object.values(data.clips || {})[0];
+    if (idle) {
+      const action = mixer.clipAction(idle);
+      action.play();
+      mixer.update(Math.min(0.3, idle.duration * 0.18));
+    }
+
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y > 0) {
+      root.scale.multiplyScalar(1.72 / size.y);
+    }
+    const scaledBox = new THREE.Box3().setFromObject(root);
+    const center = scaledBox.getCenter(new THREE.Vector3());
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= scaledBox.min.y - 0.04;
+
+    const fittedBox = new THREE.Box3().setFromObject(root);
+    const fittedCenter = fittedBox.getCenter(new THREE.Vector3());
+    const halfFrame = 1.16;
+    camera.left = -halfFrame;
+    camera.right = halfFrame;
+    camera.top = halfFrame;
+    camera.bottom = -halfFrame;
+    camera.position.set(0, fittedCenter.y, 6);
+    camera.lookAt(0, fittedCenter.y, 0);
+    camera.updateProjectionMatrix();
+
+    this._centerPreviewBodyInFrame(renderer, scene, camera, root);
+    renderer.render(scene, camera);
+    return renderer.domElement.toDataURL('image/png');
+  }
+
+  _centerPreviewBodyInFrame(renderer, scene, camera, root) {
+    const hidden = [];
+    this._setPreviewWeaponVisibility(root, false, hidden);
+    renderer.render(scene, camera);
+    const bounds = this._getPreviewAlphaBounds(renderer.domElement);
+    for (const entry of hidden) entry.object.visible = entry.visible;
+
+    if (!bounds) return;
+    const bodyCenterX = (bounds.minX + bounds.maxX) / 2;
+    const targetCenterX = renderer.domElement.width / 2;
+    const deltaPixels = targetCenterX - bodyCenterX;
+    if (Math.abs(deltaPixels) < 1) return;
+    const worldUnitsPerPixel = (camera.right - camera.left) / renderer.domElement.width;
+    root.position.x += deltaPixels * worldUnitsPerPixel;
+  }
+
+  _getPreviewAlphaBounds(canvas) {
+    const sample = document.createElement('canvas');
+    sample.width = canvas.width;
+    sample.height = canvas.height;
+    const ctx = sample.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(canvas, 0, 0);
+    const { data, width, height } = ctx.getImageData(0, 0, sample.width, sample.height);
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const alpha = data[(y * width + x) * 4 + 3];
+        if (alpha < 12) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    return maxX >= minX && maxY >= minY ? { minX, minY, maxX, maxY } : null;
+  }
+
+  _setPreviewWeaponVisibility(root, visible, hidden) {
+    const visit = (object, inheritedWeapon = false) => {
+      const isWeapon = inheritedWeapon || this._isPreviewWeaponNode(object);
+      if (isWeapon && object.visible !== visible) {
+        hidden.push({ object, visible: object.visible });
+        object.visible = visible;
+      }
+      for (const child of object.children) visit(child, isWeapon);
+    };
+
+    visit(root, false);
+  }
+
+  _isPreviewWeaponNode(object) {
+    return /spear|katana|sword|longsword|axe|battleaxe|shield|blade|weapon/i.test(object.name || '');
+  }
+
+  _getPreviewRenderer() {
+    if (!this._previewRenderer) {
+      this._previewRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+      this._previewRenderer.setPixelRatio(1);
+      this._previewRenderer.setSize(384, 384, false);
+      this._previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+      this._previewRenderer.setClearColor(0x000000, 0);
+    }
+    return this._previewRenderer;
   }
 
   _updateOpponentLabel() {
     if (this.p1Heading) {
       this.p1Heading.textContent = this.mode === 'watch' ? 'AI 1 Character' : 'Player 1 Character';
     }
+    const p1Label = this.p1VersusSide?.querySelector('.versus-label');
+    if (p1Label) p1Label.textContent = this.mode === 'watch' ? 'AI 1' : 'Player 1';
+    if (this.p1HeroRole) this.p1HeroRole.textContent = this.mode === 'watch' ? 'AI 1' : 'Player 1';
+    const p2Label = this.p2VersusSide?.querySelector('.versus-label');
+    const p2Role = this.mode === 'ai'
+      ? 'Computer'
+      : this.mode === 'watch'
+        ? 'AI 2'
+        : this.mode === 'online'
+          ? 'Opponent'
+          : 'Player 2';
+    if (p2Label) {
+      p2Label.textContent = p2Role;
+    }
+    if (this.p2HeroRole) this.p2HeroRole.textContent = p2Role;
     if (!this.p2Heading) return;
     this.p2Heading.textContent = this.mode === 'ai'
       ? 'Computer Character'
@@ -195,23 +596,82 @@ export class CharacterSelect {
         : 'Player 2 Character';
   }
 
+  _updateVersusPreview() {
+    this._setVersusSide({
+      charId: this.p1Char,
+      nameEl: this.p1VersusName,
+      weaponEl: this.p1VersusWeapon,
+      imageEl: this.p1VersusImg,
+      sideEl: this.p1VersusSide,
+    });
+    this._setVersusSide({
+      charId: this.p2Char,
+      nameEl: this.p2VersusName,
+      weaponEl: this.p2VersusWeapon,
+      imageEl: this.p2VersusImg,
+      sideEl: this.p2VersusSide,
+    });
+    this._syncHeroLabels();
+    this._updateHeroPreviewCharacter('p1', this.p1Char);
+    this._updateHeroPreviewCharacter('p2', this.p2Char);
+  }
+
+  _syncHeroLabels() {
+    const p1Def = CHARACTER_DEFS[this.p1Char] ?? CHARACTER_DEFS[DEFAULT_CHAR];
+    const p2Def = CHARACTER_DEFS[this.p2Char] ?? CHARACTER_DEFS[DEFAULT_CHAR];
+    if (this.p1HeroName) this.p1HeroName.textContent = p1Def.displayName.toUpperCase();
+    if (this.p2HeroName) this.p2HeroName.textContent = p2Def.displayName.toUpperCase();
+  }
+
+  _setVersusSide({ charId, nameEl, weaponEl, imageEl, sideEl }) {
+    const def = CHARACTER_DEFS[charId] ?? CHARACTER_DEFS[DEFAULT_CHAR];
+    if (nameEl) nameEl.textContent = def.displayName.toUpperCase();
+    if (weaponEl) weaponEl.textContent = (def.weapon?.stats?.name ?? 'Weapon').toUpperCase();
+    const src = this._previewImages.get(charId);
+    if (imageEl && src) {
+      imageEl.src = src;
+      imageEl.classList.add('ready');
+    } else if (imageEl) {
+      imageEl.removeAttribute('src');
+      imageEl.classList.remove('ready');
+    }
+    if (sideEl) sideEl.classList.toggle('preview-ready', Boolean(src));
+  }
+
   _buildStageButtons() {
     if (!this.stageContainer) return;
     this.stageContainer.innerHTML = '';
     for (const [id, stage] of Object.entries(STAGE_DEFS)) {
       const btn = document.createElement('button');
-      btn.className = 'select-btn';
+      btn.className = 'select-btn stage-card-btn';
       btn.dataset.stage = id;
-      btn.textContent = stage.displayName.toUpperCase();
+      const boundary = stage.bounds?.boundary === 'wall' ? 'Wall bounce' : 'Ring-out death';
+      btn.innerHTML = `
+        <span class="stage-card-copy">
+          <span class="stage-card-name">${this._escapeHtml(stage.displayName).toUpperCase()}</span>
+          <span class="stage-card-boundary">${boundary.toUpperCase()}</span>
+          <span class="stage-card-note">${this._escapeHtml(stage.description ?? stage.displayName)}</span>
+        </span>
+      `;
       btn.title = stage.description ?? stage.displayName;
       if (id === this.stageId) btn.classList.add('active');
       btn.addEventListener('click', () => {
         this.stageContainer.querySelectorAll('.select-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.stageId = normalizeStageId(id);
+        if (this.onStagePreview) this.onStagePreview(this.stageId);
       });
       this.stageContainer.appendChild(btn);
     }
+  }
+
+  _escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   _updateModeUI() {
@@ -405,12 +865,19 @@ export class CharacterSelect {
     this.el.style.display = 'flex';
     this._updateModeUI();
     this._setControlsOpen(false);
+    this._renderCharacterPreviewImages();
+    this._syncHeroLabels();
+    this._updateHeroPreviewCharacter('p1', this.p1Char, true);
+    this._updateHeroPreviewCharacter('p2', this.p2Char, true);
+    this._startHeroPreviewLoop();
+    if (this.onStagePreview) this.onStagePreview(this.stageId);
     window.addEventListener('keydown', this._keyHandler);
   }
 
   hide() {
     this.el.style.display = 'none';
     this._setControlsOpen(false);
+    this._stopHeroPreviewLoop();
     window.removeEventListener('keydown', this._keyHandler);
   }
 

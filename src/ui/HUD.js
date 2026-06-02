@@ -12,6 +12,8 @@ export class HUD {
     this.onlinePing = document.getElementById('online-hud-ping');
     this.p1Name = document.querySelector('.fighter-hud.p1 .fighter-name');
     this.p2Name = document.querySelector('.fighter-hud.p2 .fighter-name');
+    this.p1Loadout = document.getElementById('p1-loadout');
+    this.p2Loadout = document.getElementById('p2-loadout');
   }
 
   show() {
@@ -39,6 +41,18 @@ export class HUD {
   setFighterNames(p1Name = 'PLAYER 1', p2Name = 'PLAYER 2') {
     if (this.p1Name) this.p1Name.textContent = p1Name;
     if (this.p2Name) this.p2Name.textContent = p2Name;
+  }
+
+  setFighterLoadouts(p1 = null, p2 = null) {
+    this._setLoadout(this.p1Loadout, p1);
+    this._setLoadout(this.p2Loadout, p2);
+  }
+
+  _setLoadout(el, detail) {
+    if (!el) return;
+    const name = detail?.displayName ?? 'Fighter';
+    const weapon = detail?.weapon?.stats?.name ?? 'Weapon';
+    el.textContent = `${name} / ${weapon}`.toUpperCase();
   }
 
   updateRoundPips(p1Wins, p2Wins) {

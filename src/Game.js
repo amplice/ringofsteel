@@ -133,6 +133,8 @@ export class Game {
       const progressDone = 0.2 + ((i + 1) / Math.max(charEntries.length, 1)) * 0.52;
       this.ui.showLoading(progressDone, `Loaded ${def.displayName}`);
     }
+    this.ui.select.setCharacterPreviewCache(this._charCache);
+    this.ui.victory.setCharacterPreviews(this.ui.select.getCharacterPreviewImages());
 
     const stageEntries = Object.entries(STAGE_DEFS);
     for (let i = 0; i < stageEntries.length; i++) {
@@ -199,6 +201,9 @@ export class Game {
         this._disconnectDiscoverySession();
       }
     };
+    this.ui.select.onStagePreview = async (stageId) => {
+      await this._previewSelectStage(stageId);
+    };
     this.ui.select.onOnlineHostPublic = async (config) => {
       await this._hostPublicOnline(config);
     };
@@ -246,10 +251,49 @@ export class Game {
     return { animData, charDef: def, resolvedId: id };
   }
 
+  async _previewSelectStage(stageId) {
+    if (this.gameState !== GameState.SELECT) return;
+    const normalized = normalizeStageId(stageId);
+    this.currentStageId = normalized;
+    this._cleanupFighters();
+    if (this.arena?.stageId !== normalized) {
+      await this.arena?.setStage(normalized);
+    }
+    this._setSelectStageCamera(normalized);
+  }
+
+  _setSelectStageCamera(stageId) {
+    const stage = STAGE_DEFS[stageId] ?? STAGE_DEFS[DEFAULT_STAGE];
+    const radius = stage.bounds?.type === 'rect'
+      ? Math.max(stage.bounds.halfWidth ?? 4, stage.bounds.halfDepth ?? 4)
+      : stage.bounds?.radius ?? 4;
+    const presets = {
+      wooden_pier: { position: [0, 5.1, 7.4], lookAt: [0, 0.45, 0], fov: 48 },
+      mountaintop: { position: [0, 4.7, 8.2], lookAt: [0, 0.55, 0], fov: 48 },
+      amphitheater: { position: [0, 5.2, 7.8], lookAt: [0, 0.45, 0], fov: 50 },
+      bamboo_clearing: { position: [0, 4.6, 7.3], lookAt: [0, 0.55, 0], fov: 48 },
+      test: { position: [0, 5.0, 7.8], lookAt: [0, 0.35, 0], fov: 50 },
+    };
+    const preset = presets[stageId] ?? {
+      position: [0, Math.max(4.3, radius * 1.1), Math.max(7.0, radius * 1.8)],
+      lookAt: [0, 0.45, 0],
+      fov: 50,
+    };
+    this.camera.fov = preset.fov;
+    this.camera.updateProjectionMatrix();
+    this.camera.position.set(...preset.position);
+    this.camera.lookAt(new THREE.Vector3(...preset.lookAt));
+    this.cameraController.currentLookAt.set(...preset.lookAt);
+    this.cameraController.targetLookAt.set(...preset.lookAt);
+    this.cameraController.targetPosition.copy(this.camera.position);
+  }
+
   async _startMatch(p1Char, p2Char) {
     this._disconnectOnlineSession();
     this._resetMatchScoreState();
     await this.arena?.setStage(this.currentStageId);
+    this.camera.fov = 50;
+    this.camera.updateProjectionMatrix();
 
     const { p1, p2 } = this._spawnFighters(p1Char, p2Char);
 
@@ -289,6 +333,7 @@ export class Game {
       this.mode === 'watch' ? 'AI 1' : 'PLAYER 1',
       this.mode === 'ai' ? 'COMPUTER' : (this.mode === 'watch' ? 'AI 2' : 'PLAYER 2'),
     );
+    this.ui.hud.setFighterLoadouts(p1.charDef, p2.charDef);
     this.ui.hud.updateRoundPips(0, 0);
     this.ui.hud.setOnlineMeta({ visible: false });
     this._startRound();
@@ -680,11 +725,16 @@ export class Game {
     const p2 = sortedPlayers[1];
     if (!p1 || !p2) return;
 
-    this._spawnFighters(p1.characterId, p2.characterId);
+    const spawned = this._spawnFighters(p1.characterId, p2.characterId);
 
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
     this.ui.showHUD();
+    this.ui.hud.setFighterNames(
+      this.onlineLocalSlot === 0 ? 'YOU' : 'OPPONENT',
+      this.onlineLocalSlot === 1 ? 'YOU' : 'OPPONENT',
+    );
+    this.ui.hud.setFighterLoadouts(spawned.p1.charDef, spawned.p2.charDef);
     this.ui.hud.reset();
     this.ui.hud.updateRoundPips(this.p1Score, this.p2Score);
       this.ui.hud.setOnlineMeta({
@@ -1245,7 +1295,15 @@ export class Game {
         p2Score: this.p2Score,
       });
     }
-    this.ui.showVictory(winnerName, this.p1Score, this.p2Score);
+    this.ui.showVictory(winnerName, this.p1Score, this.p2Score, {
+      winnerCharId: this._resolveWinnerCharId(),
+    });
+  }
+
+  _resolveWinnerCharId() {
+    if (this.p1Score >= ROUNDS_TO_WIN) return this.fighter1?.charDef?.id ?? null;
+    if (this.p2Score >= ROUNDS_TO_WIN) return this.fighter2?.charDef?.id ?? null;
+    return null;
   }
 
   _updateDebugOverlay() {

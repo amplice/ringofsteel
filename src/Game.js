@@ -332,6 +332,7 @@ export class Game {
       stageIds,
       stageOffset: Math.floor(Math.random() * stageIds.length),
       index: 0,
+      elapsed: 0,
     };
     await this._startGauntletMatch();
   }
@@ -365,6 +366,7 @@ export class Game {
       this.ui.showVictory('PLAYER 1', this.p1Score, this.p2Score, {
         ...detail,
         title: 'GAUNTLET COMPLETE',
+        subtitle: this._recordGauntletClear(g),
         allowRematch: false,
       });
       this._gauntlet = null;
@@ -377,6 +379,25 @@ export class Game {
       title: `FOE ${g.index}/${total} DEFEATED`,
       primaryLabel: `NEXT: ${next}`,
     });
+  }
+
+  // Persist the fastest clear per fighter; returns the line shown under
+  // GAUNTLET COMPLETE, e.g. "CLEARED IN 2:43 - NEW BEST".
+  _recordGauntletClear(g) {
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    const key = `ring-of-steel-gauntlet-best-${g.player}`;
+    let best = null;
+    try {
+      const saved = Number(window.localStorage?.getItem(key));
+      best = Number.isFinite(saved) && saved > 0 ? saved : null;
+      if (best === null || g.elapsed < best) {
+        window.localStorage?.setItem(key, String(g.elapsed));
+      }
+    } catch {
+      // Storage unavailable — still show the clear time.
+    }
+    const isNewBest = best === null || g.elapsed < best;
+    return `CLEARED IN ${fmt(g.elapsed)}${isNewBest ? ' · NEW BEST' : ` · BEST ${fmt(best)}`}`;
   }
 
   _exitToTitle() {
@@ -1211,6 +1232,7 @@ export class Game {
     this._mapDefaultSideInput(input1, this.fighter1, this.fighter2, 'left');
     this._mapDefaultSideInput(input2, this.fighter2, this.fighter1, 'right');
     if (this.mode === 'training' && input2) this._applyDummyBehavior(input2);
+    if (this.mode === 'gauntlet' && this._gauntlet) this._gauntlet.elapsed += dt;
     const controller1 = this.aiController1
       ? ((fighter, opponent, sim, simDt) => {
           this.aiController1.update(fighter, opponent, sim.frameCount, simDt);

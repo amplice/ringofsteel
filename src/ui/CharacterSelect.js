@@ -991,11 +991,18 @@ export class CharacterSelect {
 
   _setFocus(el) {
     if (this._focusEl === el) return;
-    this._focusEl?.classList.remove('gp-focus');
+    const prev = this._focusEl;
+    prev?.classList.remove('gp-focus');
     this._focusEl = el ?? null;
     if (el) {
       el.classList.add('gp-focus');
       el.scrollIntoView?.({ block: 'nearest' });
+    }
+    // Live-preview the focused stage; restore the selected one on leaving the row.
+    if (el?.dataset?.stage) {
+      this.onStagePreview?.(normalizeStageId(el.dataset.stage));
+    } else if (prev?.dataset?.stage) {
+      this.onStagePreview?.(this.stageId);
     }
   }
 

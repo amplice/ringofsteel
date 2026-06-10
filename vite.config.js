@@ -63,6 +63,13 @@ export default defineConfig({
   }],
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/three')) return 'three';
+        },
+      },
+    },
   },
   esbuild: {
     target: 'esnext',

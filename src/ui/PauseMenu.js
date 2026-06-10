@@ -2,9 +2,11 @@ export class PauseMenu {
   constructor() {
     this.el = document.getElementById('pause-screen');
     this.resumeBtn = document.getElementById('pause-resume-btn');
+    this.dummyBtn = document.getElementById('pause-dummy-btn');
     this.selectBtn = document.getElementById('pause-select-btn');
     this.titleBtn = document.getElementById('pause-title-btn');
     this.onResume = null;
+    this.onDummyCycle = null;
     this.onCharacterSelect = null;
     this.onMainMenu = null;
     this._focusEl = null;
@@ -12,6 +14,9 @@ export class PauseMenu {
 
     this.resumeBtn?.addEventListener('click', () => {
       if (this.onResume) this.onResume();
+    });
+    this.dummyBtn?.addEventListener('click', () => {
+      if (this.onDummyCycle) this.onDummyCycle();
     });
     this.selectBtn?.addEventListener('click', () => {
       if (this.onCharacterSelect) this.onCharacterSelect();
@@ -23,6 +28,13 @@ export class PauseMenu {
 
   get visible() {
     return this.el ? this.el.style.display === 'flex' : false;
+  }
+
+  // Show the dummy-behavior control (training mode only) and sync its label.
+  setDummyControl(visible, mode = 'manual') {
+    if (!this.dummyBtn) return;
+    this.dummyBtn.style.display = visible ? '' : 'none';
+    this.dummyBtn.textContent = `DUMMY: ${mode.toUpperCase()}`;
   }
 
   show() {
@@ -40,7 +52,7 @@ export class PauseMenu {
   }
 
   _buttons() {
-    return [this.resumeBtn, this.selectBtn, this.titleBtn].filter(
+    return [this.resumeBtn, this.dummyBtn, this.selectBtn, this.titleBtn].filter(
       (btn) => btn && btn.offsetParent !== null && !btn.disabled
     );
   }

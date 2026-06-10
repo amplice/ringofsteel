@@ -114,7 +114,27 @@ if (trainingP2Name !== 'DUMMY') {
   errors.push(`Training mode P2 label was ${JSON.stringify(trainingP2Name)}, expected "DUMMY".`);
 }
 
-console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, trainingP2Name, errors: errors.slice(0, 10) }, null, 2));
+// Pause inside training: the dummy-behavior control should be visible and cycle.
+let dummyLabel = null;
+const dummyDeadline = Date.now() + 15000;
+while (!dummyLabel && Date.now() < dummyDeadline) {
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 500));
+  dummyLabel = await page.evaluate(() => {
+    const btn = document.getElementById('pause-dummy-btn');
+    return btn && btn.offsetParent !== null ? btn.textContent : null;
+  });
+}
+if (dummyLabel !== 'DUMMY: MANUAL') {
+  errors.push(`Training pause dummy control was ${JSON.stringify(dummyLabel)}, expected "DUMMY: MANUAL".`);
+}
+await page.click('#pause-dummy-btn');
+const dummyLabelAfterCycle = await page.evaluate(() => document.getElementById('pause-dummy-btn').textContent);
+if (dummyLabelAfterCycle !== 'DUMMY: BLOCK') {
+  errors.push(`Dummy control did not cycle, got ${JSON.stringify(dummyLabelAfterCycle)}.`);
+}
+
+console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

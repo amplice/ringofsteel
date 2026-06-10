@@ -241,6 +241,11 @@ export class Game {
     this.ui.pause.onResume = () => this._resumeFromPause();
     this.ui.pause.onCharacterSelect = () => this._exitToSelect();
     this.ui.pause.onMainMenu = () => this._exitToTitle();
+    this.ui.pause.onDummyCycle = () => {
+      const order = ['manual', 'block', 'attack'];
+      this.trainingDummyMode = order[(order.indexOf(this.trainingDummyMode) + 1) % order.length];
+      this.ui.pause.setDummyControl(true, this.trainingDummyMode);
+    };
 
     window.addEventListener('keydown', (e) => {
       if (e.code !== 'Escape' || e._fromGamepad) return;
@@ -327,11 +332,27 @@ export class Game {
     this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
     this.ui.hud.reset();
     this.input.clearBuffers();
+    this._dummyNextAttackFrame = 0;
+  }
+
+  // Layer the selected dummy behavior on top of any real P2 input.
+  _applyDummyBehavior(input) {
+    if (this.trainingDummyMode === 'block') {
+      input.held.block = true;
+    } else if (this.trainingDummyMode === 'attack') {
+      const frame = this.matchSim?.frameCount ?? 0;
+      if (frame >= this._dummyNextAttackFrame) {
+        const attacks = ['quick', 'heavy', 'thrust'];
+        input.pressed[attacks[Math.floor(Math.random() * attacks.length)]] = true;
+        this._dummyNextAttackFrame = frame + 45 + Math.floor(Math.random() * 75);
+      }
+    }
   }
 
   _pauseMatch() {
     if (this.gameState !== GameState.FIGHTING || this.mode === 'online') return;
     this.gameState = GameState.PAUSED;
+    this.ui.pause.setDummyControl(this.mode === 'training', this.trainingDummyMode);
     this.ui.pause.show();
   }
 
@@ -343,6 +364,8 @@ export class Game {
 
   async _startMatch(p1Char, p2Char) {
     this._lastMatchChars = { p1Char, p2Char };
+    this.trainingDummyMode = 'manual';
+    this._dummyNextAttackFrame = 0;
     this._disconnectOnlineSession();
     this._resetMatchScoreState();
     await this.arena?.setStage(this.currentStageId);
@@ -1100,6 +1123,7 @@ export class Game {
     const input2 = this.aiController2 ? null : captureInputFrame(this.input, 1, frame);
     this._mapDefaultSideInput(input1, this.fighter1, this.fighter2, 'left');
     this._mapDefaultSideInput(input2, this.fighter2, this.fighter1, 'right');
+    if (this.mode === 'training' && input2) this._applyDummyBehavior(input2);
     const controller1 = this.aiController1
       ? ((fighter, opponent, sim, simDt) => {
           this.aiController1.update(fighter, opponent, sim.frameCount, simDt);

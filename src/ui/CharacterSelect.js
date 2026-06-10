@@ -584,7 +584,9 @@ export class CharacterSelect {
           ? 'Opponent'
           : this.mode === 'training'
             ? 'Dummy'
-            : 'Player 2';
+            : this.mode === 'gauntlet'
+              ? 'The Gauntlet'
+              : 'Player 2';
     if (p2Label) {
       p2Label.textContent = p2Role;
     }
@@ -687,7 +689,7 @@ export class CharacterSelect {
       this.onlineSection.style.display = this.mode === 'online' ? 'block' : 'none';
     }
     if (this.p2Column) {
-      this.p2Column.style.display = this.mode === 'online' ? 'none' : '';
+      this.p2Column.style.display = (this.mode === 'online' || this.mode === 'gauntlet') ? 'none' : '';
     }
     if (this.startBtn) {
       this._updateStartButton();
@@ -699,7 +701,13 @@ export class CharacterSelect {
   _updateStartButton() {
     if (!this.startBtn) return;
     if (this.mode !== 'online') {
-      this.startBtn.textContent = this.mode === 'watch' ? 'WATCH' : this.mode === 'training' ? 'TRAIN' : 'FIGHT';
+      this.startBtn.textContent = this.mode === 'watch'
+        ? 'WATCH'
+        : this.mode === 'training'
+          ? 'TRAIN'
+          : this.mode === 'gauntlet'
+            ? 'BEGIN'
+            : 'FIGHT';
       this.startBtn.disabled = false;
       if (this.onlineLeaveBtn) this.onlineLeaveBtn.style.display = 'none';
       return;

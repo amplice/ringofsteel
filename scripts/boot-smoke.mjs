@@ -68,6 +68,49 @@ const focusedAfterArrows = await page.evaluate(() => {
   return el ? (el.id || el.dataset.stage || el.dataset.char || el.dataset.mode || el.dataset.diff || el.textContent.trim().slice(0, 24)) : null;
 });
 
+// GAUNTLET: mode hides the P2 column, button reads BEGIN, the HUD shows a
+// foe counter, and pause -> MAIN MENU returns to the title.
+await page.click('#mode-options [data-mode="gauntlet"]');
+const gauntletUI = await page.evaluate(() => ({
+  startLabel: document.getElementById('start-fight-btn').textContent,
+  p2Hidden: getComputedStyle(
+    document.getElementById('p2-char-heading').closest('.char-select-column')
+  ).display === 'none',
+}));
+if (gauntletUI.startLabel !== 'BEGIN' || !gauntletUI.p2Hidden) {
+  errors.push(`Gauntlet select UI wrong: ${JSON.stringify(gauntletUI)}`);
+}
+await page.click('#start-fight-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+  { timeout: 45000 }
+).catch(() => errors.push('HUD never became visible after starting the gauntlet.'));
+const gauntletP2Name = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent).catch(() => null);
+if (!/ 1\/\d+$/.test(gauntletP2Name ?? '')) {
+  errors.push(`Gauntlet HUD foe label was ${JSON.stringify(gauntletP2Name)}, expected a "1/N" counter.`);
+}
+let gauntletPaused = false;
+const gauntletPauseDeadline = Date.now() + 15000;
+while (!gauntletPaused && Date.now() < gauntletPauseDeadline) {
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 500));
+  gauntletPaused = await page.evaluate(
+    () => getComputedStyle(document.getElementById('pause-screen')).display !== 'none'
+  );
+}
+if (!gauntletPaused) errors.push('Could not pause the gauntlet match.');
+await page.click('#pause-title-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('title-screen')).display !== 'none',
+  { timeout: 10000 }
+).catch(() => errors.push('MAIN MENU did not return to the title screen.'));
+await page.keyboard.press('Enter');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
+  { timeout: 10000 }
+).catch(() => errors.push('Could not get back to the select screen after the gauntlet.'));
+await page.click('#mode-options [data-mode="ai"]');
+
 // Start a VS COMPUTER fight, wait for the HUD, then verify Escape pauses
 // and resumes the match.
 await page.click('#start-fight-btn');
@@ -134,7 +177,7 @@ if (dummyLabelAfterCycle !== 'DUMMY: BLOCK') {
   errors.push(`Dummy control did not cycle, got ${JSON.stringify(dummyLabelAfterCycle)}.`);
 }
 
-console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

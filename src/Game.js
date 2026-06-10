@@ -190,6 +190,10 @@ export class Game {
         await this._startOnlineSession(config);
         return;
       }
+      if (config.mode === 'gauntlet') {
+        await this._startGauntlet(config.p1Char);
+        return;
+      }
       await this._startMatch(config.p1Char, config.p2Char);
     };
     this.ui.select.onModeChange = async (mode) => {
@@ -231,8 +235,13 @@ export class Game {
     this.ui.victory.onContinue = () => this._exitToTitle();
 
     this.ui.victory.onRematch = async () => {
-      if (this.mode === 'online' || !this._lastMatchChars) return;
+      if (this.mode === 'online') return;
       this.sound.unlock().catch(() => {});
+      if (this.mode === 'gauntlet' && this._gauntlet) {
+        await this._startGauntletMatch();
+        return;
+      }
+      if (!this._lastMatchChars) return;
       await this._startMatch(this._lastMatchChars.p1Char, this._lastMatchChars.p2Char);
     };
 
@@ -306,6 +315,68 @@ export class Game {
     this.cameraController.currentLookAt.set(...preset.lookAt);
     this.cameraController.targetLookAt.set(...preset.lookAt);
     this.cameraController.targetPosition.copy(this.camera.position);
+  }
+
+  // Gauntlet: face every other character with ramping difficulty, then a
+  // hard mirror match as the finale. Random opponent order, rotating stages.
+  async _startGauntlet(p1Char) {
+    const others = Object.keys(CHARACTER_DEFS).filter((id) => id !== p1Char);
+    for (let i = others.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [others[i], others[j]] = [others[j], others[i]];
+    }
+    const stageIds = Object.keys(STAGE_DEFS).filter((id) => id !== 'test');
+    this._gauntlet = {
+      player: p1Char,
+      opponents: [...others, p1Char],
+      stageIds,
+      stageOffset: Math.floor(Math.random() * stageIds.length),
+      index: 0,
+    };
+    await this._startGauntletMatch();
+  }
+
+  async _startGauntletMatch() {
+    const g = this._gauntlet;
+    if (!g) return;
+    const total = g.opponents.length;
+    this.difficulty = g.index === 0 ? 'easy' : g.index === total - 1 ? 'hard' : 'medium';
+    this.currentStageId = normalizeStageId(g.stageIds[(g.stageOffset + g.index) % g.stageIds.length]);
+    await this._startMatch(g.player, g.opponents[g.index]);
+  }
+
+  _endGauntletMatch(playerWon) {
+    this.gameState = GameState.VICTORY;
+    const g = this._gauntlet;
+    const total = g?.opponents.length ?? 0;
+    const detail = { winnerCharId: this._resolveWinnerCharId(), allowRematch: true };
+
+    if (!playerWon) {
+      this.ui.showVictory('COMPUTER', this.p1Score, this.p2Score, {
+        ...detail,
+        title: 'GAUNTLET FAILED',
+        primaryLabel: 'TRY AGAIN',
+      });
+      return;
+    }
+
+    g.index++;
+    if (g.index >= total) {
+      this.ui.showVictory('PLAYER 1', this.p1Score, this.p2Score, {
+        ...detail,
+        title: 'GAUNTLET COMPLETE',
+        allowRematch: false,
+      });
+      this._gauntlet = null;
+      return;
+    }
+
+    const next = CHARACTER_DEFS[g.opponents[g.index]]?.displayName?.toUpperCase() ?? 'NEXT FOE';
+    this.ui.showVictory('PLAYER 1', this.p1Score, this.p2Score, {
+      ...detail,
+      title: `FOE ${g.index}/${total} DEFEATED`,
+      primaryLabel: `NEXT: ${next}`,
+    });
   }
 
   _exitToTitle() {
@@ -390,19 +461,23 @@ export class Game {
       this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
       this.aiMatchRecorder.discard();
-    } else if (this.mode === 'ai') {
+    } else if (this.mode === 'ai' || this.mode === 'gauntlet') {
       this.aiController1 = null;
       this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
-      this.aiMatchRecorder.startMatch({
-        mode: 'ai',
-        fighter1Char: p1.charDef.id,
-        fighter2Char: p2.charDef.id,
-        playerChar: p1.charDef.id,
-        aiChar: p2.charDef.id,
-        difficulty: this.difficulty,
-        aiMeta: this.aiController.getDebugSnapshot?.() ?? null,
-      });
+      if (this.mode === 'ai') {
+        this.aiMatchRecorder.startMatch({
+          mode: 'ai',
+          fighter1Char: p1.charDef.id,
+          fighter2Char: p2.charDef.id,
+          playerChar: p1.charDef.id,
+          aiChar: p2.charDef.id,
+          difficulty: this.difficulty,
+          aiMeta: this.aiController.getDebugSnapshot?.() ?? null,
+        });
+      } else {
+        this.aiMatchRecorder.discard();
+      }
     } else {
       this.aiController = null;
       this.aiController1 = null;
@@ -424,7 +499,9 @@ export class Game {
           ? 'AI 2'
           : this.mode === 'training'
             ? 'DUMMY'
-            : 'PLAYER 2',
+            : this.mode === 'gauntlet'
+              ? `${(p2.charDef.displayName ?? 'FOE').toUpperCase()} ${this._gauntlet ? `${this._gauntlet.index + 1}/${this._gauntlet.opponents.length}` : ''}`.trim()
+              : 'PLAYER 2',
     );
     this.ui.hud.setFighterLoadouts(p1.charDef, p2.charDef);
     this.ui.hud.updateRoundPips(0, 0);
@@ -1378,10 +1455,18 @@ export class Game {
       }
 
       if (this.p1Score >= ROUNDS_TO_WIN) {
-        this._showVictory(this.mode === 'watch' ? 'AI 1' : 'PLAYER 1');
+        if (this.mode === 'gauntlet') {
+          this._endGauntletMatch(true);
+        } else {
+          this._showVictory(this.mode === 'watch' ? 'AI 1' : 'PLAYER 1');
+        }
       } else if (this.p2Score >= ROUNDS_TO_WIN) {
-        const name = this.mode === 'ai' ? 'COMPUTER' : (this.mode === 'watch' ? 'AI 2' : 'PLAYER 2');
-        this._showVictory(name);
+        if (this.mode === 'gauntlet') {
+          this._endGauntletMatch(false);
+        } else {
+          const name = this.mode === 'ai' ? 'COMPUTER' : (this.mode === 'watch' ? 'AI 2' : 'PLAYER 2');
+          this._showVictory(name);
+        }
       } else {
         this.currentRound++;
         this._startRound();

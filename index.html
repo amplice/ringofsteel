@@ -1371,7 +1371,7 @@
     }
 
     #mode-options {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     #difficulty-options {
@@ -2489,10 +2489,11 @@
         <h3>Mode</h3>
         <div class="select-options" id="mode-options">
           <button class="select-btn active" data-mode="ai">VS COMPUTER</button>
-          <button class="select-btn" data-mode="watch">AI VS AI</button>
+          <button class="select-btn" data-mode="gauntlet">GAUNTLET</button>
           <button class="select-btn" data-mode="pvp">VS PLAYER</button>
-          <button class="select-btn" data-mode="training">TRAINING</button>
           <button class="select-btn" data-mode="online">VS ONLINE</button>
+          <button class="select-btn" data-mode="training">TRAINING</button>
+          <button class="select-btn" data-mode="watch">AI VS AI</button>
         </div>
       </div>
 
@@ -2646,7 +2647,7 @@
               </div>
             </div>
           </div>
-          <div class="help-note">In VS COMPUTER, Player 2 controls are unused. In AI VS AI, both fighters are controlled by CPU. In TRAINING, kills reset instantly and the dummy responds to Player 2 controls. M toggles sound. Toggle debug with F3.</div>
+          <div class="help-note">In VS COMPUTER, Player 2 controls are unused. In AI VS AI, both fighters are controlled by CPU. In TRAINING, kills reset instantly and the dummy responds to Player 2 controls. GAUNTLET pits you against every fighter with rising difficulty. M toggles sound. Toggle debug with F3.</div>
         </div>
       </div>
     </div>

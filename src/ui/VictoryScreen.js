@@ -30,11 +30,12 @@ export class VictoryScreen {
   }
 
   show(winnerName, p1Score, p2Score, detail = {}) {
-    this.winnerText.textContent = `${winnerName} WINS`;
+    this.winnerText.textContent = detail.title ?? `${winnerName} WINS`;
     this.scoreText.textContent = `${p1Score} - ${p2Score}`;
     this._setPortrait(detail.winnerCharId);
     if (this.rematchBtn) {
       this.rematchBtn.style.display = detail.allowRematch === false ? 'none' : '';
+      this.rematchBtn.textContent = detail.primaryLabel ?? 'REMATCH';
     }
     this.el.style.display = 'flex';
     this._setFocus(this._buttons()[0] ?? null);

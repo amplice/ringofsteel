@@ -21,6 +21,7 @@
     "smoke:boot": "node scripts/boot-smoke.mjs dist",
     "multiplayer:server": "node server/multiplayer-server.mjs",
     "multiplayer:smoke": "node scripts/smoke-multiplayer.mjs",
+    "multiplayer:rematch-smoke": "node scripts/smoke-online-rematch.mjs",
     "multiplayer:browser-smoke": "node scripts/smoke-online-browser.mjs",
     "multiplayer:public-ui-smoke": "node scripts/smoke-online-public-ui.mjs",
     "multiplayer:disconnect-smoke": "node scripts/smoke-online-disconnect.mjs",

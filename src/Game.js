@@ -241,8 +241,19 @@ export class Game {
     this.ui.victory.onContinue = () => this._exitToTitle();
 
     this.ui.victory.onRematch = async () => {
-      if (this.mode === 'online') return;
       this.sound.unlock().catch(() => {});
+      if (this.mode === 'online') {
+        // Online rematch is a fresh ready handshake in the same lobby; the
+        // match starts when the opponent agrees (server sends match_start).
+        if (!this.onlineSession?.connected) return;
+        try {
+          this.onlineSession.setReady(true);
+          this.ui.victory.setRematchWaiting('WAITING FOR OPPONENT...');
+        } catch (err) {
+          console.error('Failed to request online rematch:', err);
+        }
+        return;
+      }
       if (this.mode === 'gauntlet' && this._gauntlet) {
         await this._startGauntletMatch();
         return;
@@ -1660,7 +1671,7 @@ export class Game {
     }
     this.ui.showVictory(winnerName, this.p1Score, this.p2Score, {
       winnerCharId: this._resolveWinnerCharId(),
-      allowRematch: this.mode !== 'online',
+      allowRematch: this.mode !== 'online' || Boolean(this.onlineSession?.connected),
       stats: this.mode === 'online' ? null : this._buildMatchStatsLine(),
     });
   }

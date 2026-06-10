@@ -26,6 +26,16 @@ export class VictoryScreen {
     });
   }
 
+  // Online rematch requested: lock the button until the opponent responds.
+  setRematchWaiting(label = 'WAITING...') {
+    if (!this.rematchBtn) return;
+    this.rematchBtn.textContent = label;
+    this.rematchBtn.disabled = true;
+    if (this._focusEl === this.rematchBtn) {
+      this._setFocus(this._buttons()[0] ?? null);
+    }
+  }
+
   setCharacterPreviews(previewImages) {
     this._previewImages = previewImages instanceof Map ? new Map(previewImages) : new Map();
   }
@@ -38,6 +48,7 @@ export class VictoryScreen {
     if (this.rematchBtn) {
       this.rematchBtn.style.display = detail.allowRematch === false ? 'none' : '';
       this.rematchBtn.textContent = detail.primaryLabel ?? 'REMATCH';
+      this.rematchBtn.disabled = false;
     }
     this.el.style.display = 'flex';
     this._setFocus(this._buttons()[0] ?? null);

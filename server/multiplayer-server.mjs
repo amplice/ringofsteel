@@ -30,7 +30,8 @@ const LOBBY_SWEEP_INTERVAL_MS = Number(process.env.LOBBY_SWEEP_INTERVAL_MS || 15
 const EMPTY_LOBBY_TTL_MS = Number(process.env.EMPTY_LOBBY_TTL_MS || 30000);
 const PUBLIC_LOBBY_IDLE_TTL_MS = Number(process.env.PUBLIC_LOBBY_IDLE_TTL_MS || 10 * 60 * 1000);
 const PRIVATE_LOBBY_IDLE_TTL_MS = Number(process.env.PRIVATE_LOBBY_IDLE_TTL_MS || 30 * 60 * 1000);
-const MATCH_COMPLETE_TTL_MS = Number(process.env.MATCH_COMPLETE_TTL_MS || 30000);
+// Long enough for both players to decide on a rematch from the victory screen.
+const MATCH_COMPLETE_TTL_MS = Number(process.env.MATCH_COMPLETE_TTL_MS || 120000);
 const SERVER_INSTANCE_ID = crypto.randomUUID().slice(0, 8);
 
 const metrics = {
@@ -118,6 +119,10 @@ class MatchRoom {
       this.restartTimer = null;
     }
     this.lobby.phase = reason === 'disconnect' ? 'lobby' : 'match_complete';
+    if (reason !== 'disconnect') {
+      // Require a fresh ready handshake for a rematch in this lobby.
+      for (const player of this.lobby.players) player.ready = false;
+    }
   }
 
   setInput(playerId, input) {
@@ -342,7 +347,13 @@ class LobbyManager {
   }
 
   ensureMatchStarted(lobby) {
-    if (lobby.phase !== 'match_pending' || lobby.room) return lobby;
+    if (lobby.phase !== 'match_pending') return lobby;
+    if (lobby.room && !lobby.room.interval) {
+      // Previous match finished — discard the stopped room so a rematch
+      // (both players ready again) starts a fresh one.
+      lobby.room = null;
+    }
+    if (lobby.room) return lobby;
     lobby.room = new MatchRoom(lobby);
     lobby.room.start();
     this._touchLobby(lobby);

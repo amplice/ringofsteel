@@ -66,6 +66,9 @@ export class CharacterSelect {
     this.controlsCloseBtn = document.getElementById('controls-close-btn');
     this._keyHandler = this._onKey.bind(this);
     this._focusEl = null;
+    this.onIdle = null;
+    this._idleTimer = null;
+    this._idleReset = this._resetIdleTimer.bind(this);
     this._onlineBusy = false;
     this._onlineLocked = false;
     this._publicLobbies = [];
@@ -618,9 +621,33 @@ export class CharacterSelect {
       imageEl: this.p2VersusImg,
       sideEl: this.p2VersusSide,
     });
+    if (this.mode === 'gauntlet') {
+      // The ladder picks the foes — show the challenge and your record instead.
+      if (this.p2VersusName) this.p2VersusName.textContent = 'THE GAUNTLET';
+      if (this.p2VersusWeapon) this.p2VersusWeapon.textContent = this._gauntletBestLabel();
+      if (this.p2VersusImg) {
+        this.p2VersusImg.removeAttribute('src');
+        this.p2VersusImg.classList.remove('ready');
+      }
+      this.p2VersusSide?.classList.remove('preview-ready');
+    }
     this._syncHeroLabels();
     this._updateHeroPreviewCharacter('p1', this.p1Char);
     this._updateHeroPreviewCharacter('p2', this.p2Char);
+  }
+
+  _gauntletBestLabel() {
+    try {
+      const saved = Number(window.localStorage?.getItem(`ring-of-steel-gauntlet-best-${this.p1Char}`));
+      if (Number.isFinite(saved) && saved > 0) {
+        const minutes = Math.floor(saved / 60);
+        const seconds = String(Math.floor(saved % 60)).padStart(2, '0');
+        return `BEST CLEAR ${minutes}:${seconds}`;
+      }
+    } catch {
+      // Storage unavailable — treat as no record.
+    }
+    return 'NO CLEAR YET';
   }
 
   _syncHeroLabels() {
@@ -696,6 +723,7 @@ export class CharacterSelect {
     }
     this._updateOnlineButtons();
     this._updateOpponentLabel();
+    this._updateVersusPreview();
   }
 
   _updateStartButton() {
@@ -885,6 +913,10 @@ export class CharacterSelect {
     this._startHeroPreviewLoop();
     if (this.onStagePreview) this.onStagePreview(this.stageId);
     window.addEventListener('keydown', this._keyHandler);
+    window.addEventListener('keydown', this._idleReset);
+    window.addEventListener('pointerdown', this._idleReset);
+    window.addEventListener('pointermove', this._idleReset);
+    this._resetIdleTimer();
   }
 
   hide() {
@@ -893,6 +925,24 @@ export class CharacterSelect {
     this._stopHeroPreviewLoop();
     this._setFocus(null);
     window.removeEventListener('keydown', this._keyHandler);
+    window.removeEventListener('keydown', this._idleReset);
+    window.removeEventListener('pointerdown', this._idleReset);
+    window.removeEventListener('pointermove', this._idleReset);
+    window.clearTimeout(this._idleTimer);
+    this._idleTimer = null;
+  }
+
+  // After a minute of inactivity (and no online session in progress), hand
+  // back to the title screen so the attract loop takes over.
+  _resetIdleTimer() {
+    window.clearTimeout(this._idleTimer);
+    this._idleTimer = window.setTimeout(() => {
+      if (this.mode === 'online' || this._onlineBusy || this._onlineLocked) {
+        this._resetIdleTimer();
+        return;
+      }
+      this.onIdle?.();
+    }, 60000);
   }
 
   _setControlsOpen(open) {

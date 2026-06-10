@@ -234,6 +234,10 @@ export class Game {
       this.ui.select.setOnlineStatus('Disconnected. Browse a public room, host one, quick match, or enter a direct code manually.');
     };
 
+    this.ui.select.onIdle = () => {
+      if (this.gameState === GameState.SELECT) this._exitToTitle();
+    };
+
     this.ui.victory.onContinue = () => this._exitToTitle();
 
     this.ui.victory.onRematch = async () => {

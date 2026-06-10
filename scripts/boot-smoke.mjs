@@ -83,9 +83,14 @@ const gauntletUI = await page.evaluate(() => ({
   p2Hidden: getComputedStyle(
     document.getElementById('p2-char-heading').closest('.char-select-column')
   ).display === 'none',
+  versusName: document.getElementById('p2-versus-name')?.textContent ?? null,
+  versusRecord: document.getElementById('p2-versus-weapon')?.textContent ?? null,
 }));
 if (gauntletUI.startLabel !== 'BEGIN' || !gauntletUI.p2Hidden) {
   errors.push(`Gauntlet select UI wrong: ${JSON.stringify(gauntletUI)}`);
+}
+if (gauntletUI.versusName !== 'THE GAUNTLET' || gauntletUI.versusRecord !== 'NO CLEAR YET') {
+  errors.push(`Gauntlet versus panel wrong: ${JSON.stringify(gauntletUI)}`);
 }
 await page.click('#start-fight-btn');
 await page.waitForFunction(

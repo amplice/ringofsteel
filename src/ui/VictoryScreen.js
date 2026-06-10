@@ -4,6 +4,7 @@ export class VictoryScreen {
     this.winnerText = document.getElementById('winner-text');
     this.scoreText = document.getElementById('final-score');
     this.portrait = document.getElementById('victory-portrait-img');
+    this.statsEl = document.getElementById('victory-stats');
     this.rematchBtn = document.getElementById('victory-rematch-btn');
     this.selectBtn = document.getElementById('victory-select-btn');
     this.titleBtn = document.getElementById('victory-title-btn');
@@ -32,6 +33,7 @@ export class VictoryScreen {
   show(winnerName, p1Score, p2Score, detail = {}) {
     this.winnerText.textContent = detail.title ?? `${winnerName} WINS`;
     this.scoreText.textContent = detail.subtitle ?? `${p1Score} - ${p2Score}`;
+    if (this.statsEl) this.statsEl.textContent = detail.stats ?? '';
     this._setPortrait(detail.winnerCharId);
     if (this.rematchBtn) {
       this.rematchBtn.style.display = detail.allowRematch === false ? 'none' : '';

@@ -358,7 +358,11 @@ export class Game {
     this.gameState = GameState.VICTORY;
     const g = this._gauntlet;
     const total = g?.opponents.length ?? 0;
-    const detail = { winnerCharId: this._resolveWinnerCharId(), allowRematch: true };
+    const detail = {
+      winnerCharId: this._resolveWinnerCharId(),
+      allowRematch: true,
+      stats: this._buildMatchStatsLine(),
+    };
 
     if (!playerWon) {
       this.ui.showVictory('COMPUTER', this.p1Score, this.p2Score, {
@@ -700,6 +704,38 @@ export class Game {
     this.p1Score = 0;
     this.p2Score = 0;
     this.currentRound = 1;
+    this._matchStats = {
+      parries: [0, 0],
+      blocks: [0, 0],
+      clashes: 0,
+      roundTimes: [],
+    };
+  }
+
+  _recordStatsEvent(event) {
+    const s = this._matchStats;
+    if (!s || event.type !== 'combat_result') return;
+    if (event.result === HitResult.PARRIED && event.defenderIndex !== undefined) {
+      s.parries[event.defenderIndex]++;
+    } else if (event.result === HitResult.BLOCKED && event.defenderIndex !== undefined) {
+      s.blocks[event.defenderIndex]++;
+    } else if (event.result === HitResult.CLASH) {
+      s.clashes++;
+    }
+  }
+
+  _buildMatchStatsLine() {
+    const s = this._matchStats;
+    if (!s) return null;
+    const parts = [
+      `PARRIES ${s.parries[0]}-${s.parries[1]}`,
+      `BLOCKS ${s.blocks[0]}-${s.blocks[1]}`,
+      `CLASHES ${s.clashes}`,
+    ];
+    if (s.roundTimes.length) {
+      parts.push(`FASTEST KILL ${Math.min(...s.roundTimes).toFixed(1)}S`);
+    }
+    return parts.join(' · ');
   }
 
   _resetCombatPresentation() {
@@ -1425,6 +1461,7 @@ export class Game {
         this._resetTrainingRound();
         return;
       }
+      this._matchStats?.roundTimes.push(step.frameCount / 60);
       const killer = step.winner === 1 ? this.fighter1 : this.fighter2;
       const victim = step.winner === 1 ? this.fighter2 : this.fighter1;
       this._startKillPresentation(killer, victim, step.killReason);
@@ -1433,6 +1470,7 @@ export class Game {
 
   _handleSimEvent(event) {
     this.gameAudio.handleCombatEvent(event);
+    this._recordStatsEvent(event);
     if (this.mode === 'training' && event.type === 'combat_result') {
       this._updateTrainingReadout(event);
     }
@@ -1623,6 +1661,7 @@ export class Game {
     this.ui.showVictory(winnerName, this.p1Score, this.p2Score, {
       winnerCharId: this._resolveWinnerCharId(),
       allowRematch: this.mode !== 'online',
+      stats: this.mode === 'online' ? null : this._buildMatchStatsLine(),
     });
   }
 

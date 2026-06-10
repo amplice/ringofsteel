@@ -12,6 +12,13 @@ const MIME = {
 
 const server = createServer(async (req, res) => {
   let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (req.method === 'POST' && path === '/__ai_match_logs') {
+    // Stub of the dev-server match-log endpoint so AI matches can finish.
+    req.resume();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
   if (path === '/') path = '/index.html';
   try {
     const data = await readFile(join(root, path));
@@ -154,14 +161,30 @@ const pauseClosed = await page.evaluate(
 );
 if (!pauseClosed) errors.push('Escape did not close the pause menu.');
 
-// Pause again, exit to the select screen, and start a TRAINING session.
-await page.keyboard.press('Escape');
-await new Promise((r) => setTimeout(r, 400));
-await page.click('#pause-select-btn');
+// Inject a finished match to validate victory-screen rendering (winner,
+// stats line) and use its CHANGE FIGHTERS button to reach the select screen.
+const victoryInfo = await page.evaluate(() => {
+  const game = window.__ringOfSteelGame;
+  game._matchStats = { parries: [2, 1], blocks: [3, 4], clashes: 5, roundTimes: [7.34, 12.1] };
+  game.p1Score = 3;
+  game.p2Score = 1;
+  game._showVictory('PLAYER 1');
+  return {
+    title: document.getElementById('winner-text').textContent,
+    stats: document.getElementById('victory-stats').textContent,
+  };
+});
+if (victoryInfo.title !== 'PLAYER 1 WINS') {
+  errors.push(`Victory title was ${JSON.stringify(victoryInfo.title)}.`);
+}
+if (victoryInfo.stats !== 'PARRIES 2-1 · BLOCKS 3-4 · CLASHES 5 · FASTEST KILL 7.3S') {
+  errors.push(`Victory stats line was ${JSON.stringify(victoryInfo.stats)}.`);
+}
+await page.click('#victory-select-btn');
 await page.waitForFunction(
   () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
   { timeout: 10000 }
-).catch(() => errors.push('CHANGE FIGHTERS did not return to the select screen.'));
+).catch(() => errors.push('Victory CHANGE FIGHTERS did not return to the select screen.'));
 
 await page.click('#mode-options [data-mode="training"]');
 await page.click('#start-fight-btn');
@@ -227,7 +250,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

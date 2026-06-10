@@ -94,7 +94,27 @@ const pauseClosed = await page.evaluate(
 );
 if (!pauseClosed) errors.push('Escape did not close the pause menu.');
 
-console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, errors: errors.slice(0, 10) }, null, 2));
+// Pause again, exit to the select screen, and start a TRAINING session.
+await page.keyboard.press('Escape');
+await new Promise((r) => setTimeout(r, 400));
+await page.click('#pause-select-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
+  { timeout: 10000 }
+).catch(() => errors.push('CHANGE FIGHTERS did not return to the select screen.'));
+
+await page.click('#mode-options [data-mode="training"]');
+await page.click('#start-fight-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+  { timeout: 30000 }
+).catch(() => errors.push('HUD never became visible after starting training.'));
+const trainingP2Name = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent).catch(() => null);
+if (trainingP2Name !== 'DUMMY') {
+  errors.push(`Training mode P2 label was ${JSON.stringify(trainingP2Name)}, expected "DUMMY".`);
+}
+
+console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, trainingP2Name, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

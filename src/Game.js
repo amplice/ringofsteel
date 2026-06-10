@@ -319,6 +319,16 @@ export class Game {
     this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
   }
 
+  // Training kills skip the kill cam and round flow entirely — the round
+  // restarts in place so practice keeps its rhythm.
+  _resetTrainingRound() {
+    this._resetCombatPresentation();
+    this.matchSim?.startRound(FIGHT_START_DISTANCE);
+    this.gameAudio.resetFighterState([this.fighter1, this.fighter2]);
+    this.ui.hud.reset();
+    this.input.clearBuffers();
+  }
+
   _pauseMatch() {
     if (this.gameState !== GameState.FIGHTING || this.mode === 'online') return;
     this.gameState = GameState.PAUSED;
@@ -375,7 +385,13 @@ export class Game {
     this.ui.showHUD();
     this.ui.hud.setFighterNames(
       this.mode === 'watch' ? 'AI 1' : 'PLAYER 1',
-      this.mode === 'ai' ? 'COMPUTER' : (this.mode === 'watch' ? 'AI 2' : 'PLAYER 2'),
+      this.mode === 'ai'
+        ? 'COMPUTER'
+        : this.mode === 'watch'
+          ? 'AI 2'
+          : this.mode === 'training'
+            ? 'DUMMY'
+            : 'PLAYER 2',
     );
     this.ui.hud.setFighterLoadouts(p1.charDef, p2.charDef);
     this.ui.hud.updateRoundPips(0, 0);
@@ -1160,6 +1176,10 @@ export class Game {
     }
 
     if (step.roundOver && this.gameState === GameState.FIGHTING) {
+      if (this.mode === 'training') {
+        this._resetTrainingRound();
+        return;
+      }
       const killer = step.winner === 1 ? this.fighter1 : this.fighter2;
       const victim = step.winner === 1 ? this.fighter2 : this.fighter1;
       this._startKillPresentation(killer, victim, step.killReason);

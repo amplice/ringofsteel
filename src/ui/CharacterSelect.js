@@ -582,7 +582,9 @@ export class CharacterSelect {
         ? 'AI 2'
         : this.mode === 'online'
           ? 'Opponent'
-          : 'Player 2';
+          : this.mode === 'training'
+            ? 'Dummy'
+            : 'Player 2';
     if (p2Label) {
       p2Label.textContent = p2Role;
     }
@@ -594,6 +596,8 @@ export class CharacterSelect {
         ? 'AI 2 Character'
       : this.mode === 'online'
         ? 'Opponent Character'
+      : this.mode === 'training'
+        ? 'Dummy Character'
         : 'Player 2 Character';
   }
 
@@ -695,7 +699,7 @@ export class CharacterSelect {
   _updateStartButton() {
     if (!this.startBtn) return;
     if (this.mode !== 'online') {
-      this.startBtn.textContent = this.mode === 'watch' ? 'WATCH' : 'FIGHT';
+      this.startBtn.textContent = this.mode === 'watch' ? 'WATCH' : this.mode === 'training' ? 'TRAIN' : 'FIGHT';
       this.startBtn.disabled = false;
       if (this.onlineLeaveBtn) this.onlineLeaveBtn.style.display = 'none';
       return;

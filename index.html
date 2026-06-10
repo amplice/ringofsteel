@@ -1123,6 +1123,15 @@
       background-size: auto, auto, 42px 42px, auto;
     }
 
+    /* While the attract duel plays behind the title, thin the backdrop so the
+       fight reads through while the logo band stays legible. */
+    #title-screen.attract {
+      background:
+        var(--ui-cut),
+        linear-gradient(90deg, rgba(101, 30, 24, 0.2), transparent 24%, transparent 75%, rgba(35, 71, 112, 0.18)),
+        linear-gradient(180deg, rgba(5, 7, 12, 0.85) 0%, rgba(20, 10, 14, 0.38) 46%, rgba(5, 7, 11, 0.88) 100%);
+    }
+
     #loading-screen::before,
     #title-screen::before,
     #select-screen::before {

@@ -48,6 +48,13 @@ const titleVisible = await page.evaluate(() => {
   return el ? getComputedStyle(el).display !== 'none' : false;
 });
 
+// The attract duel should engage behind the title shortly after boot.
+const attractAtBoot = await page.waitForFunction(
+  () => document.getElementById('title-screen').classList.contains('attract'),
+  { timeout: 20000 }
+).then(() => true).catch(() => false);
+if (!attractAtBoot) errors.push('Attract mode never engaged on the title screen.');
+
 // Simulate pressing Enter to start, let the game run a bit
 await page.keyboard.press('Enter');
 await new Promise((r) => setTimeout(r, 4000));
@@ -104,6 +111,11 @@ await page.waitForFunction(
   () => getComputedStyle(document.getElementById('title-screen')).display !== 'none',
   { timeout: 10000 }
 ).catch(() => errors.push('MAIN MENU did not return to the title screen.'));
+const attractAfterExit = await page.waitForFunction(
+  () => document.getElementById('title-screen').classList.contains('attract'),
+  { timeout: 20000 }
+).then(() => true).catch(() => false);
+if (!attractAfterExit) errors.push('Attract mode did not restart after returning to the title.');
 await page.keyboard.press('Enter');
 await page.waitForFunction(
   () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
@@ -177,7 +189,7 @@ if (dummyLabelAfterCycle !== 'DUMMY: BLOCK') {
   errors.push(`Dummy control did not cycle, got ${JSON.stringify(dummyLabelAfterCycle)}.`);
 }
 
-console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

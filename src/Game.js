@@ -166,6 +166,7 @@ export class Game {
 
     this.ui.title.onStart = () => {
       this.sound.unlock().catch(() => {});
+      this._stopAttract();
       this._disconnectDiscoverySession();
       this._stopOnlineLobbyRefresh();
       this._disconnectOnlineSession();
@@ -178,6 +179,7 @@ export class Game {
 
     this.ui.title.onAnimPlayer = async () => {
       this.sound.unlock().catch(() => {});
+      this._stopAttract();
       await this._startAnimationSandbox();
     };
 
@@ -265,6 +267,8 @@ export class Game {
       }
     });
     this._syncMuteIndicator(this.sound.muted);
+
+    this._startAttract();
 
     this.clock.start();
     this._loop();
@@ -407,6 +411,68 @@ export class Game {
     this.gameState = GameState.TITLE;
     this._cleanupFighters();
     this.ui.showTitle();
+    this._startAttract();
+  }
+
+  // Attract mode: an endless AI duel behind the title screen. Silent (no
+  // audio/vfx events) and torn down the moment the player moves on.
+  async _startAttract() {
+    if (this._attractActive || this._attractStarting || this.gameState !== GameState.TITLE) return;
+    this._attractStarting = true;
+    try {
+      const charIds = Object.keys(CHARACTER_DEFS).filter((id) => this._charCache[id]);
+      if (!charIds.length) return;
+      const pick = () => charIds[Math.floor(Math.random() * charIds.length)];
+      const stageIds = Object.keys(STAGE_DEFS).filter((id) => id !== 'test');
+      const stageId = normalizeStageId(stageIds[Math.floor(Math.random() * stageIds.length)] ?? this.currentStageId);
+
+      await this.arena.setStage(stageId);
+      if (this.gameState !== GameState.TITLE) return;
+
+      const { p1, p2 } = this._spawnFighters(pick(), pick());
+      this.aiController1 = this._createCpuController(p1.charDef.id, 'medium', p2.charDef.id);
+      this.aiController2 = this._createCpuController(p2.charDef.id, 'medium', p1.charDef.id);
+      this.matchSim = new MatchSim({
+        fighter1: this.fighter1,
+        fighter2: this.fighter2,
+        stageId,
+      });
+      this.matchSim.startRound(FIGHT_START_DISTANCE);
+      this._attractActive = true;
+      this._attractRestartTimer = 0;
+      this.ui.title.el?.classList.add('attract');
+    } catch (err) {
+      console.warn('Attract mode failed to start:', err);
+    } finally {
+      this._attractStarting = false;
+    }
+  }
+
+  _stopAttract() {
+    this.ui.title.el?.classList.remove('attract');
+    if (!this._attractActive) return;
+    this._attractActive = false;
+    this._cleanupFighters();
+  }
+
+  _updateAttract(dt) {
+    if (!this._attractActive || !this.matchSim) return;
+    const controller1 = (fighter, opponent, sim, simDt) => {
+      this.aiController1?.update(fighter, opponent, sim.frameCount, simDt);
+    };
+    const controller2 = (fighter, opponent, sim, simDt) => {
+      this.aiController2?.update(fighter, opponent, sim.frameCount, simDt);
+    };
+    const step = this.matchSim.step(dt, { controller1, controller2 });
+    if (step.roundOver) {
+      this._attractRestartTimer += dt;
+      if (this._attractRestartTimer > 2.0) {
+        this._attractRestartTimer = 0;
+        this.matchSim.startRound(FIGHT_START_DISTANCE);
+        this.aiController1?.reset();
+        this.aiController2?.reset();
+      }
+    }
   }
 
   _exitToSelect() {
@@ -1126,6 +1192,9 @@ export class Game {
     }
 
     switch (this.gameState) {
+      case GameState.TITLE:
+        this._updateAttract(dt);
+        break;
       case GameState.ROUND_INTRO:
         this._updateRoundIntro(dt);
         break;
@@ -1161,7 +1230,9 @@ export class Game {
     }
 
     if (this.fighter1 && this.fighter2) {
-      this.gameAudio.updateFighters([this.fighter1, this.fighter2]);
+      if (!this._attractActive) {
+        this.gameAudio.updateFighters([this.fighter1, this.fighter2]);
+      }
       this.cameraController.update(dt, this.fighter1, this.fighter2);
     }
 

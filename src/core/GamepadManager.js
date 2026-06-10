@@ -11,6 +11,10 @@
 
 const STICK_DEADZONE = 0.35;
 
+// Menu navigation repeat for held directions, in 60Hz updates.
+const MENU_REPEAT_DELAY = 24; // ~400ms before repeating
+const MENU_REPEAT_INTERVAL = 9; // ~150ms between repeats
+
 const BTN = {
   a: 0,
   b: 1,
@@ -146,8 +150,15 @@ export class GamepadManager {
     };
 
     for (const code of Object.keys(state)) {
-      if (state[code] && !prev[code]) this._dispatchMenuKey(code);
-      prev[code] = state[code];
+      const count = state[code] ? (prev[code] ?? 0) + 1 : 0;
+      prev[code] = count;
+      if (!count) continue;
+      // Held directions repeat like OS key-repeat; Enter/Escape fire once.
+      const repeat =
+        code.startsWith('Arrow') &&
+        count > MENU_REPEAT_DELAY &&
+        (count - MENU_REPEAT_DELAY) % MENU_REPEAT_INTERVAL === 1;
+      if (count === 1 || repeat) this._dispatchMenuKey(code);
     }
   }
 

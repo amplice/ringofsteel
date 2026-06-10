@@ -608,6 +608,9 @@ export class Game {
     });
 
     this.ui.showHUD();
+    if (this.input.touch.available && this.mode !== 'watch') {
+      this.input.touch.show();
+    }
     this.ui.hud.setFighterNames(
       this.mode === 'watch' ? 'AI 1' : 'PLAYER 1',
       this.mode === 'ai'
@@ -722,6 +725,7 @@ export class Game {
   }
 
   _cleanupFighters() {
+    this.input.touch.hide();
     if (this.fighter1) {
       this.fighter1.removeFromScene(this.scene);
       this.fighter1 = null;
@@ -1017,6 +1021,9 @@ export class Game {
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
     this.ui.showHUD();
+    if (this.input.touch.available && this.onlineLocalSlot !== null) {
+      this.input.touch.show();
+    }
     this.ui.hud.setFighterNames(
       this.onlineLocalSlot === 0 ? 'YOU' : 'OPPONENT',
       this.onlineLocalSlot === 1 ? 'YOU' : 'OPPONENT',

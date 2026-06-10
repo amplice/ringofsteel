@@ -817,6 +817,75 @@
       opacity: 1;
     }
 
+    #touch-controls {
+      position: absolute;
+      inset: 0;
+      display: none;
+      z-index: 18;
+      pointer-events: none;
+    }
+    #touch-controls.active {
+      display: block;
+    }
+    #touch-stick-zone {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 45%;
+      height: 65%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #touch-stick-base {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      margin: -55px 0 0 -55px;
+      border: 1px solid rgba(245, 217, 154, 0.4);
+      border-radius: 50%;
+      background: rgba(8, 9, 14, 0.35);
+    }
+    #touch-stick-nub {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 48px;
+      height: 48px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(245, 217, 154, 0.45);
+    }
+    #touch-buttons {
+      position: absolute;
+      right: 12px;
+      bottom: 24px;
+      width: 220px;
+      height: 220px;
+      pointer-events: none;
+    }
+    .touch-btn {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 1px solid rgba(245, 217, 154, 0.5);
+      background: rgba(8, 9, 14, 0.5);
+      color: var(--ui-gold);
+      font-size: 12px;
+      letter-spacing: 1px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .touch-btn.pressed {
+      background: rgba(245, 217, 154, 0.4);
+      color: #0a0a0e;
+    }
+    #touch-btn-thrust { right: 78px; top: 0; }
+    #touch-btn-quick { right: 146px; top: 78px; }
+    #touch-btn-heavy { right: 10px; top: 78px; }
+    #touch-btn-block { right: 146px; top: 156px; }
+    #touch-btn-backstep { right: 10px; top: 156px; }
+
     #mute-indicator {
       position: absolute;
       top: 12px;
@@ -2735,6 +2804,22 @@
 
     <!-- Mute indicator -->
     <div id="mute-indicator">SOUND OFF &middot; M</div>
+
+    <!-- Touch controls (combat overlay, touch devices only) -->
+    <div id="touch-controls">
+      <div id="touch-stick-zone">
+        <div id="touch-stick-base" style="display: none;">
+          <div id="touch-stick-nub"></div>
+        </div>
+      </div>
+      <div id="touch-buttons">
+        <button class="touch-btn" id="touch-btn-thrust" data-taction="thrust">THR</button>
+        <button class="touch-btn" id="touch-btn-quick" data-taction="quick">QCK</button>
+        <button class="touch-btn" id="touch-btn-heavy" data-taction="heavy">HVY</button>
+        <button class="touch-btn" id="touch-btn-block" data-taction="block">BLK</button>
+        <button class="touch-btn" id="touch-btn-backstep" data-taction="backstep">STEP</button>
+      </div>
+    </div>
 
     <!-- Pause Overlay -->
     <div id="pause-screen">

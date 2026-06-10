@@ -1,5 +1,6 @@
 import { INPUT_BUFFER_SIZE, INPUT_BUFFER_WINDOW } from './Constants.js';
 import { GamepadManager } from './GamepadManager.js';
+import { TouchControls } from './TouchControls.js';
 
 // Key bindings
 const P1_KEYS = {
@@ -36,6 +37,7 @@ export class InputManager {
     this.buffers = [[], []];
 
     this.gamepads = new GamepadManager();
+    this.touch = new TouchControls();
 
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onKeyUp = this._onKeyUp.bind(this);
@@ -93,6 +95,12 @@ export class InputManager {
         if (this.buffers[playerIndex].length > INPUT_BUFFER_SIZE) this.buffers[playerIndex].shift();
       }
     }
+
+    // Touch overlay always drives player 1.
+    for (const action of this.touch.consumePressed()) {
+      this.buffers[0].push({ action, frame: frameCount });
+      if (this.buffers[0].length > INPUT_BUFFER_SIZE) this.buffers[0].shift();
+    }
   }
 
   _codeToAction(code, keyMap) {
@@ -106,6 +114,7 @@ export class InputManager {
     const keyMap = playerIndex === 0 ? P1_KEYS : P2_KEYS;
     const code = keyMap[action];
     if (code && this.keysDown.has(code)) return true;
+    if (playerIndex === 0 && this.touch.isHeld(action)) return true;
     return this.gamepads.isHeld(playerIndex, action);
   }
 

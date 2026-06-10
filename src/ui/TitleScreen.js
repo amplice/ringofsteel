@@ -35,6 +35,15 @@ export class TitleScreen {
     this.el.style.display = 'flex';
     this._syncAnimPlayerButton();
     window.addEventListener('keydown', this._keyHandler);
+    if (!this._tapHandler) {
+      // Tap/click anywhere starts the game — required on touch devices,
+      // which have no Enter key.
+      this._tapHandler = (e) => {
+        if (e.target?.closest?.('#anim-player-btn')) return;
+        if (this.onStart) this.onStart();
+      };
+      this.el.addEventListener('pointerdown', this._tapHandler);
+    }
   }
 
   hide() {

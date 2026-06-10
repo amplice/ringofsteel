@@ -189,7 +189,28 @@ if (dummyLabelAfterCycle !== 'DUMMY: BLOCK') {
   errors.push(`Dummy control did not cycle, got ${JSON.stringify(dummyLabelAfterCycle)}.`);
 }
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, errors: errors.slice(0, 10) }, null, 2));
+// Touch device pass: tapping the title starts the game, and the combat
+// overlay appears once a fight begins.
+const touchPage = await browser.newPage();
+await touchPage.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true });
+touchPage.on('pageerror', (err) => errors.push(`TOUCH PAGEERROR: ${err.message}`));
+await touchPage.goto(`http://localhost:${port}/`, { waitUntil: 'networkidle2', timeout: 60000 });
+await new Promise((r) => setTimeout(r, 6000));
+await touchPage.tap('#title-screen');
+const touchSelectVisible = await touchPage.waitForFunction(
+  () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
+  { timeout: 10000 }
+).then(() => true).catch(() => false);
+if (!touchSelectVisible) errors.push('Tapping the title did not reach the select screen.');
+await touchPage.tap('#start-fight-btn');
+const touchOverlayActive = await touchPage.waitForFunction(
+  () => document.getElementById('touch-controls').classList.contains('active'),
+  { timeout: 30000 }
+).then(() => true).catch(() => false);
+if (!touchOverlayActive) errors.push('Touch combat overlay never appeared on a touch device.');
+await touchPage.close();
+
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

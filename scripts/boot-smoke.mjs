@@ -59,7 +59,20 @@ const state = await page.evaluate(() => ({
   })(),
 }));
 
-console.log(JSON.stringify({ titleVisible, ...state, errors: errors.slice(0, 10) }, null, 2));
+// Arrow-key navigation on the select screen should focus a control,
+// and Enter should activate it (mode row first -> stays on select screen).
+await page.keyboard.press('ArrowDown');
+await page.keyboard.press('ArrowRight');
+const focusedAfterArrows = await page.evaluate(() => {
+  const el = document.querySelector('.select-btn.gp-focus');
+  return el ? (el.id || el.dataset.stage || el.dataset.char || el.dataset.mode || el.dataset.diff || el.textContent.trim().slice(0, 24)) : null;
+});
+
+console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, errors: errors.slice(0, 10) }, null, 2));
+if (!focusedAfterArrows) {
+  console.error('Select-screen arrow navigation produced no focused control.');
+  process.exitCode = 1;
+}
 await browser.close();
 server.close();
 process.exit(errors.length ? 1 : 0);

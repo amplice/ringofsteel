@@ -65,6 +65,7 @@ export class CharacterSelect {
     this.controlsModal = document.getElementById('controls-modal');
     this.controlsCloseBtn = document.getElementById('controls-close-btn');
     this._keyHandler = this._onKey.bind(this);
+    this._focusEl = null;
     this._onlineBusy = false;
     this._onlineLocked = false;
     this._publicLobbies = [];
@@ -878,6 +879,7 @@ export class CharacterSelect {
     this.el.style.display = 'none';
     this._setControlsOpen(false);
     this._stopHeroPreviewLoop();
+    this._setFocus(null);
     window.removeEventListener('keydown', this._keyHandler);
   }
 
@@ -887,8 +889,112 @@ export class CharacterSelect {
   }
 
   _onKey(e) {
-    if (e.code === 'Escape' && this.controlsModal?.classList.contains('open')) {
-      this._setControlsOpen(false);
+    if (e.code === 'Escape') {
+      if (this.controlsModal?.classList.contains('open')) this._setControlsOpen(false);
+      return;
+    }
+    if (this._isEditableTarget(e.target)) return;
+    if (this.controlsModal?.classList.contains('open')) {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') this._setControlsOpen(false);
+      return;
+    }
+
+    switch (e.code) {
+      case 'ArrowLeft':
+        this._moveFocus(-1, 0);
+        e.preventDefault();
+        break;
+      case 'ArrowRight':
+        this._moveFocus(1, 0);
+        e.preventDefault();
+        break;
+      case 'ArrowUp':
+        this._moveFocus(0, -1);
+        e.preventDefault();
+        break;
+      case 'ArrowDown':
+        this._moveFocus(0, 1);
+        e.preventDefault();
+        break;
+      case 'Enter':
+      case 'NumpadEnter':
+        this._activateFocus();
+        break;
+    }
+  }
+
+  _isEditableTarget(target) {
+    if (!target || typeof target.closest !== 'function') return false;
+    return Boolean(target.closest('input, textarea, select, [contenteditable]'));
+  }
+
+  // Rows of currently visible, enabled controls for arrow/gamepad navigation.
+  _focusGroups() {
+    const groups = [];
+    const usable = (el) => Boolean(el) && !el.disabled && el.offsetParent !== null;
+    const add = (els) => {
+      const list = els.filter(usable);
+      if (list.length) groups.push(list);
+    };
+
+    add([...document.querySelectorAll('#mode-options .select-btn')]);
+    add([...document.querySelectorAll('#difficulty-options .select-btn')]);
+    add([this.onlineQuickMatchBtn, this.onlineHostPublicBtn, this.onlineRefreshBtn, this.onlineLeaveBtn]);
+    add([...(this.stageContainer?.querySelectorAll('.select-btn') ?? [])]);
+    add([...(this.p1Container?.querySelectorAll('.select-btn') ?? [])]);
+    add([...(this.p2Container?.querySelectorAll('.select-btn') ?? [])]);
+    add([this.startBtn, this.controlsBtn]);
+    return groups;
+  }
+
+  _moveFocus(dx, dy) {
+    const groups = this._focusGroups();
+    if (!groups.length) return;
+
+    let g = -1;
+    let i = -1;
+    if (this._focusEl) {
+      for (let gi = 0; gi < groups.length; gi++) {
+        const ii = groups[gi].indexOf(this._focusEl);
+        if (ii !== -1) {
+          g = gi;
+          i = ii;
+          break;
+        }
+      }
+    }
+
+    if (g === -1) {
+      g = 0;
+      i = Math.max(0, groups[0].indexOf(document.querySelector('#mode-options .select-btn.active')));
+    } else if (dy) {
+      g = (g + dy + groups.length) % groups.length;
+      i = Math.min(i, groups[g].length - 1);
+    } else if (dx) {
+      i = (i + dx + groups[g].length) % groups[g].length;
+    }
+
+    this._setFocus(groups[g][i]);
+  }
+
+  _setFocus(el) {
+    if (this._focusEl === el) return;
+    this._focusEl?.classList.remove('gp-focus');
+    this._focusEl = el ?? null;
+    if (el) {
+      el.classList.add('gp-focus');
+      el.scrollIntoView?.({ block: 'nearest' });
+    }
+  }
+
+  _activateFocus() {
+    if (this._focusEl && this._focusGroups().some((group) => group.includes(this._focusEl))) {
+      this._focusEl.click();
+      return;
+    }
+    // Nothing focused: Enter/A is a shortcut for the main action button.
+    if (this.startBtn && !this.startBtn.disabled && this.startBtn.offsetParent !== null && !this._onlineBusy) {
+      this.startBtn.click();
     }
   }
 }

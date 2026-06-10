@@ -76,7 +76,7 @@ export class GamepadManager {
       { held: {}, prev: {}, pressed: [] },
       { held: {}, prev: {}, pressed: [] },
     ];
-    this._menuPrev = [{ confirm: false, back: false }, { confirm: false, back: false }];
+    this._menuPrev = [{}, {}];
     this._anyButtonDown = false;
   }
 
@@ -103,8 +103,7 @@ export class GamepadManager {
       if (!pad) {
         player.held = {};
         player.prev = {};
-        this._menuPrev[slot].confirm = false;
-        this._menuPrev[slot].back = false;
+        this._menuPrev[slot] = {};
         continue;
       }
 
@@ -126,14 +125,23 @@ export class GamepadManager {
 
   _updateMenuKeys(slot, pad) {
     const prev = this._menuPrev[slot];
-    const confirm = buttonDown(pad, BTN.a) || buttonDown(pad, BTN.start);
-    const back = buttonDown(pad, BTN.b);
+    const x = pad.axes[0] ?? 0;
+    const y = pad.axes[1] ?? 0;
 
-    if (confirm && !prev.confirm) this._dispatchMenuKey('Enter');
-    if (back && !prev.back) this._dispatchMenuKey('Escape');
+    // Raw (screen-space) directions — menu navigation is never side-inverted.
+    const state = {
+      Enter: buttonDown(pad, BTN.a) || buttonDown(pad, BTN.start),
+      Escape: buttonDown(pad, BTN.b),
+      ArrowLeft: buttonDown(pad, BTN.dpadLeft) || x < -STICK_DEADZONE,
+      ArrowRight: buttonDown(pad, BTN.dpadRight) || x > STICK_DEADZONE,
+      ArrowUp: buttonDown(pad, BTN.dpadUp) || y < -STICK_DEADZONE,
+      ArrowDown: buttonDown(pad, BTN.dpadDown) || y > STICK_DEADZONE,
+    };
 
-    prev.confirm = confirm;
-    prev.back = back;
+    for (const code of Object.keys(state)) {
+      if (state[code] && !prev[code]) this._dispatchMenuKey(code);
+      prev[code] = state[code];
+    }
   }
 
   _dispatchMenuKey(code) {

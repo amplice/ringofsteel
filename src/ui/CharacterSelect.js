@@ -4,6 +4,8 @@ import { CHARACTER_DEFS, DEFAULT_CHAR } from '../entities/CharacterDefs.js';
 import { getDefaultMultiplayerWsUrl } from '../net/NetConfig.js';
 import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
 
+const CONTROLS_SEEN_KEY = 'ring-of-steel-controls-seen';
+
 const PREVIEW_FRONT_YAW = {
   spearman: Math.PI / 2,
   ronin: Math.PI / 2,
@@ -906,6 +908,7 @@ export class CharacterSelect {
     this.el.style.display = 'flex';
     this._updateModeUI();
     this._setControlsOpen(false);
+    this._maybeShowFirstVisitControls();
     this._renderCharacterPreviewImages();
     this._syncHeroLabels();
     this._updateHeroPreviewCharacter('p1', this.p1Char, true);
@@ -948,6 +951,17 @@ export class CharacterSelect {
   _setControlsOpen(open) {
     if (!this.controlsModal) return;
     this.controlsModal.classList.toggle('open', open);
+  }
+
+  // First ever visit to the select screen: show the controls once.
+  _maybeShowFirstVisitControls() {
+    try {
+      if (window.localStorage?.getItem(CONTROLS_SEEN_KEY)) return;
+      window.localStorage?.setItem(CONTROLS_SEEN_KEY, 'true');
+    } catch {
+      return; // No storage — don't risk nagging on every visit.
+    }
+    this._setControlsOpen(true);
   }
 
   _onKey(e) {

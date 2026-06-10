@@ -73,6 +73,21 @@ const state = await page.evaluate(() => ({
   })(),
 }));
 
+// First-ever visit: the controls modal auto-opens once; Enter dismisses it.
+const firstVisitControls = await page.evaluate(
+  () => document.getElementById('controls-modal')?.classList.contains('open') ?? false
+);
+if (!firstVisitControls) {
+  errors.push('Controls modal did not auto-open on first visit to the select screen.');
+} else {
+  await page.keyboard.press('Enter');
+  await new Promise((r) => setTimeout(r, 300));
+  const stillOpen = await page.evaluate(
+    () => document.getElementById('controls-modal').classList.contains('open')
+  );
+  if (stillOpen) errors.push('Controls modal did not close on Enter.');
+}
+
 // Arrow-key navigation on the select screen should focus a control,
 // and Enter should activate it (mode row first -> stays on select screen).
 await page.keyboard.press('ArrowDown');
@@ -250,7 +265,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

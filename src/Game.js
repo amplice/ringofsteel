@@ -1028,6 +1028,14 @@ export class Game {
       return;
     }
 
+    if (this.mode === 'online' && this.gameState === GameState.VICTORY) {
+      const opponentReady = detail.players?.some(
+        (player) => player.id !== this.onlineSession?.clientId && player.ready && player.connected
+      );
+      if (opponentReady) this.ui.victory.setOpponentWantsRematch();
+      return;
+    }
+
     this.ui.select.setOnlineBusy(false);
     this.ui.select.setOnlineLocked(Boolean(detail.code));
     if (detail.phase === 'match_running') {

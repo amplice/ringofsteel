@@ -26,6 +26,14 @@ export class VictoryScreen {
     });
   }
 
+  // The opponent has already readied up — make accepting one press away.
+  setOpponentWantsRematch() {
+    if (!this.rematchBtn || this.rematchBtn.style.display === 'none') return;
+    if (this.rematchBtn.disabled) return; // we already requested; match is starting
+    this.rematchBtn.textContent = 'ACCEPT REMATCH';
+    this._setFocus(this.rematchBtn);
+  }
+
   // Online rematch requested: lock the button until the opponent responds.
   setRematchWaiting(label = 'WAITING...') {
     if (!this.rematchBtn) return;

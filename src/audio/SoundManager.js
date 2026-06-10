@@ -1,3 +1,5 @@
+const MUTE_STORAGE_KEY = 'ring-of-steel-muted';
+
 export class SoundManager {
   constructor() {
     this.context = null;
@@ -9,8 +11,24 @@ export class SoundManager {
     };
     this._unlockArmed = false;
     this.enabled = typeof window !== 'undefined';
+    this.muted = this.enabled && window.localStorage?.getItem(MUTE_STORAGE_KEY) === 'true';
 
     this._armUnlock();
+  }
+
+  setMuted(muted) {
+    this.muted = Boolean(muted);
+    if (this.masterGain) this.masterGain.gain.value = this.muted ? 0 : 1;
+    try {
+      window.localStorage?.setItem(MUTE_STORAGE_KEY, String(this.muted));
+    } catch {
+      // Storage unavailable (private mode etc.) — mute still applies this session.
+    }
+  }
+
+  toggleMuted() {
+    this.setMuted(!this.muted);
+    return this.muted;
   }
 
   _ensureContext() {
@@ -25,7 +43,7 @@ export class SoundManager {
 
     this.context = new AudioContextCtor();
     this.masterGain = this.context.createGain();
-    this.masterGain.gain.value = 1;
+    this.masterGain.gain.value = this.muted ? 0 : 1;
     this.masterGain.connect(this.context.destination);
     return this.context;
   }

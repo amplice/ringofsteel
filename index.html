@@ -799,6 +799,21 @@
       min-width: 200px;
     }
 
+    #mute-indicator {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      display: none;
+      padding: 4px 10px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--ui-gold);
+      border: 1px solid rgba(245, 217, 154, 0.4);
+      background: rgba(8, 9, 14, 0.7);
+      z-index: 40;
+      pointer-events: none;
+    }
+
     /* Pause overlay */
     #pause-screen {
       position: absolute;
@@ -2631,7 +2646,7 @@
               </div>
             </div>
           </div>
-          <div class="help-note">In VS COMPUTER, Player 2 controls are unused. In AI VS AI, both fighters are controlled by CPU. In TRAINING, kills reset instantly and the dummy responds to Player 2 controls. Toggle debug with F3.</div>
+          <div class="help-note">In VS COMPUTER, Player 2 controls are unused. In AI VS AI, both fighters are controlled by CPU. In TRAINING, kills reset instantly and the dummy responds to Player 2 controls. M toggles sound. Toggle debug with F3.</div>
         </div>
       </div>
     </div>
@@ -2688,6 +2703,9 @@
       </div>
       <div class="prompt">ENTER CONFIRMS &middot; ESC FOR MAIN MENU</div>
     </div>
+
+    <!-- Mute indicator -->
+    <div id="mute-indicator">SOUND OFF &middot; M</div>
 
     <!-- Pause Overlay -->
     <div id="pause-screen">

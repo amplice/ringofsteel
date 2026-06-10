@@ -248,9 +248,14 @@ export class Game {
     };
 
     window.addEventListener('keydown', (e) => {
-      if (e.code !== 'Escape' || e._fromGamepad) return;
-      if (this.gameState === GameState.FIGHTING) this._pauseMatch();
+      if (e._fromGamepad) return;
+      if (e.code === 'Escape' && this.gameState === GameState.FIGHTING) {
+        this._pauseMatch();
+      } else if (e.code === 'KeyM' && !e.target?.closest?.('input, textarea, [contenteditable]')) {
+        this._syncMuteIndicator(this.sound.toggleMuted());
+      }
     });
+    this._syncMuteIndicator(this.sound.muted);
 
     this.clock.start();
     this._loop();
@@ -347,6 +352,11 @@ export class Game {
         this._dummyNextAttackFrame = frame + 45 + Math.floor(Math.random() * 75);
       }
     }
+  }
+
+  _syncMuteIndicator(muted) {
+    const el = document.getElementById('mute-indicator');
+    if (el) el.style.display = muted ? 'block' : 'none';
   }
 
   _pauseMatch() {

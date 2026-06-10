@@ -421,6 +421,36 @@ export class Game {
     this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
   }
 
+  // One-line feedback in training: what the last exchange was and how it
+  // resolved, from the player's perspective.
+  _updateTrainingReadout(event) {
+    const el = document.getElementById('training-readout');
+    if (!el) return;
+    const type = (event.attackerType ?? '').toUpperCase();
+    const youAttacked = event.attackerIndex === 0;
+    let text;
+    switch (event.result) {
+      case HitResult.CLASH:
+        text = `CLASH — ${type}`;
+        break;
+      case HitResult.PARRIED:
+        text = youAttacked ? `YOUR ${type} WAS PARRIED` : `YOU PARRIED THE ${type}`;
+        break;
+      case HitResult.BLOCKED:
+        text = youAttacked ? `YOUR ${type} WAS BLOCKED` : `YOU BLOCKED THE ${type}`;
+        break;
+      case HitResult.LETHAL_HIT:
+        text = youAttacked ? `${type} — CLEAN HIT` : `HIT BY ${type}`;
+        break;
+      default:
+        return;
+    }
+    el.textContent = text;
+    el.classList.add('visible');
+    window.clearTimeout(this._trainingReadoutTimer);
+    this._trainingReadoutTimer = window.setTimeout(() => el.classList.remove('visible'), 2500);
+  }
+
   // Training kills skip the kill cam and round flow entirely — the round
   // restarts in place so practice keeps its rhythm.
   _resetTrainingRound() {
@@ -1321,6 +1351,9 @@ export class Game {
 
   _handleSimEvent(event) {
     this.gameAudio.handleCombatEvent(event);
+    if (this.mode === 'training' && event.type === 'combat_result') {
+      this._updateTrainingReadout(event);
+    }
     if (event.type === 'wall_bounce') {
       const contactPoint = new THREE.Vector3(
         event.contactPoint?.x ?? 0,

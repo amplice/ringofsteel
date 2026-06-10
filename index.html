@@ -799,6 +799,24 @@
       min-width: 200px;
     }
 
+    #training-readout {
+      position: absolute;
+      top: 16%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 15px;
+      letter-spacing: 3px;
+      color: var(--ui-gold);
+      text-shadow: 2px 2px 0 rgba(15, 6, 9, 0.86);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #training-readout.visible {
+      opacity: 1;
+    }
+
     #mute-indicator {
       position: absolute;
       top: 12px;
@@ -2654,6 +2672,7 @@
 
     <!-- HUD -->
     <div id="hud">
+      <div id="training-readout"></div>
       <div class="online-hud-strip" id="online-hud-strip">
         <span class="label">Mode</span>
         <span class="value" id="online-hud-status">Offline</span>

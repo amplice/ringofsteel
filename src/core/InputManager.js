@@ -1,4 +1,5 @@
 import { INPUT_BUFFER_SIZE, INPUT_BUFFER_WINDOW } from './Constants.js';
+import { GamepadManager } from './GamepadManager.js';
 
 // Key bindings
 const P1_KEYS = {
@@ -34,6 +35,8 @@ export class InputManager {
     // Input buffers per player
     this.buffers = [[], []];
 
+    this.gamepads = new GamepadManager();
+
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onKeyUp = this._onKeyUp.bind(this);
 
@@ -42,6 +45,7 @@ export class InputManager {
   }
 
   _onKeyDown(e) {
+    if (e._fromGamepad) return;
     if (this._isEditableTarget(e.target)) return;
     if (!this.keysDown.has(e.code)) {
       this.keysPressed.add(e.code);
@@ -51,6 +55,7 @@ export class InputManager {
   }
 
   _onKeyUp(e) {
+    if (e._fromGamepad) return;
     if (this._isEditableTarget(e.target)) return;
     this.keysDown.delete(e.code);
     this.keysReleased.add(e.code);
@@ -80,6 +85,14 @@ export class InputManager {
 
     this.keysPressed.clear();
     this.keysReleased.clear();
+
+    this.gamepads.update();
+    for (let playerIndex = 0; playerIndex < 2; playerIndex++) {
+      for (const action of this.gamepads.getPressedActions(playerIndex)) {
+        this.buffers[playerIndex].push({ action, frame: frameCount });
+        if (this.buffers[playerIndex].length > INPUT_BUFFER_SIZE) this.buffers[playerIndex].shift();
+      }
+    }
   }
 
   _codeToAction(code, keyMap) {
@@ -92,7 +105,8 @@ export class InputManager {
   isHeld(playerIndex, action) {
     const keyMap = playerIndex === 0 ? P1_KEYS : P2_KEYS;
     const code = keyMap[action];
-    return code ? this.keysDown.has(code) : false;
+    if (code && this.keysDown.has(code)) return true;
+    return this.gamepads.isHeld(playerIndex, action);
   }
 
   consumeBuffer(playerIndex, action, currentFrame) {
@@ -107,7 +121,7 @@ export class InputManager {
   }
 
   anyKeyPressed() {
-    return this.keysDown.size > 0;
+    return this.keysDown.size > 0 || this.gamepads.anyButtonDown();
   }
 
   isKeyDown(code) {

@@ -1,0 +1,65 @@
+import puppeteer from 'puppeteer';
+import { createServer } from 'http';
+import { readFile } from 'fs/promises';
+import { extname, join } from 'path';
+
+const root = process.argv[2] || 'dist';
+const MIME = {
+  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.json': 'application/json',
+};
+
+const server = createServer(async (req, res) => {
+  let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (path === '/') path = '/index.html';
+  try {
+    const data = await readFile(join(root, path));
+    res.writeHead(200, { 'Content-Type': MIME[extname(path)] || 'application/octet-stream' });
+    res.end(data);
+  } catch {
+    res.writeHead(404); res.end();
+  }
+});
+await new Promise((r) => server.listen(0, r));
+const port = server.address().port;
+
+const browser = await puppeteer.launch({ headless: 'new' });
+const page = await browser.newPage();
+const errors = [];
+page.on('console', (msg) => {
+  if (msg.type() !== 'error') return;
+  // Network failures are tracked precisely via response events below.
+  if (msg.text().startsWith('Failed to load resource')) return;
+  errors.push(msg.text());
+});
+page.on('pageerror', (err) => errors.push(`PAGEERROR: ${err.message}`));
+page.on('response', (res) => {
+  if (res.status() < 400) return;
+  if (res.url().endsWith('/favicon.ico')) return;
+  errors.push(`HTTP ${res.status()}: ${res.url()}`);
+});
+
+await page.goto(`http://localhost:${port}/`, { waitUntil: 'networkidle2', timeout: 60000 });
+await new Promise((r) => setTimeout(r, 6000));
+
+const titleVisible = await page.evaluate(() => {
+  const el = document.getElementById('title-screen');
+  return el ? getComputedStyle(el).display !== 'none' : false;
+});
+
+// Simulate pressing Enter to start, let the game run a bit
+await page.keyboard.press('Enter');
+await new Promise((r) => setTimeout(r, 4000));
+
+const state = await page.evaluate(() => ({
+  selectVisible: (() => {
+    const el = document.getElementById('select-screen') || document.getElementById('character-select');
+    return el ? getComputedStyle(el).display !== 'none' : null;
+  })(),
+}));
+
+console.log(JSON.stringify({ titleVisible, ...state, errors: errors.slice(0, 10) }, null, 2));
+await browser.close();
+server.close();
+process.exit(errors.length ? 1 : 0);

@@ -195,6 +195,33 @@ if (victoryInfo.title !== 'PLAYER 1 WINS') {
 if (victoryInfo.stats !== 'PARRIES 2-1 · BLOCKS 3-4 · CLASHES 5 · FASTEST KILL 7.3S') {
   errors.push(`Victory stats line was ${JSON.stringify(victoryInfo.stats)}.`);
 }
+// KO replay: button starts the replay (victory hides, badge shows) and
+// Escape returns to the victory screen.
+let replayState = null;
+const replayBtnVisible = await page.evaluate(
+  () => document.getElementById('victory-replay-btn').offsetParent !== null
+);
+if (!replayBtnVisible) {
+  errors.push('REPLAY KO button was not visible on an offline victory.');
+} else {
+  await page.click('#victory-replay-btn');
+  await new Promise((r) => setTimeout(r, 600));
+  replayState = await page.evaluate(() => ({
+    victoryHidden: getComputedStyle(document.getElementById('victory-screen')).display === 'none',
+    badgeVisible: getComputedStyle(document.getElementById('replay-indicator')).display !== 'none',
+    gameState: window.__ringOfSteelGame.gameState,
+  }));
+  if (!replayState.victoryHidden || !replayState.badgeVisible || replayState.gameState !== 'replay') {
+    errors.push(`KO replay did not start cleanly: ${JSON.stringify(replayState)}`);
+  }
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 400));
+  const backAtVictory = await page.evaluate(
+    () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
+  );
+  if (!backAtVictory) errors.push('Escape did not return from the KO replay to the victory screen.');
+}
+
 await page.click('#victory-select-btn');
 await page.waitForFunction(
   () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
@@ -265,7 +292,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

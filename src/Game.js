@@ -263,6 +263,7 @@ export class Game {
     };
 
     this.ui.victory.onCharacterSelect = () => this._exitToSelect();
+    this.ui.victory.onReplay = () => this._startKoReplay();
 
     this.ui.pause.onResume = () => this._resumeFromPause();
     this.ui.pause.onCharacterSelect = () => this._exitToSelect();
@@ -274,6 +275,13 @@ export class Game {
     };
 
     window.addEventListener('keydown', (e) => {
+      if (
+        this.gameState === GameState.REPLAY &&
+        (e.code === 'Escape' || e.code === 'Enter' || e.code === 'NumpadEnter')
+      ) {
+        this._endKoReplay();
+        return;
+      }
       if (e._fromGamepad) return;
       if (e.code === 'Escape' && this.gameState === GameState.FIGHTING) {
         this._pauseMatch();
@@ -372,22 +380,24 @@ export class Game {
     const detail = {
       winnerCharId: this._resolveWinnerCharId(),
       allowRematch: true,
+      allowReplay: (this._koReplayBuffer?.length ?? 0) > 0,
       stats: this._buildMatchStatsLine(),
     };
 
+    const present = (winnerName, extra) => {
+      const merged = { ...detail, ...extra };
+      this._lastVictoryView = { winnerName, p1: this.p1Score, p2: this.p2Score, detail: merged };
+      this.ui.showVictory(winnerName, this.p1Score, this.p2Score, merged);
+    };
+
     if (!playerWon) {
-      this.ui.showVictory('COMPUTER', this.p1Score, this.p2Score, {
-        ...detail,
-        title: 'GAUNTLET FAILED',
-        primaryLabel: 'TRY AGAIN',
-      });
+      present('COMPUTER', { title: 'GAUNTLET FAILED', primaryLabel: 'TRY AGAIN' });
       return;
     }
 
     g.index++;
     if (g.index >= total) {
-      this.ui.showVictory('PLAYER 1', this.p1Score, this.p2Score, {
-        ...detail,
+      present('PLAYER 1', {
         title: 'GAUNTLET COMPLETE',
         subtitle: this._recordGauntletClear(g),
         allowRematch: false,
@@ -397,8 +407,7 @@ export class Game {
     }
 
     const next = CHARACTER_DEFS[g.opponents[g.index]]?.displayName?.toUpperCase() ?? 'NEXT FOE';
-    this.ui.showVictory('PLAYER 1', this.p1Score, this.p2Score, {
-      ...detail,
+    present('PLAYER 1', {
       title: `FOE ${g.index}/${total} DEFEATED`,
       primaryLabel: `NEXT: ${next}`,
     });
@@ -561,6 +570,59 @@ export class Game {
     }
   }
 
+  // KO replay: re-feed the recorded sim snapshots of the final round through
+  // the same remote-view path online clients render with, at half speed.
+  _startKoReplay() {
+    if (!this._koReplayBuffer?.length || !this.fighter1 || !this.fighter2) return;
+    this._replayFrames = this._koReplayBuffer.slice(-300);
+    this._replayIndex = 0;
+    this._replayHold = 0;
+    this._replayTick = 0;
+    this.fighter1._hasRemoteTarget = false;
+    this.fighter2._hasRemoteTarget = false;
+    this.gameState = GameState.REPLAY;
+    this.ui.hideAll();
+    const badge = document.getElementById('replay-indicator');
+    if (badge) badge.style.display = 'block';
+  }
+
+  _updateReplay(dt) {
+    if (!this._replayFrames || !this.fighter1 || !this.fighter2) {
+      this._endKoReplay();
+      return;
+    }
+
+    this._replayTick++;
+    if (this._replayTick % 2 === 0 && this._replayIndex < this._replayFrames.length) {
+      const snap = this._replayFrames[this._replayIndex++];
+      const [f1, f2] = snap.fighters ?? [];
+      if (f1) this.fighter1.applyAuthoritativeSnapshot(f1);
+      if (f2) this.fighter2.applyAuthoritativeSnapshot(f2);
+    }
+
+    this.fighter1.updateRemoteView(dt * 0.5);
+    this.fighter2.updateRemoteView(dt * 0.5);
+
+    if (this._replayIndex >= this._replayFrames.length) {
+      this._replayHold += dt;
+      if (this._replayHold > 1.5) this._endKoReplay();
+    }
+  }
+
+  _endKoReplay() {
+    if (this.gameState !== GameState.REPLAY) return;
+    this._replayFrames = null;
+    const badge = document.getElementById('replay-indicator');
+    if (badge) badge.style.display = 'none';
+    this.gameState = GameState.VICTORY;
+    const view = this._lastVictoryView;
+    if (view) {
+      this.ui.showVictory(view.winnerName, view.p1, view.p2, view.detail);
+    } else {
+      this._exitToTitle();
+    }
+  }
+
   _syncMuteIndicator(muted) {
     const el = document.getElementById('mute-indicator');
     if (el) el.style.display = muted ? 'block' : 'none';
@@ -674,6 +736,7 @@ export class Game {
   _startRound() {
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
+    this._koReplayBuffer = [];
     this._resetCombatPresentation();
 
     this.matchSim?.startRound(FIGHT_START_DISTANCE);
@@ -715,6 +778,7 @@ export class Game {
     this.p1Score = 0;
     this.p2Score = 0;
     this.currentRound = 1;
+    this._koReplayBuffer = [];
     this._matchStats = {
       parries: [0, 0],
       blocks: [0, 0],
@@ -1261,6 +1325,9 @@ export class Game {
       case GameState.TITLE:
         this._updateAttract(dt);
         break;
+      case GameState.REPLAY:
+        this._updateReplay(dt);
+        break;
       case GameState.ROUND_INTRO:
         this._updateRoundIntro(dt);
         break;
@@ -1416,6 +1483,10 @@ export class Game {
       controller1,
       controller2,
     });
+    if (step.snapshot) {
+      this._koReplayBuffer.push(step.snapshot);
+      if (this._koReplayBuffer.length > 480) this._koReplayBuffer.shift();
+    }
     if (this.mode === 'ai') {
       this.aiMatchRecorder.recordStep({
         frameCount: step.frameCount,
@@ -1677,11 +1748,14 @@ export class Game {
         p2Score: this.p2Score,
       });
     }
-    this.ui.showVictory(winnerName, this.p1Score, this.p2Score, {
+    const detail = {
       winnerCharId: this._resolveWinnerCharId(),
       allowRematch: this.mode !== 'online' || Boolean(this.onlineSession?.connected),
+      allowReplay: this.mode !== 'online' && (this._koReplayBuffer?.length ?? 0) > 0,
       stats: this.mode === 'online' ? null : this._buildMatchStatsLine(),
-    });
+    };
+    this._lastVictoryView = { winnerName, p1: this.p1Score, p2: this.p2Score, detail };
+    this.ui.showVictory(winnerName, this.p1Score, this.p2Score, detail);
   }
 
   _resolveWinnerCharId() {

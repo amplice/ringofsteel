@@ -8,6 +8,7 @@ export const GameState = {
   KILL_CAM: 'kill_cam',
   ROUND_END: 'round_end',
   VICTORY: 'victory',
+  REPLAY: 'replay',
   ANIM_PLAYER: 'anim_player',
   POSE_BROWSER: 'pose_browser',
 };

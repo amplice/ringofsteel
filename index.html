@@ -923,6 +923,22 @@
       }
     }
 
+    #replay-indicator {
+      display: none;
+      position: absolute;
+      top: 14px;
+      left: 18px;
+      padding: 4px 10px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #e86a5a;
+      border: 1px solid rgba(232, 106, 90, 0.45);
+      background: rgba(8, 9, 14, 0.7);
+      z-index: 40;
+      pointer-events: none;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
     #mute-indicator {
       position: absolute;
       top: 12px;
@@ -2841,6 +2857,7 @@
       <div class="match-stats" id="victory-stats"></div>
       <div class="victory-actions" id="victory-actions">
         <button class="select-btn" id="victory-rematch-btn">REMATCH</button>
+        <button class="select-btn" id="victory-replay-btn">REPLAY KO</button>
         <button class="select-btn" id="victory-select-btn">CHANGE FIGHTERS</button>
         <button class="select-btn" id="victory-title-btn">MAIN MENU</button>
       </div>
@@ -2849,6 +2866,9 @@
 
     <!-- Mute indicator -->
     <div id="mute-indicator">SOUND OFF &middot; M</div>
+
+    <!-- KO replay badge -->
+    <div id="replay-indicator">&#9679; REPLAY &middot; ESC TO SKIP</div>
 
     <!-- Portrait orientation hint (touch devices) -->
     <div id="rotate-hint">ROTATE YOUR DEVICE &mdash; BEST PLAYED IN LANDSCAPE</div>

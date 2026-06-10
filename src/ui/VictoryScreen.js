@@ -6,10 +6,12 @@ export class VictoryScreen {
     this.portrait = document.getElementById('victory-portrait-img');
     this.statsEl = document.getElementById('victory-stats');
     this.rematchBtn = document.getElementById('victory-rematch-btn');
+    this.replayBtn = document.getElementById('victory-replay-btn');
     this.selectBtn = document.getElementById('victory-select-btn');
     this.titleBtn = document.getElementById('victory-title-btn');
     this.onContinue = null;
     this.onRematch = null;
+    this.onReplay = null;
     this.onCharacterSelect = null;
     this._previewImages = new Map();
     this._focusEl = null;
@@ -17,6 +19,9 @@ export class VictoryScreen {
 
     this.rematchBtn?.addEventListener('click', () => {
       if (this.onRematch) this.onRematch();
+    });
+    this.replayBtn?.addEventListener('click', () => {
+      if (this.onReplay) this.onReplay();
     });
     this.selectBtn?.addEventListener('click', () => {
       if (this.onCharacterSelect) this.onCharacterSelect();
@@ -58,6 +63,9 @@ export class VictoryScreen {
       this.rematchBtn.textContent = detail.primaryLabel ?? 'REMATCH';
       this.rematchBtn.disabled = false;
     }
+    if (this.replayBtn) {
+      this.replayBtn.style.display = detail.allowReplay ? '' : 'none';
+    }
     this.el.style.display = 'flex';
     this._setFocus(this._buttons()[0] ?? null);
     window.addEventListener('keydown', this._keyHandler);
@@ -82,7 +90,7 @@ export class VictoryScreen {
   }
 
   _buttons() {
-    return [this.rematchBtn, this.selectBtn, this.titleBtn].filter(
+    return [this.rematchBtn, this.replayBtn, this.selectBtn, this.titleBtn].filter(
       (btn) => btn && btn.offsetParent !== null && !btn.disabled
     );
   }

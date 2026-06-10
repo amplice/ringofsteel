@@ -237,6 +237,24 @@ export class Game {
       this.ui.showTitle();
     };
 
+    this.ui.victory.onRematch = async () => {
+      if (this.mode === 'online' || !this._lastMatchChars) return;
+      this.sound.unlock().catch(() => {});
+      await this._startMatch(this._lastMatchChars.p1Char, this._lastMatchChars.p2Char);
+    };
+
+    this.ui.victory.onCharacterSelect = () => {
+      this._stopOnlineLobbyRefresh();
+      this._disconnectDiscoverySession();
+      this._disconnectOnlineSession();
+      this._cleanupFighters();
+      this.gameState = GameState.SELECT;
+      this.ui.showSelect();
+      this.ui.select.resetOnlineState();
+      this.ui.select.setPublicLobbies([]);
+      this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
+    };
+
     this.clock.start();
     this._loop();
   }
@@ -289,6 +307,7 @@ export class Game {
   }
 
   async _startMatch(p1Char, p2Char) {
+    this._lastMatchChars = { p1Char, p2Char };
     this._disconnectOnlineSession();
     this._resetMatchScoreState();
     await this.arena?.setStage(this.currentStageId);
@@ -1297,6 +1316,7 @@ export class Game {
     }
     this.ui.showVictory(winnerName, this.p1Score, this.p2Score, {
       winnerCharId: this._resolveWinnerCharId(),
+      allowRematch: this.mode !== 'online',
     });
   }
 

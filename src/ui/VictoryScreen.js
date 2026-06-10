@@ -4,9 +4,25 @@ export class VictoryScreen {
     this.winnerText = document.getElementById('winner-text');
     this.scoreText = document.getElementById('final-score');
     this.portrait = document.getElementById('victory-portrait-img');
+    this.rematchBtn = document.getElementById('victory-rematch-btn');
+    this.selectBtn = document.getElementById('victory-select-btn');
+    this.titleBtn = document.getElementById('victory-title-btn');
     this.onContinue = null;
+    this.onRematch = null;
+    this.onCharacterSelect = null;
     this._previewImages = new Map();
+    this._focusEl = null;
     this._keyHandler = this._onKey.bind(this);
+
+    this.rematchBtn?.addEventListener('click', () => {
+      if (this.onRematch) this.onRematch();
+    });
+    this.selectBtn?.addEventListener('click', () => {
+      if (this.onCharacterSelect) this.onCharacterSelect();
+    });
+    this.titleBtn?.addEventListener('click', () => {
+      if (this.onContinue) this.onContinue();
+    });
   }
 
   setCharacterPreviews(previewImages) {
@@ -17,12 +33,17 @@ export class VictoryScreen {
     this.winnerText.textContent = `${winnerName} WINS`;
     this.scoreText.textContent = `${p1Score} - ${p2Score}`;
     this._setPortrait(detail.winnerCharId);
+    if (this.rematchBtn) {
+      this.rematchBtn.style.display = detail.allowRematch === false ? 'none' : '';
+    }
     this.el.style.display = 'flex';
+    this._setFocus(this._buttons()[0] ?? null);
     window.addEventListener('keydown', this._keyHandler);
   }
 
   hide() {
     this.el.style.display = 'none';
+    this._setFocus(null);
     window.removeEventListener('keydown', this._keyHandler);
   }
 
@@ -38,9 +59,48 @@ export class VictoryScreen {
     }
   }
 
+  _buttons() {
+    return [this.rematchBtn, this.selectBtn, this.titleBtn].filter(
+      (btn) => btn && btn.offsetParent !== null && !btn.disabled
+    );
+  }
+
+  _setFocus(el) {
+    if (this._focusEl === el) return;
+    this._focusEl?.classList.remove('gp-focus');
+    this._focusEl = el ?? null;
+    if (el) el.classList.add('gp-focus');
+  }
+
+  _moveFocus(dir) {
+    const buttons = this._buttons();
+    if (!buttons.length) return;
+    const current = buttons.indexOf(this._focusEl);
+    const next = current === -1 ? 0 : (current + dir + buttons.length) % buttons.length;
+    this._setFocus(buttons[next]);
+  }
+
   _onKey(e) {
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-      if (this.onContinue) this.onContinue();
+    switch (e.code) {
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        this._moveFocus(-1);
+        e.preventDefault();
+        break;
+      case 'ArrowRight':
+      case 'ArrowDown':
+        this._moveFocus(1);
+        e.preventDefault();
+        break;
+      case 'Enter':
+      case 'NumpadEnter': {
+        const target = this._buttons().includes(this._focusEl) ? this._focusEl : this._buttons()[0];
+        target?.click();
+        break;
+      }
+      case 'Escape':
+        if (this.onContinue) this.onContinue();
+        break;
     }
   }
 }

@@ -787,6 +787,17 @@
       letter-spacing: 3px;
       text-transform: uppercase;
     }
+    .victory-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .victory-actions .select-btn {
+      width: auto;
+      min-width: 200px;
+    }
 
     /* Animation Player */
     #anim-player-screen {
@@ -2639,7 +2650,12 @@
       </div>
       <h2 id="winner-text">PLAYER 1 WINS</h2>
       <div class="score" id="final-score">3 - 1</div>
-      <div class="prompt">PRESS ENTER TO CONTINUE</div>
+      <div class="victory-actions" id="victory-actions">
+        <button class="select-btn" id="victory-rematch-btn">REMATCH</button>
+        <button class="select-btn" id="victory-select-btn">CHANGE FIGHTERS</button>
+        <button class="select-btn" id="victory-title-btn">MAIN MENU</button>
+      </div>
+      <div class="prompt">ENTER CONFIRMS &middot; ESC FOR MAIN MENU</div>
     </div>
 
     <!-- Animation Player -->

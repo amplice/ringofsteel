@@ -6,8 +6,22 @@ export class TitleScreen {
     this.onStart = null;
     this.onAnimPlayer = null;
     this.animPlayerBtn = document.getElementById('anim-player-btn');
+    this.promptEl = this.el?.querySelector('.prompt') ?? null;
     this._keyHandler = this._onKey.bind(this);
     this._bindButtons();
+
+    window.addEventListener('gamepadconnected', () => this._syncPrompt());
+    window.addEventListener('gamepaddisconnected', () => this._syncPrompt());
+    this._syncPrompt();
+  }
+
+  _syncPrompt() {
+    if (!this.promptEl) return;
+    const hasPad =
+      typeof navigator !== 'undefined' &&
+      typeof navigator.getGamepads === 'function' &&
+      [...navigator.getGamepads()].some((pad) => pad && pad.connected);
+    this.promptEl.textContent = hasPad ? 'PRESS ENTER OR Ⓐ TO BEGIN' : 'PRESS ENTER TO BEGIN';
   }
 
   _bindButtons() {

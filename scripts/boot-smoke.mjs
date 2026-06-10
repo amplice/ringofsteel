@@ -208,9 +208,21 @@ const touchOverlayActive = await touchPage.waitForFunction(
   { timeout: 30000 }
 ).then(() => true).catch(() => false);
 if (!touchOverlayActive) errors.push('Touch combat overlay never appeared on a touch device.');
+let touchPaused = false;
+if (touchOverlayActive) {
+  const touchPauseDeadline = Date.now() + 15000;
+  while (!touchPaused && Date.now() < touchPauseDeadline) {
+    await touchPage.tap('#touch-btn-pause');
+    await new Promise((r) => setTimeout(r, 500));
+    touchPaused = await touchPage.evaluate(
+      () => getComputedStyle(document.getElementById('pause-screen')).display !== 'none'
+    );
+  }
+  if (!touchPaused) errors.push('Touch pause button did not open the pause menu.');
+}
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

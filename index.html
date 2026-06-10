@@ -880,6 +880,14 @@
       background: rgba(245, 217, 154, 0.4);
       color: #0a0a0e;
     }
+    #touch-btn-pause {
+      left: 50%;
+      top: 10px;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 44px;
+      font-size: 13px;
+    }
     #touch-btn-thrust { right: 78px; top: 0; }
     #touch-btn-quick { right: 146px; top: 78px; }
     #touch-btn-heavy { right: 10px; top: 78px; }
@@ -2812,6 +2820,7 @@
           <div id="touch-stick-nub"></div>
         </div>
       </div>
+      <button class="touch-btn" id="touch-btn-pause">&#10074;&#10074;</button>
       <div id="touch-buttons">
         <button class="touch-btn" id="touch-btn-thrust" data-taction="thrust">THR</button>
         <button class="touch-btn" id="touch-btn-quick" data-taction="quick">QCK</button>

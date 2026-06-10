@@ -115,6 +115,12 @@ export class TouchControls {
   }
 
   _bindButtons() {
+    // Pause taps re-dispatch as Escape so Game's pause handling stays single-path.
+    document.getElementById('touch-btn-pause')?.addEventListener('pointerdown', (e) => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true }));
+      e.preventDefault();
+    });
+
     for (const btn of this.el.querySelectorAll('[data-taction]')) {
       const action = btn.dataset.taction;
       btn.addEventListener('pointerdown', (e) => {

@@ -78,6 +78,7 @@ export class GamepadManager {
     ];
     this._menuPrev = [{}, {}];
     this._anyButtonDown = false;
+    this._startEdge = false;
   }
 
   static available() {
@@ -94,6 +95,7 @@ export class GamepadManager {
     }
 
     this._anyButtonDown = false;
+    this._startEdge = false;
 
     for (let slot = 0; slot < 2; slot++) {
       const player = this.players[slot];
@@ -128,9 +130,14 @@ export class GamepadManager {
     const x = pad.axes[0] ?? 0;
     const y = pad.axes[1] ?? 0;
 
+    // Start is the pause toggle (read via startPressed), not a menu confirm.
+    const startNow = buttonDown(pad, BTN.start);
+    if (startNow && !prev._start) this._startEdge = true;
+    prev._start = startNow;
+
     // Raw (screen-space) directions — menu navigation is never side-inverted.
     const state = {
-      Enter: buttonDown(pad, BTN.a) || buttonDown(pad, BTN.start),
+      Enter: buttonDown(pad, BTN.a),
       Escape: buttonDown(pad, BTN.b),
       ArrowLeft: buttonDown(pad, BTN.dpadLeft) || x < -STICK_DEADZONE,
       ArrowRight: buttonDown(pad, BTN.dpadRight) || x > STICK_DEADZONE,
@@ -160,5 +167,10 @@ export class GamepadManager {
 
   anyButtonDown() {
     return this._anyButtonDown;
+  }
+
+  // True for the single update in which any pad's Start button was pressed.
+  startPressed() {
+    return this._startEdge;
   }
 }

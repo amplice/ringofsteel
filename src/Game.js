@@ -228,14 +228,7 @@ export class Game {
       this.ui.select.setOnlineStatus('Disconnected. Browse a public room, host one, quick match, or enter a direct code manually.');
     };
 
-    this.ui.victory.onContinue = () => {
-      this._stopOnlineLobbyRefresh();
-      this._disconnectDiscoverySession();
-      this._disconnectOnlineSession();
-      this.gameState = GameState.TITLE;
-      this._cleanupFighters();
-      this.ui.showTitle();
-    };
+    this.ui.victory.onContinue = () => this._exitToTitle();
 
     this.ui.victory.onRematch = async () => {
       if (this.mode === 'online' || !this._lastMatchChars) return;
@@ -243,17 +236,16 @@ export class Game {
       await this._startMatch(this._lastMatchChars.p1Char, this._lastMatchChars.p2Char);
     };
 
-    this.ui.victory.onCharacterSelect = () => {
-      this._stopOnlineLobbyRefresh();
-      this._disconnectDiscoverySession();
-      this._disconnectOnlineSession();
-      this._cleanupFighters();
-      this.gameState = GameState.SELECT;
-      this.ui.showSelect();
-      this.ui.select.resetOnlineState();
-      this.ui.select.setPublicLobbies([]);
-      this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
-    };
+    this.ui.victory.onCharacterSelect = () => this._exitToSelect();
+
+    this.ui.pause.onResume = () => this._resumeFromPause();
+    this.ui.pause.onCharacterSelect = () => this._exitToSelect();
+    this.ui.pause.onMainMenu = () => this._exitToTitle();
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || e._fromGamepad) return;
+      if (this.gameState === GameState.FIGHTING) this._pauseMatch();
+    });
 
     this.clock.start();
     this._loop();
@@ -304,6 +296,39 @@ export class Game {
     this.cameraController.currentLookAt.set(...preset.lookAt);
     this.cameraController.targetLookAt.set(...preset.lookAt);
     this.cameraController.targetPosition.copy(this.camera.position);
+  }
+
+  _exitToTitle() {
+    this._stopOnlineLobbyRefresh();
+    this._disconnectDiscoverySession();
+    this._disconnectOnlineSession();
+    this.gameState = GameState.TITLE;
+    this._cleanupFighters();
+    this.ui.showTitle();
+  }
+
+  _exitToSelect() {
+    this._stopOnlineLobbyRefresh();
+    this._disconnectDiscoverySession();
+    this._disconnectOnlineSession();
+    this._cleanupFighters();
+    this.gameState = GameState.SELECT;
+    this.ui.showSelect();
+    this.ui.select.resetOnlineState();
+    this.ui.select.setPublicLobbies([]);
+    this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
+  }
+
+  _pauseMatch() {
+    if (this.gameState !== GameState.FIGHTING || this.mode === 'online') return;
+    this.gameState = GameState.PAUSED;
+    this.ui.pause.show();
+  }
+
+  _resumeFromPause() {
+    if (this.gameState !== GameState.PAUSED) return;
+    this.gameState = GameState.FIGHTING;
+    this.ui.pause.hide();
   }
 
   async _startMatch(p1Char, p2Char) {
@@ -917,6 +942,11 @@ export class Game {
 
   _fixedUpdate(dt) {
     this.input.update(this.clock.frameCount);
+
+    if (this.input.gamepads.startPressed()) {
+      if (this.gameState === GameState.FIGHTING) this._pauseMatch();
+      else if (this.gameState === GameState.PAUSED) this._resumeFromPause();
+    }
 
     switch (this.gameState) {
       case GameState.ROUND_INTRO:

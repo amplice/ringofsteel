@@ -68,7 +68,33 @@ const focusedAfterArrows = await page.evaluate(() => {
   return el ? (el.id || el.dataset.stage || el.dataset.char || el.dataset.mode || el.dataset.diff || el.textContent.trim().slice(0, 24)) : null;
 });
 
-console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, errors: errors.slice(0, 10) }, null, 2));
+// Start a VS COMPUTER fight, wait for the HUD, then verify Escape pauses
+// and resumes the match.
+await page.click('#start-fight-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+  { timeout: 30000 }
+).catch(() => errors.push('HUD never became visible after starting a fight.'));
+
+let pauseVisible = false;
+const pauseDeadline = Date.now() + 15000;
+while (!pauseVisible && Date.now() < pauseDeadline) {
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 500));
+  pauseVisible = await page.evaluate(
+    () => getComputedStyle(document.getElementById('pause-screen')).display !== 'none'
+  );
+}
+if (!pauseVisible) errors.push('Escape never opened the pause menu during the fight.');
+
+await page.keyboard.press('Escape');
+await new Promise((r) => setTimeout(r, 300));
+const pauseClosed = await page.evaluate(
+  () => getComputedStyle(document.getElementById('pause-screen')).display === 'none'
+);
+if (!pauseClosed) errors.push('Escape did not close the pause menu.');
+
+console.log(JSON.stringify({ titleVisible, ...state, focusedAfterArrows, pauseVisible, pauseClosed, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

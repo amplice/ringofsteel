@@ -4,6 +4,7 @@ export const GameState = {
   SELECT: 'select',
   ROUND_INTRO: 'round_intro',
   FIGHTING: 'fighting',
+  PAUSED: 'paused',
   KILL_CAM: 'kill_cam',
   ROUND_END: 'round_end',
   VICTORY: 'victory',

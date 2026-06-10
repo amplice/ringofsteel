@@ -3,6 +3,7 @@ import { TitleScreen } from './TitleScreen.js';
 import { CharacterSelect } from './CharacterSelect.js';
 import { HUD } from './HUD.js';
 import { VictoryScreen } from './VictoryScreen.js';
+import { PauseMenu } from './PauseMenu.js';
 
 export class UIManager {
   constructor() {
@@ -11,6 +12,7 @@ export class UIManager {
     this.select = new CharacterSelect();
     this.hud = new HUD();
     this.victory = new VictoryScreen();
+    this.pause = new PauseMenu();
     this.animPlayer = null;
     this._animPlayerPromise = null;
   }
@@ -42,6 +44,7 @@ export class UIManager {
     this.select.hide();
     this.hud.hide();
     this.victory.hide();
+    this.pause.hide();
     if (this.animPlayer) {
       this.animPlayer.hide();
     }

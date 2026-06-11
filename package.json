@@ -17,7 +17,7 @@
     "sim:regression": "node scripts/combat-regression.mjs",
     "sim:selfplay": "node scripts/selfplay-tournament.mjs",
     "sim:analyze": "node scripts/analyze-selfplay.mjs",
-    "stability:check": "npm run build && npm run sim:regression",
+    "stability:check": "npm run build && npm run sim:regression && npm run smoke:boot",
     "smoke:boot": "node scripts/boot-smoke.mjs dist",
     "multiplayer:server": "node server/multiplayer-server.mjs",
     "multiplayer:smoke": "node scripts/smoke-multiplayer.mjs",

@@ -5,6 +5,9 @@ import { getDefaultMultiplayerWsUrl } from '../net/NetConfig.js';
 import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
 
 const CONTROLS_SEEN_KEY = 'ring-of-steel-controls-seen';
+const LOADOUT_KEY = 'ring-of-steel-loadout';
+const KNOWN_MODES = ['ai', 'gauntlet', 'pvp', 'online', 'training', 'watch'];
+const KNOWN_DIFFICULTIES = ['easy', 'medium', 'hard'];
 
 const PREVIEW_FRONT_YAW = {
   spearman: Math.PI / 2,
@@ -31,6 +34,7 @@ export class CharacterSelect {
     this.stageId = DEFAULT_STAGE;
     this.p1Char = DEFAULT_CHAR;
     this.p2Char = DEFAULT_CHAR;
+    this._restoreLoadout();
     this.difficultySection = document.getElementById('difficulty-section');
     this.stageContainer = document.getElementById('stage-options');
     this.onlineSection = document.getElementById('online-section');
@@ -97,6 +101,7 @@ export class CharacterSelect {
     this._setupButtons();
     this._buildStageButtons();
     this._buildCharButtons();
+    this._syncStaticButtons();
     this._updateModeUI();
     this._updateVersusPreview();
     this.clearOnlineLobbyInfo();
@@ -138,6 +143,7 @@ export class CharacterSelect {
     // Start button
     document.getElementById('start-fight-btn').addEventListener('click', () => {
       if (this._onlineBusy) return;
+      this._persistLoadout();
       if (this.onConfirm) {
         this.onConfirm({
           mode: this.mode,
@@ -730,6 +736,7 @@ export class CharacterSelect {
       </span>
     `;
     randomBtn.title = 'A different arena every match.';
+    if (this.stageId === 'random') randomBtn.classList.add('active');
     randomBtn.addEventListener('click', () => {
       this.stageContainer.querySelectorAll('.select-btn').forEach(b => b.classList.remove('active'));
       randomBtn.classList.add('active');
@@ -951,7 +958,7 @@ export class CharacterSelect {
     this._updateHeroPreviewCharacter('p1', this.p1Char, true);
     this._updateHeroPreviewCharacter('p2', this.p2Char, true);
     this._startHeroPreviewLoop();
-    if (this.onStagePreview) this.onStagePreview(this.stageId);
+    if (this.onStagePreview && this.stageId !== 'random') this.onStagePreview(this.stageId);
     window.addEventListener('keydown', this._keyHandler);
     window.addEventListener('keydown', this._idleReset);
     window.addEventListener('pointerdown', this._idleReset);
@@ -988,6 +995,45 @@ export class CharacterSelect {
   _setControlsOpen(open) {
     if (!this.controlsModal) return;
     this.controlsModal.classList.toggle('open', open);
+  }
+
+  // Last confirmed loadout survives across sessions.
+  _persistLoadout() {
+    try {
+      window.localStorage?.setItem(LOADOUT_KEY, JSON.stringify({
+        mode: this.mode,
+        difficulty: this.difficulty,
+        stageId: this.stageId,
+        p1Char: this.p1Char,
+        p2Char: this.p2Char,
+      }));
+    } catch {
+      // Storage unavailable — selection just won't stick.
+    }
+  }
+
+  _restoreLoadout() {
+    try {
+      const raw = window.localStorage?.getItem(LOADOUT_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (KNOWN_MODES.includes(saved.mode)) this.mode = saved.mode;
+      if (KNOWN_DIFFICULTIES.includes(saved.difficulty)) this.difficulty = saved.difficulty;
+      if (saved.stageId === 'random' || STAGE_DEFS[saved.stageId]) this.stageId = saved.stageId;
+      if (CHARACTER_DEFS[saved.p1Char]) this.p1Char = saved.p1Char;
+      if (CHARACTER_DEFS[saved.p2Char]) this.p2Char = saved.p2Char;
+    } catch {
+      // Corrupt or unavailable — defaults stand.
+    }
+  }
+
+  _syncStaticButtons() {
+    document.querySelectorAll('#mode-options .select-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.mode === this.mode);
+    });
+    document.querySelectorAll('#difficulty-options .select-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.diff === this.difficulty);
+    });
   }
 
   // First ever visit to the select screen: show the controls once.

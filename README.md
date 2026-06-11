@@ -42,7 +42,9 @@ best clear times.
 ```bash
 npm run sim:regression     # deterministic combat regression suite
 npm run smoke:boot         # headless browser E2E (boot, menus, fight, pause,
-                           # training, gauntlet, victory, replay, touch pass)
+                           # training, gauntlet, survival, victory, replay,
+                           # rebinding, records, touch pass)
+npm run smoke:gauntlet     # plays a full gauntlet to completion in a browser
 npm run multiplayer:check  # build + parity + ws/rematch/browser/disconnect smokes
 npm run stability:check    # build + sim regression
 ```

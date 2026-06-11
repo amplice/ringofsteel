@@ -19,7 +19,7 @@ const BINDABLE_ACTIONS = [
 
 const CONTROLS_SEEN_KEY = 'ring-of-steel-controls-seen';
 const LOADOUT_KEY = 'ring-of-steel-loadout';
-const KNOWN_MODES = ['ai', 'gauntlet', 'pvp', 'online', 'training', 'watch'];
+const KNOWN_MODES = ['ai', 'gauntlet', 'survival', 'pvp', 'online', 'training', 'watch'];
 const KNOWN_DIFFICULTIES = ['easy', 'medium', 'hard'];
 
 const PREVIEW_FRONT_YAW = {
@@ -622,7 +622,9 @@ export class CharacterSelect {
             ? 'Dummy'
             : this.mode === 'gauntlet'
               ? 'The Gauntlet'
-              : 'Player 2';
+              : this.mode === 'survival'
+                ? 'Endless Foes'
+                : 'Player 2';
     if (p2Label) {
       p2Label.textContent = p2Role;
     }
@@ -658,10 +660,16 @@ export class CharacterSelect {
       imageEl: this.p2VersusImg,
       sideEl: this.p2VersusSide,
     });
-    if (this.mode === 'gauntlet') {
-      // The ladder picks the foes — show the challenge and your record instead.
-      if (this.p2VersusName) this.p2VersusName.textContent = 'THE GAUNTLET';
-      if (this.p2VersusWeapon) this.p2VersusWeapon.textContent = this._gauntletBestLabel();
+    if (this.mode === 'gauntlet' || this.mode === 'survival') {
+      // The mode picks the foes — show the challenge and your record instead.
+      if (this.p2VersusName) {
+        this.p2VersusName.textContent = this.mode === 'gauntlet' ? 'THE GAUNTLET' : 'ENDLESS FOES';
+      }
+      if (this.p2VersusWeapon) {
+        this.p2VersusWeapon.textContent = this.mode === 'gauntlet'
+          ? this._gauntletBestLabel()
+          : this._survivalBestLabel();
+      }
       if (this.p2VersusImg) {
         this.p2VersusImg.removeAttribute('src');
         this.p2VersusImg.classList.remove('ready');
@@ -686,6 +694,16 @@ export class CharacterSelect {
     } catch {
       return null;
     }
+  }
+
+  _survivalBestLabel() {
+    try {
+      const saved = Number(window.localStorage?.getItem(`ring-of-steel-survival-best-${this.p1Char}`));
+      if (Number.isFinite(saved) && saved > 0) return `BEST STREAK ${saved}`;
+    } catch {
+      // Storage unavailable.
+    }
+    return 'NO RUNS YET';
   }
 
   _gauntletBestLabel() {
@@ -787,15 +805,17 @@ export class CharacterSelect {
       this.onlineSection.style.display = this.mode === 'online' ? 'block' : 'none';
     }
     if (this.roundsSection) {
-      // Online uses the server's fixed length, training has no rounds, and
-      // gauntlet stays canonical so best clear times remain comparable.
+      // Online uses the server's fixed length, training has no rounds,
+      // gauntlet stays canonical for comparable bests, and survival duels
+      // are always a single round.
       this.roundsSection.style.display =
-        (this.mode === 'online' || this.mode === 'training' || this.mode === 'gauntlet')
+        (this.mode === 'online' || this.mode === 'training' || this.mode === 'gauntlet' || this.mode === 'survival')
           ? 'none'
           : 'block';
     }
     if (this.p2Column) {
-      this.p2Column.style.display = (this.mode === 'online' || this.mode === 'gauntlet') ? 'none' : '';
+      this.p2Column.style.display =
+        (this.mode === 'online' || this.mode === 'gauntlet' || this.mode === 'survival') ? 'none' : '';
     }
     if (this.startBtn) {
       this._updateStartButton();
@@ -814,7 +834,9 @@ export class CharacterSelect {
           ? 'TRAIN'
           : this.mode === 'gauntlet'
             ? 'BEGIN'
-            : 'FIGHT';
+            : this.mode === 'survival'
+              ? 'SURVIVE'
+              : 'FIGHT';
       this.startBtn.disabled = false;
       if (this.onlineLeaveBtn) this.onlineLeaveBtn.style.display = 'none';
       return;

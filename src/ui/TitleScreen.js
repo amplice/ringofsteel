@@ -40,7 +40,17 @@ export class TitleScreen {
       // which have no Enter key.
       this._tapHandler = (e) => {
         if (e.target?.closest?.('#anim-player-btn')) return;
-        if (this.onStart) this.onStart();
+        if (!this.onStart) return;
+        // The tap that starts the game also fires a click after the select
+        // screen appears, landing on whatever control is under the finger —
+        // swallow that one click.
+        const swallow = (clickEvent) => {
+          clickEvent.stopPropagation();
+          clickEvent.preventDefault();
+        };
+        window.addEventListener('click', swallow, { capture: true, once: true });
+        window.setTimeout(() => window.removeEventListener('click', swallow, true), 600);
+        this.onStart();
       };
       this.el.addEventListener('pointerdown', this._tapHandler);
     }

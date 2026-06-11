@@ -188,7 +188,8 @@ export class Game {
       this.sound.unlock().catch(() => {});
       this.mode = config.mode;
       this.difficulty = config.difficulty;
-      const customLength = config.mode !== 'online' && config.mode !== 'gauntlet';
+      const customLength =
+        config.mode !== 'online' && config.mode !== 'gauntlet' && config.mode !== 'survival';
       this.roundsToWin = customLength && [1, 3, 5].includes(config.rounds)
         ? config.rounds
         : ROUNDS_TO_WIN;
@@ -201,6 +202,10 @@ export class Game {
       }
       if (config.mode === 'gauntlet') {
         await this._startGauntlet(config.p1Char);
+        return;
+      }
+      if (config.mode === 'survival') {
+        await this._startSurvival(config.p1Char);
         return;
       }
       await this._startMatch(config.p1Char, config.p2Char);
@@ -258,6 +263,14 @@ export class Game {
 
     this.ui.victory.onRematch = async () => {
       this.sound.unlock().catch(() => {});
+      if (this.mode === 'survival' && this._survival) {
+        if (this._survival.alive) {
+          await this._nextSurvivalMatch();
+        } else {
+          await this._startSurvival(this._survival.player);
+        }
+        return;
+      }
       if (this.mode === 'online') {
         // Online rematch is a fresh ready handshake in the same lobby; the
         // match starts when the opponent agrees (server sends match_start).
@@ -364,6 +377,99 @@ export class Game {
     this.cameraController.currentLookAt.set(...preset.lookAt);
     this.cameraController.targetLookAt.set(...preset.lookAt);
     this.cameraController.targetPosition.copy(this.camera.position);
+  }
+
+  // Survival: an endless run of single-round duels against random foes with
+  // escalating difficulty. One loss ends the run; best streak persists.
+  async _startSurvival(p1Char) {
+    const stageIds = Object.keys(STAGE_DEFS).filter((id) => id !== 'test');
+    this._survival = {
+      player: p1Char,
+      streak: 0,
+      alive: true,
+      stageIds,
+      stageOffset: Math.floor(Math.random() * stageIds.length),
+    };
+    await this._nextSurvivalMatch();
+  }
+
+  async _nextSurvivalMatch() {
+    const s = this._survival;
+    if (!s) return;
+    const charIds = Object.keys(CHARACTER_DEFS);
+    const opponent = charIds[Math.floor(Math.random() * charIds.length)];
+    this.difficulty = s.streak < 2 ? 'easy' : s.streak < 5 ? 'medium' : 'hard';
+    this.currentStageId = normalizeStageId(
+      s.stageIds[(s.stageOffset + s.streak) % s.stageIds.length]
+    );
+    this.roundsToWin = 1; // every survival duel is a single round
+    await this._startMatch(s.player, opponent);
+  }
+
+  _endSurvivalMatch(playerWon) {
+    this.gameState = GameState.VICTORY;
+    this.input.touch.hide();
+    const s = this._survival;
+    if (!s) return;
+    const detail = {
+      winnerCharId: this._resolveWinnerCharId(),
+      allowRematch: true,
+      allowReplay: (this._koReplayBuffer?.length ?? 0) > 0,
+      stats: this._buildMatchStatsLine(),
+    };
+
+    if (playerWon) {
+      s.streak++;
+      this._lastVictoryView = {
+        winnerName: 'PLAYER 1',
+        p1: this.p1Score,
+        p2: this.p2Score,
+        detail: {
+          ...detail,
+          title: `STREAK ${s.streak}`,
+          subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()} · BEST ${this._survivalBest(s.player)}`,
+          primaryLabel: 'NEXT FOE',
+        },
+      };
+    } else {
+      s.alive = false;
+      const best = this._recordSurvivalBest(s);
+      this._lastVictoryView = {
+        winnerName: 'COMPUTER',
+        p1: this.p1Score,
+        p2: this.p2Score,
+        detail: {
+          ...detail,
+          title: 'RUN OVER',
+          subtitle: `STREAK ${s.streak}${best.isNew ? ' · NEW BEST' : ` · BEST ${best.value}`}`,
+          primaryLabel: 'NEW RUN',
+        },
+      };
+    }
+    const view = this._lastVictoryView;
+    this.ui.showVictory(view.winnerName, view.p1, view.p2, view.detail);
+  }
+
+  _survivalBest(charId) {
+    try {
+      const saved = Number(window.localStorage?.getItem(`ring-of-steel-survival-best-${charId}`));
+      return Number.isFinite(saved) && saved > 0 ? saved : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  _recordSurvivalBest(s) {
+    const best = this._survivalBest(s.player);
+    const isNew = s.streak > best;
+    if (isNew) {
+      try {
+        window.localStorage?.setItem(`ring-of-steel-survival-best-${s.player}`, String(s.streak));
+      } catch {
+        // Storage unavailable.
+      }
+    }
+    return { isNew, value: Math.max(best, s.streak) };
   }
 
   // Gauntlet: face every other character with ramping difficulty, then a
@@ -761,7 +867,7 @@ export class Game {
   }
 
   async _startMatch(p1Char, p2Char) {
-    if (this._stageChoice === 'random' && this.mode !== 'gauntlet') {
+    if (this._stageChoice === 'random' && this.mode !== 'gauntlet' && this.mode !== 'survival') {
       this.currentStageId = this._resolveStageChoice('random');
     }
     this._lastMatchChars = { p1Char, p2Char };
@@ -781,7 +887,7 @@ export class Game {
       this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
       this.aiMatchRecorder.discard();
-    } else if (this.mode === 'ai' || this.mode === 'gauntlet') {
+    } else if (this.mode === 'ai' || this.mode === 'gauntlet' || this.mode === 'survival') {
       this.aiController1 = null;
       this.aiController2 = this._createCpuController(p2.charDef.id, this.difficulty, p1.charDef.id);
       this.aiController = this.aiController2;
@@ -825,7 +931,9 @@ export class Game {
             ? 'DUMMY'
             : this.mode === 'gauntlet'
               ? `${(p2.charDef.displayName ?? 'FOE').toUpperCase()} ${this._gauntlet ? `${this._gauntlet.index + 1}/${this._gauntlet.opponents.length}` : ''}`.trim()
-              : 'PLAYER 2',
+              : this.mode === 'survival'
+                ? `${(p2.charDef.displayName ?? 'FOE').toUpperCase()} · STREAK ${this._survival?.streak ?? 0}`
+                : 'PLAYER 2',
     );
     this.ui.hud.setFighterLoadouts(p1.charDef, p2.charDef);
     this.ui.hud.updateRoundPips(0, 0);
@@ -1868,12 +1976,16 @@ export class Game {
       if (this.p1Score >= this.roundsToWin) {
         if (this.mode === 'gauntlet') {
           this._endGauntletMatch(true);
+        } else if (this.mode === 'survival') {
+          this._endSurvivalMatch(true);
         } else {
           this._showVictory(this.mode === 'watch' ? 'AI 1' : 'PLAYER 1');
         }
       } else if (this.p2Score >= this.roundsToWin) {
         if (this.mode === 'gauntlet') {
           this._endGauntletMatch(false);
+        } else if (this.mode === 'survival') {
+          this._endSurvivalMatch(false);
         } else {
           const name = this.mode === 'ai' ? 'COMPUTER' : (this.mode === 'watch' ? 'AI 2' : 'PLAYER 2');
           this._showVictory(name);

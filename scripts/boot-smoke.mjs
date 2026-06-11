@@ -187,6 +187,48 @@ await page.waitForFunction(
   () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
   { timeout: 10000 }
 ).catch(() => errors.push('Could not get back to the select screen after the gauntlet.'));
+// SURVIVAL: mode hides P2/difficulty/rounds, button reads SURVIVE, and the
+// HUD shows a streak counter; exit via pause MAIN MENU.
+await page.click('#mode-options [data-mode="survival"]');
+const survivalUI = await page.evaluate(() => ({
+  startLabel: document.getElementById('start-fight-btn').textContent,
+  versusName: document.getElementById('p2-versus-name')?.textContent ?? null,
+  versusRecord: document.getElementById('p2-versus-weapon')?.textContent ?? null,
+  roundsHidden: getComputedStyle(document.getElementById('rounds-section')).display === 'none',
+}));
+if (survivalUI.startLabel !== 'SURVIVE' || survivalUI.versusName !== 'ENDLESS FOES' ||
+    survivalUI.versusRecord !== 'NO RUNS YET' || !survivalUI.roundsHidden) {
+  errors.push(`Survival select UI wrong: ${JSON.stringify(survivalUI)}`);
+}
+await page.click('#start-fight-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+  { timeout: 45000 }
+).catch(() => errors.push('HUD never became visible after starting survival.'));
+const survivalP2Name = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent).catch(() => null);
+if (!/ · STREAK 0$/.test(survivalP2Name ?? '')) {
+  errors.push(`Survival HUD label was ${JSON.stringify(survivalP2Name)}, expected a STREAK 0 counter.`);
+}
+let survivalPaused = false;
+const survivalPauseDeadline = Date.now() + 15000;
+while (!survivalPaused && Date.now() < survivalPauseDeadline) {
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 500));
+  survivalPaused = await page.evaluate(
+    () => getComputedStyle(document.getElementById('pause-screen')).display !== 'none'
+  );
+}
+if (!survivalPaused) errors.push('Could not pause the survival match.');
+await page.click('#pause-title-btn');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('title-screen')).display !== 'none',
+  { timeout: 10000 }
+).catch(() => errors.push('MAIN MENU did not return to the title from survival.'));
+await page.keyboard.press('Enter');
+await page.waitForFunction(
+  () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',
+  { timeout: 10000 }
+).catch(() => errors.push('Could not get back to the select screen after survival.'));
 await page.click('#mode-options [data-mode="ai"]');
 
 // Start a VS COMPUTER fight on the RANDOM stage card, wait for the HUD, then
@@ -353,7 +395,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, survivalUI, survivalP2Name, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

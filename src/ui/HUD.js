@@ -14,6 +14,11 @@ export class HUD {
     this.p2Name = document.querySelector('.fighter-hud.p2 .fighter-name');
     this.p1Loadout = document.getElementById('p1-loadout');
     this.p2Loadout = document.getElementById('p2-loadout');
+    this.roundsToWin = ROUNDS_TO_WIN;
+  }
+
+  setRoundsToWin(rounds) {
+    this.roundsToWin = rounds || ROUNDS_TO_WIN;
   }
 
   show() {
@@ -64,7 +69,7 @@ export class HUD {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
-    for (let i = 0; i < ROUNDS_TO_WIN; i++) {
+    for (let i = 0; i < this.roundsToWin; i++) {
       const pip = document.createElement('div');
       pip.className = 'pip' + (i < wins ? ' won' : '');
       container.appendChild(pip);

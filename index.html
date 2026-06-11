@@ -1512,6 +1512,7 @@
     .select-options,
     #mode-options,
     #difficulty-options,
+    #rounds-options,
     #stage-options {
       display: grid;
       width: 100%;
@@ -1523,7 +1524,8 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    #difficulty-options {
+    #difficulty-options,
+    #rounds-options {
       grid-template-columns: repeat(3, minmax(0, 1fr));
       max-width: 560px;
     }
@@ -2380,6 +2382,7 @@
 
       #mode-options,
       #difficulty-options,
+      #rounds-options,
       #stage-options,
       .char-select-grid,
       .online-fields,
@@ -2652,6 +2655,15 @@
           <button class="select-btn" data-diff="easy">EASY</button>
           <button class="select-btn active" data-diff="medium">MEDIUM</button>
           <button class="select-btn" data-diff="hard">HARD</button>
+        </div>
+      </div>
+
+      <div class="select-section" id="rounds-section">
+        <h3>Match Length</h3>
+        <div class="select-options" id="rounds-options">
+          <button class="select-btn" data-rounds="1">FIRST TO 1</button>
+          <button class="select-btn active" data-rounds="3">FIRST TO 3</button>
+          <button class="select-btn" data-rounds="5">FIRST TO 5</button>
         </div>
       </div>
 

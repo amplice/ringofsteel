@@ -98,6 +98,7 @@ export class Game {
     this.p1Score = 0;
     this.p2Score = 0;
     this.currentRound = 1;
+    this.roundsToWin = ROUNDS_TO_WIN;
     this.killSlowMoTimer = 0;
     this.animationSandbox = null;
     this.debugOverlay = null;
@@ -187,6 +188,10 @@ export class Game {
       this.sound.unlock().catch(() => {});
       this.mode = config.mode;
       this.difficulty = config.difficulty;
+      const customLength = config.mode !== 'online' && config.mode !== 'gauntlet';
+      this.roundsToWin = customLength && [1, 3, 5].includes(config.rounds)
+        ? config.rounds
+        : ROUNDS_TO_WIN;
       this._stageChoice = config.stageId;
       this.currentStageId = this._resolveStageChoice(config.stageId);
       config.stageId = this.currentStageId; // online lobbies need a concrete stage
@@ -784,6 +789,7 @@ export class Game {
     });
 
     this.ui.showHUD();
+    this.ui.hud.setRoundsToWin(this.roundsToWin);
     if (this.input.touch.available && this.mode !== 'watch') {
       this.input.touch.show();
     }
@@ -1258,6 +1264,7 @@ export class Game {
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
     this.ui.showHUD();
+    this.ui.hud.setRoundsToWin(ROUNDS_TO_WIN);
     if (this.input.touch.available && this.onlineLocalSlot !== null) {
       this.input.touch.show();
     }
@@ -1836,13 +1843,13 @@ export class Game {
         return;
       }
 
-      if (this.p1Score >= ROUNDS_TO_WIN) {
+      if (this.p1Score >= this.roundsToWin) {
         if (this.mode === 'gauntlet') {
           this._endGauntletMatch(true);
         } else {
           this._showVictory(this.mode === 'watch' ? 'AI 1' : 'PLAYER 1');
         }
-      } else if (this.p2Score >= ROUNDS_TO_WIN) {
+      } else if (this.p2Score >= this.roundsToWin) {
         if (this.mode === 'gauntlet') {
           this._endGauntletMatch(false);
         } else {
@@ -1860,7 +1867,7 @@ export class Game {
     this.gameState = GameState.VICTORY;
     this.input.touch.hide();
     if (this.mode === 'ai') {
-      this._recordCharResult(this.fighter1?.charDef?.id, this.p1Score >= ROUNDS_TO_WIN);
+      this._recordCharResult(this.fighter1?.charDef?.id, this.p1Score >= this.roundsToWin);
       this.aiMatchRecorder.finishMatch({
         winnerName,
         p1Score: this.p1Score,
@@ -1881,8 +1888,8 @@ export class Game {
   }
 
   _resolveWinnerCharId() {
-    if (this.p1Score >= ROUNDS_TO_WIN) return this.fighter1?.charDef?.id ?? null;
-    if (this.p2Score >= ROUNDS_TO_WIN) return this.fighter2?.charDef?.id ?? null;
+    if (this.p1Score >= this.roundsToWin) return this.fighter1?.charDef?.id ?? null;
+    if (this.p2Score >= this.roundsToWin) return this.fighter2?.charDef?.id ?? null;
     return null;
   }
 

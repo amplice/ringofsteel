@@ -31,11 +31,13 @@ export class CharacterSelect {
 
     this.mode = 'ai';
     this.difficulty = 'medium';
+    this.rounds = 3;
     this.stageId = DEFAULT_SELECT_STAGE;
     this.p1Char = DEFAULT_CHAR;
     this.p2Char = DEFAULT_CHAR;
     this._restoreLoadout();
     this.difficultySection = document.getElementById('difficulty-section');
+    this.roundsSection = document.getElementById('rounds-section');
     this.stageContainer = document.getElementById('stage-options');
     this.onlineSection = document.getElementById('online-section');
     this.onlineServerUrl = document.getElementById('online-server-url');
@@ -140,6 +142,15 @@ export class CharacterSelect {
       });
     });
 
+    // Match length buttons
+    document.querySelectorAll('#rounds-options .select-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#rounds-options .select-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.rounds = Number(btn.dataset.rounds);
+      });
+    });
+
     // Start button
     document.getElementById('start-fight-btn').addEventListener('click', () => {
       if (this._onlineBusy) return;
@@ -148,6 +159,7 @@ export class CharacterSelect {
         this.onConfirm({
           mode: this.mode,
           difficulty: this.difficulty,
+          rounds: this.rounds,
           stageId: this.stageId,
           p1Char: this.p1Char,
           p2Char: this.p2Char,
@@ -761,6 +773,14 @@ export class CharacterSelect {
     if (this.onlineSection) {
       this.onlineSection.style.display = this.mode === 'online' ? 'block' : 'none';
     }
+    if (this.roundsSection) {
+      // Online uses the server's fixed length, training has no rounds, and
+      // gauntlet stays canonical so best clear times remain comparable.
+      this.roundsSection.style.display =
+        (this.mode === 'online' || this.mode === 'training' || this.mode === 'gauntlet')
+          ? 'none'
+          : 'block';
+    }
     if (this.p2Column) {
       this.p2Column.style.display = (this.mode === 'online' || this.mode === 'gauntlet') ? 'none' : '';
     }
@@ -1003,6 +1023,7 @@ export class CharacterSelect {
       window.localStorage?.setItem(LOADOUT_KEY, JSON.stringify({
         mode: this.mode,
         difficulty: this.difficulty,
+        rounds: this.rounds,
         stageId: this.stageId,
         p1Char: this.p1Char,
         p2Char: this.p2Char,
@@ -1019,6 +1040,7 @@ export class CharacterSelect {
       const saved = JSON.parse(raw);
       if (KNOWN_MODES.includes(saved.mode)) this.mode = saved.mode;
       if (KNOWN_DIFFICULTIES.includes(saved.difficulty)) this.difficulty = saved.difficulty;
+      if ([1, 3, 5].includes(saved.rounds)) this.rounds = saved.rounds;
       if (saved.stageId === 'random' || STAGE_DEFS[saved.stageId]) this.stageId = saved.stageId;
       if (CHARACTER_DEFS[saved.p1Char]) this.p1Char = saved.p1Char;
       if (CHARACTER_DEFS[saved.p2Char]) this.p2Char = saved.p2Char;
@@ -1033,6 +1055,9 @@ export class CharacterSelect {
     });
     document.querySelectorAll('#difficulty-options .select-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.diff === this.difficulty);
+    });
+    document.querySelectorAll('#rounds-options .select-btn').forEach((btn) => {
+      btn.classList.toggle('active', Number(btn.dataset.rounds) === this.rounds);
     });
   }
 
@@ -1098,6 +1123,7 @@ export class CharacterSelect {
 
     add([...document.querySelectorAll('#mode-options .select-btn')]);
     add([...document.querySelectorAll('#difficulty-options .select-btn')]);
+    add([...document.querySelectorAll('#rounds-options .select-btn')]);
     add([this.onlineQuickMatchBtn, this.onlineHostPublicBtn, this.onlineRefreshBtn, this.onlineLeaveBtn]);
     add([...(this.stageContainer?.querySelectorAll('.select-btn') ?? [])]);
     add([...(this.p1Container?.querySelectorAll('.select-btn') ?? [])]);

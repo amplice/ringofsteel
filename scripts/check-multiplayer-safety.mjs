@@ -7,6 +7,7 @@ const STEPS = [
   ['build', ['npm', 'run', 'build']],
   ['parity', ['npm', 'run', 'multiplayer:parity']],
   ['ws smoke', ['npm', 'run', 'multiplayer:smoke']],
+  ['rematch smoke', ['npm', 'run', 'multiplayer:rematch-smoke']],
   ['browser smoke', ['npm', 'run', 'multiplayer:browser-smoke']],
   ['public ui smoke', ['npm', 'run', 'multiplayer:public-ui-smoke']],
   ['disconnect smoke', ['npm', 'run', 'multiplayer:disconnect-smoke']],

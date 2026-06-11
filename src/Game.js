@@ -1135,11 +1135,21 @@ export class Game {
       return;
     }
 
-    if (this.mode === 'online' && this.gameState === GameState.VICTORY) {
+    if (
+      this.mode === 'online' &&
+      (this.gameState === GameState.VICTORY ||
+        this.gameState === GameState.KILL_CAM ||
+        this.gameState === GameState.ROUND_END)
+    ) {
       const opponentReady = detail.players?.some(
         (player) => player.id !== this.onlineSession?.clientId && player.ready && player.connected
       );
-      if (opponentReady) this.ui.victory.setOpponentWantsRematch();
+      if (opponentReady) {
+        // May arrive while we are still in the kill cam; remembered so the
+        // victory screen can show ACCEPT REMATCH when it appears.
+        this._onlineOpponentWantsRematch = true;
+        if (this.gameState === GameState.VICTORY) this.ui.victory.setOpponentWantsRematch();
+      }
       return;
     }
 
@@ -1160,6 +1170,7 @@ export class Game {
       this.currentStageId = normalizeStageId(detail.stageId);
     }
     this.onlineMatchPlayers = detail.players;
+    this._onlineOpponentWantsRematch = false;
     this.currentRound = detail.roundNumber ?? this.currentRound;
     if (Array.isArray(detail.scores)) {
       this.p1Score = detail.scores[0] ?? this.p1Score;
@@ -1253,6 +1264,7 @@ export class Game {
     this.onlineMatchPlayers = null;
     this.onlinePendingMatchResult = null;
     this.onlinePingMs = null;
+    this._onlineOpponentWantsRematch = false;
     this.ui.select.setOnlineBusy(false);
     this.ui.select.setOnlineLocked(false);
     this.ui.select.clearOnlineLobbyInfo();
@@ -1803,6 +1815,9 @@ export class Game {
     };
     this._lastVictoryView = { winnerName, p1: this.p1Score, p2: this.p2Score, detail };
     this.ui.showVictory(winnerName, this.p1Score, this.p2Score, detail);
+    if (this.mode === 'online' && this._onlineOpponentWantsRematch) {
+      this.ui.victory.setOpponentWantsRematch();
+    }
   }
 
   _resolveWinnerCharId() {

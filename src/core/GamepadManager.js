@@ -83,6 +83,9 @@ export class GamepadManager {
     this._menuPrev = [{}, {}];
     this._anyButtonDown = false;
     this._startEdge = false;
+    // gamepad.index pinned per player slot, so one pad disconnecting
+    // mid-match never shifts the other player's pad onto a different fighter.
+    this._slotPadIndex = [null, null];
   }
 
   static available() {
@@ -92,10 +95,21 @@ export class GamepadManager {
   update() {
     if (!GamepadManager.available()) return;
 
-    const pads = [];
+    const padsByIndex = new Map();
     for (const pad of navigator.getGamepads()) {
-      if (pad && pad.connected) pads.push(pad);
-      if (pads.length === 2) break;
+      if (pad && pad.connected) padsByIndex.set(pad.index, pad);
+    }
+
+    // Release slots whose pad vanished; assign new pads to empty slots only.
+    for (let slot = 0; slot < 2; slot++) {
+      const pinned = this._slotPadIndex[slot];
+      if (pinned !== null && !padsByIndex.has(pinned)) this._slotPadIndex[slot] = null;
+    }
+    for (const index of [...padsByIndex.keys()].sort((a, b) => a - b)) {
+      if (this._slotPadIndex.includes(index)) continue;
+      const empty = this._slotPadIndex.indexOf(null);
+      if (empty === -1) break;
+      this._slotPadIndex[empty] = index;
     }
 
     this._anyButtonDown = false;
@@ -103,7 +117,7 @@ export class GamepadManager {
 
     for (let slot = 0; slot < 2; slot++) {
       const player = this.players[slot];
-      const pad = pads[slot];
+      const pad = this._slotPadIndex[slot] !== null ? padsByIndex.get(this._slotPadIndex[slot]) : undefined;
       player.pressed.length = 0;
 
       if (!pad) {

@@ -187,7 +187,9 @@ export class Game {
       this.sound.unlock().catch(() => {});
       this.mode = config.mode;
       this.difficulty = config.difficulty;
-      this.currentStageId = normalizeStageId(config.stageId);
+      this._stageChoice = config.stageId;
+      this.currentStageId = this._resolveStageChoice(config.stageId);
+      config.stageId = this.currentStageId; // online lobbies need a concrete stage
       if (config.mode === 'online') {
         await this._startOnlineSession(config);
         return;
@@ -676,7 +678,17 @@ export class Game {
     this.input.clearBuffers();
   }
 
+  // 'random' re-rolls a concrete arena every time it's resolved.
+  _resolveStageChoice(choice) {
+    if (choice !== 'random') return normalizeStageId(choice);
+    const ids = Object.keys(STAGE_DEFS).filter((id) => id !== 'test');
+    return ids[Math.floor(Math.random() * ids.length)] ?? DEFAULT_STAGE;
+  }
+
   async _startMatch(p1Char, p2Char) {
+    if (this._stageChoice === 'random' && this.mode !== 'gauntlet') {
+      this.currentStageId = this._resolveStageChoice('random');
+    }
     this._lastMatchChars = { p1Char, p2Char };
     this.trainingDummyMode = 'manual';
     this._dummyNextAttackFrame = 0;

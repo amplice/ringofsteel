@@ -150,13 +150,18 @@ await page.waitForFunction(
 ).catch(() => errors.push('Could not get back to the select screen after the gauntlet.'));
 await page.click('#mode-options [data-mode="ai"]');
 
-// Start a VS COMPUTER fight, wait for the HUD, then verify Escape pauses
-// and resumes the match.
+// Start a VS COMPUTER fight on the RANDOM stage card, wait for the HUD, then
+// verify the stage resolved to a concrete arena and Escape pauses/resumes.
+await page.click('[data-stage="random"]');
 await page.click('#start-fight-btn');
 await page.waitForFunction(
   () => getComputedStyle(document.getElementById('hud')).display !== 'none',
   { timeout: 30000 }
 ).catch(() => errors.push('HUD never became visible after starting a fight.'));
+const randomStage = await page.evaluate(() => window.__ringOfSteelGame.currentStageId);
+if (!randomStage || randomStage === 'random' || randomStage === 'test') {
+  errors.push(`RANDOM stage card resolved to ${JSON.stringify(randomStage)}.`);
+}
 
 let pauseVisible = false;
 const pauseDeadline = Date.now() + 15000;
@@ -294,7 +299,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

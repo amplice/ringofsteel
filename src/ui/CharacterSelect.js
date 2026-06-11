@@ -718,6 +718,24 @@ export class CharacterSelect {
       });
       this.stageContainer.appendChild(btn);
     }
+
+    const randomBtn = document.createElement('button');
+    randomBtn.className = 'select-btn stage-card-btn';
+    randomBtn.dataset.stage = 'random';
+    randomBtn.innerHTML = `
+      <span class="stage-card-copy">
+        <span class="stage-card-name">RANDOM</span>
+        <span class="stage-card-boundary">FATE DECIDES</span>
+        <span class="stage-card-note">A different arena every match.</span>
+      </span>
+    `;
+    randomBtn.title = 'A different arena every match.';
+    randomBtn.addEventListener('click', () => {
+      this.stageContainer.querySelectorAll('.select-btn').forEach(b => b.classList.remove('active'));
+      randomBtn.classList.add('active');
+      this.stageId = 'random';
+    });
+    this.stageContainer.appendChild(randomBtn);
   }
 
   _escapeHtml(value) {
@@ -1081,10 +1099,11 @@ export class CharacterSelect {
       el.classList.add('gp-focus');
       el.scrollIntoView?.({ block: 'nearest' });
     }
-    // Live-preview the focused stage; restore the selected one on leaving the row.
-    if (el?.dataset?.stage) {
+    // Live-preview the focused stage; restore the selected one on leaving the
+    // row. The RANDOM card has no stage of its own to preview.
+    if (el?.dataset?.stage && el.dataset.stage !== 'random') {
       this.onStagePreview?.(normalizeStageId(el.dataset.stage));
-    } else if (prev?.dataset?.stage) {
+    } else if (prev?.dataset?.stage && this.stageId !== 'random') {
       this.onStagePreview?.(this.stageId);
     }
   }

@@ -594,10 +594,14 @@ export class Game {
 
     this._replayTick++;
     if (this._replayTick % 2 === 0 && this._replayIndex < this._replayFrames.length) {
-      const snap = this._replayFrames[this._replayIndex++];
-      const [f1, f2] = snap.fighters ?? [];
+      const entry = this._replayFrames[this._replayIndex++];
+      const [f1, f2] = entry.snapshot?.fighters ?? [];
       if (f1) this.fighter1.applyAuthoritativeSnapshot(f1);
       if (f2) this.fighter2.applyAuthoritativeSnapshot(f2);
+      for (const event of entry.events ?? []) {
+        this.gameAudio.handleCombatEvent(event);
+        this._presentCombatEvent(event);
+      }
     }
 
     this.fighter1.updateRemoteView(dt * 0.5);
@@ -1484,7 +1488,7 @@ export class Game {
       controller2,
     });
     if (step.snapshot) {
-      this._koReplayBuffer.push(step.snapshot);
+      this._koReplayBuffer.push({ snapshot: step.snapshot, events: step.events });
       if (this._koReplayBuffer.length > 480) this._koReplayBuffer.shift();
     }
     if (this.mode === 'ai') {
@@ -1564,6 +1568,12 @@ export class Game {
     if (this.mode === 'training' && event.type === 'combat_result') {
       this._updateTrainingReadout(event);
     }
+    this._presentCombatEvent(event);
+  }
+
+  // Audio-free presentation (particles, shake, hitstop, flash) — shared by
+  // live combat and KO replay playback.
+  _presentCombatEvent(event) {
     if (event.type === 'wall_bounce') {
       const contactPoint = new THREE.Vector3(
         event.contactPoint?.x ?? 0,

@@ -570,6 +570,30 @@
     .help-card.wide {
       grid-column: 1 / -1;
     }
+    .rebind-hint {
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: #8d96ab;
+      text-transform: uppercase;
+    }
+    .keycap-btn {
+      background: rgba(8, 9, 14, 0.6);
+      border: 1px solid rgba(245, 217, 154, 0.35);
+      color: var(--ui-gold);
+      font-size: 11px;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+      min-width: 64px;
+      cursor: pointer;
+    }
+    .keycap-btn:hover {
+      border-color: rgba(245, 217, 154, 0.8);
+    }
+    .keycap-btn.listening {
+      color: #0a0a0e;
+      background: rgba(245, 217, 154, 0.85);
+      animation: pulse 1s ease-in-out infinite;
+    }
     .help-row {
       display: flex;
       justify-content: space-between;
@@ -2769,24 +2793,19 @@
         <div class="controls-modal-card">
           <div class="controls-modal-header">
             <h3>Controls</h3>
-            <button class="controls-close-btn" id="controls-close-btn">Close</button>
+            <div>
+              <button class="controls-close-btn" id="controls-reset-btn">Reset Keys</button>
+              <button class="controls-close-btn" id="controls-close-btn">Close</button>
+            </div>
           </div>
           <div class="help-grid">
             <div class="help-card">
-              <h4>Player 1</h4>
-              <div class="help-row"><span class="help-label">Move</span><span class="keycap">A / D</span></div>
-              <div class="help-row"><span class="help-label">Sidestep</span><span class="keycap">W / S</span></div>
-              <div class="help-row"><span class="help-label">Quick / Heavy / Thrust</span><span class="keycap">J / K / L</span></div>
-              <div class="help-row"><span class="help-label">Block / Parry</span><span class="keycap">I</span></div>
-              <div class="help-row"><span class="help-label">Backstep</span><span class="keycap">SPACE</span></div>
+              <h4>Player 1 &mdash; <span class="rebind-hint">click a key to rebind</span></h4>
+              <div id="p1-bindings"></div>
             </div>
             <div class="help-card">
-              <h4>Player 2</h4>
-              <div class="help-row"><span class="help-label">Move</span><span class="keycap">RIGHT / LEFT</span></div>
-              <div class="help-row"><span class="help-label">Sidestep</span><span class="keycap">UP / DOWN</span></div>
-              <div class="help-row"><span class="help-label">Quick / Heavy / Thrust</span><span class="keycap">[ / ] / \</span></div>
-              <div class="help-row"><span class="help-label">Block</span><span class="keycap">=</span></div>
-              <div class="help-row"><span class="help-label">Backstep</span><span class="keycap">R SHIFT</span></div>
+              <h4>Player 2 &mdash; <span class="rebind-hint">click a key to rebind</span></h4>
+              <div id="p2-bindings"></div>
             </div>
             <div class="help-card wide">
               <h4>Gamepad</h4>

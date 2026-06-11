@@ -88,6 +88,32 @@ if (!firstVisitControls) {
   if (stillOpen) errors.push('Controls modal did not close on Enter.');
 }
 
+// Key rebinding: reopen the controls modal, rebind P1 QUICK to U, verify,
+// then reset to defaults.
+await page.click('#controls-btn');
+await new Promise((r) => setTimeout(r, 300));
+await page.click('[data-bind-player="0"][data-bind-action="quick"]');
+await new Promise((r) => setTimeout(r, 200));
+await page.keyboard.press('KeyU');
+await new Promise((r) => setTimeout(r, 200));
+const reboundLabel = await page.evaluate(
+  () => document.querySelector('[data-bind-player="0"][data-bind-action="quick"]').textContent
+);
+const reboundStored = await page.evaluate(
+  () => JSON.parse(localStorage.getItem('ring-of-steel-keys') ?? '[]')?.[0]?.quick ?? null
+);
+if (reboundLabel !== 'U' || reboundStored !== 'KeyU') {
+  errors.push(`Rebinding failed: label=${JSON.stringify(reboundLabel)} stored=${JSON.stringify(reboundStored)}`);
+}
+await page.click('#controls-reset-btn');
+await new Promise((r) => setTimeout(r, 200));
+const resetLabel = await page.evaluate(
+  () => document.querySelector('[data-bind-player="0"][data-bind-action="quick"]').textContent
+);
+if (resetLabel !== 'J') errors.push(`Reset keys failed: label=${JSON.stringify(resetLabel)}`);
+await page.click('#controls-close-btn');
+await new Promise((r) => setTimeout(r, 300));
+
 // Arrow-key navigation on the select screen should focus a control,
 // and Enter should activate it (mode row first -> stays on select screen).
 await page.keyboard.press('ArrowDown');

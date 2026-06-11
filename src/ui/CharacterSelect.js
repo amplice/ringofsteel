@@ -3,6 +3,19 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CHARACTER_DEFS, DEFAULT_CHAR } from '../entities/CharacterDefs.js';
 import { getDefaultMultiplayerWsUrl } from '../net/NetConfig.js';
 import { DEFAULT_SELECT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
+import { prettyKeyLabel } from '../core/InputManager.js';
+
+const BINDABLE_ACTIONS = [
+  ['right', 'Forward'],
+  ['left', 'Back'],
+  ['sidestepUp', 'Sidestep A'],
+  ['sidestepDown', 'Sidestep B'],
+  ['quick', 'Quick'],
+  ['heavy', 'Heavy'],
+  ['thrust', 'Thrust'],
+  ['block', 'Block / Parry'],
+  ['backstep', 'Backstep'],
+];
 
 const CONTROLS_SEEN_KEY = 'ring-of-steel-controls-seen';
 const LOADOUT_KEY = 'ring-of-steel-loadout';
@@ -1015,6 +1028,69 @@ export class CharacterSelect {
   _setControlsOpen(open) {
     if (!this.controlsModal) return;
     this.controlsModal.classList.toggle('open', open);
+    if (!open) this._cancelRebind();
+  }
+
+  // Key rebinding lives in the controls modal; needs the InputManager.
+  setInputManager(input) {
+    this._input = input;
+    document.getElementById('controls-reset-btn')?.addEventListener('click', () => {
+      this._cancelRebind();
+      this._input.resetBindings();
+      this._buildBindingRows();
+    });
+    this._buildBindingRows();
+  }
+
+  _buildBindingRows() {
+    if (!this._input) return;
+    for (let player = 0; player < 2; player++) {
+      const container = document.getElementById(player === 0 ? 'p1-bindings' : 'p2-bindings');
+      if (!container) continue;
+      container.innerHTML = '';
+      for (const [action, label] of BINDABLE_ACTIONS) {
+        const row = document.createElement('div');
+        row.className = 'help-row';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'help-label';
+        labelEl.textContent = label;
+        const btn = document.createElement('button');
+        btn.className = 'keycap-btn';
+        btn.dataset.bindPlayer = String(player);
+        btn.dataset.bindAction = action;
+        btn.textContent = prettyKeyLabel(this._input.getBinding(player, action));
+        btn.addEventListener('click', () => this._startRebind(btn, player, action));
+        row.append(labelEl, btn);
+        container.appendChild(row);
+      }
+    }
+  }
+
+  _startRebind(btn, player, action) {
+    this._cancelRebind(); // may rebuild rows, detaching `btn` — re-query it
+    const liveBtn = document.querySelector(
+      `[data-bind-player="${player}"][data-bind-action="${action}"]`
+    ) ?? btn;
+    liveBtn.classList.add('listening');
+    liveBtn.textContent = 'PRESS KEY';
+    const onKey = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._cancelRebind();
+      if (e.code !== 'Escape' && e.code !== 'Enter' && e.code !== 'NumpadEnter') {
+        this._input.setBinding(player, action, e.code);
+      }
+      this._buildBindingRows();
+    };
+    this._rebindListener = onKey;
+    window.addEventListener('keydown', onKey, true);
+  }
+
+  _cancelRebind() {
+    if (!this._rebindListener) return;
+    window.removeEventListener('keydown', this._rebindListener, true);
+    this._rebindListener = null;
+    this._buildBindingRows();
   }
 
   // Last confirmed loadout survives across sessions.

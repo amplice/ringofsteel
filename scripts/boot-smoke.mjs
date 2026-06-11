@@ -365,6 +365,15 @@ await page.waitForFunction(
   { timeout: 10000 }
 ).catch(() => errors.push('Victory CHANGE FIGHTERS did not return to the select screen.'));
 
+// The injected AI victory recorded a win for spearman — the fighter card's
+// record line should now show it.
+const spearmanRecord = await page.evaluate(
+  () => document.querySelector('#p1-char-options [data-char-record="spearman"]')?.textContent ?? null
+);
+if (spearmanRecord !== '1W-0L') {
+  errors.push(`Fighter card record line was ${JSON.stringify(spearmanRecord)}, expected "1W-0L".`);
+}
+
 await page.click('#mode-options [data-mode="training"]');
 await page.click('#start-fight-btn');
 await page.waitForFunction(
@@ -440,7 +449,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, survivalUI, survivalP2Name, survivalWin, survivalNextName, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, survivalUI, survivalP2Name, survivalWin, survivalNextName, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, spearmanRecord, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

@@ -258,6 +258,7 @@ export class CharacterSelect {
         <span class="char-card-name">${this._escapeHtml(label).toUpperCase()}</span>
         <span class="char-card-weapon">${this._escapeHtml(weapon?.name ?? 'Weapon').toUpperCase()}</span>
         <span class="char-card-note">${this._escapeHtml(weapon?.description ?? 'One clean hit ends the round.')}</span>
+        ${playerIndex === 1 ? `<span class="char-card-record" data-char-record="${this._escapeHtml(id)}" style="display: none;"></span>` : ''}
       </span>
       <span class="char-card-portrait">
         <img alt="" data-char-preview="${this._escapeHtml(id)}" />
@@ -696,28 +697,56 @@ export class CharacterSelect {
     }
   }
 
-  _survivalBestLabel() {
+  _survivalBest(charId = this.p1Char) {
     try {
-      const saved = Number(window.localStorage?.getItem(`ring-of-steel-survival-best-${this.p1Char}`));
-      if (Number.isFinite(saved) && saved > 0) return `BEST STREAK ${saved}`;
+      const saved = Number(window.localStorage?.getItem(`ring-of-steel-survival-best-${charId}`));
+      if (Number.isFinite(saved) && saved > 0) return saved;
     } catch {
       // Storage unavailable.
     }
-    return 'NO RUNS YET';
+    return 0;
   }
 
-  _gauntletBestLabel() {
+  _survivalBestLabel() {
+    const best = this._survivalBest();
+    return best > 0 ? `BEST STREAK ${best}` : 'NO RUNS YET';
+  }
+
+  _gauntletBestTime(charId = this.p1Char) {
     try {
-      const saved = Number(window.localStorage?.getItem(`ring-of-steel-gauntlet-best-${this.p1Char}`));
-      if (Number.isFinite(saved) && saved > 0) {
-        const minutes = Math.floor(saved / 60);
-        const seconds = String(Math.floor(saved % 60)).padStart(2, '0');
-        return `BEST CLEAR ${minutes}:${seconds}`;
-      }
+      const saved = Number(window.localStorage?.getItem(`ring-of-steel-gauntlet-best-${charId}`));
+      if (Number.isFinite(saved) && saved > 0) return saved;
     } catch {
       // Storage unavailable — treat as no record.
     }
-    return 'NO CLEAR YET';
+    return 0;
+  }
+
+  _formatClearTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = String(Math.floor(seconds % 60)).padStart(2, '0');
+    return `${minutes}:${secs}`;
+  }
+
+  _gauntletBestLabel() {
+    const best = this._gauntletBestTime();
+    return best > 0 ? `BEST CLEAR ${this._formatClearTime(best)}` : 'NO CLEAR YET';
+  }
+
+  // Compact one-line history shown on each P1 fighter card.
+  _refreshCharRecords() {
+    for (const span of document.querySelectorAll('[data-char-record]')) {
+      const charId = span.dataset.charRecord;
+      const parts = [];
+      const record = this._charRecordLabel(charId);
+      if (record) parts.push(record);
+      const clear = this._gauntletBestTime(charId);
+      if (clear > 0) parts.push(`CLEAR ${this._formatClearTime(clear)}`);
+      const streak = this._survivalBest(charId);
+      if (streak > 0) parts.push(`STREAK ${streak}`);
+      span.textContent = parts.join(' · ');
+      span.style.display = parts.length ? '' : 'none';
+    }
   }
 
   _syncHeroLabels() {
@@ -1006,6 +1035,7 @@ export class CharacterSelect {
   show() {
     this.el.style.display = 'flex';
     this._updateModeUI();
+    this._refreshCharRecords();
     this._setControlsOpen(false);
     this._maybeShowFirstVisitControls();
     this._renderCharacterPreviewImages();

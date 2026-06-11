@@ -39,6 +39,7 @@ export class TitleScreen {
       // Tap/click anywhere starts the game — required on touch devices,
       // which have no Enter key.
       this._tapHandler = (e) => {
+        if (e.button !== undefined && e.button !== 0) return; // primary button/tap only
         if (e.target?.closest?.('#anim-player-btn')) return;
         if (!this.onStart) return;
         // The tap that starts the game also fires a click after the select

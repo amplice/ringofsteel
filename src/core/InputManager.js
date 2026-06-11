@@ -203,10 +203,13 @@ export class InputManager {
       const raw = window.localStorage?.getItem(KEY_BINDINGS_STORAGE);
       if (!raw) return;
       const saved = JSON.parse(raw);
+      const reserved = ['Escape', 'Enter', 'NumpadEnter', 'KeyM', 'F3'];
       for (let player = 0; player < 2; player++) {
         for (const action of Object.keys(this.keyMaps[player])) {
           const code = saved?.[player]?.[action];
-          if (typeof code === 'string' && code) this.keyMaps[player][action] = code;
+          if (typeof code === 'string' && code && !reserved.includes(code)) {
+            this.keyMaps[player][action] = code;
+          }
         }
       }
     } catch {

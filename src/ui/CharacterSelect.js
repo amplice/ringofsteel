@@ -219,10 +219,11 @@ export class CharacterSelect {
     if (recordsBtn) {
       // Two-step confirm: records are not recoverable.
       recordsBtn.addEventListener('click', () => {
+        window.clearTimeout(this._recordsResetTimer);
         if (!this._recordsResetArmed) {
           this._recordsResetArmed = true;
           recordsBtn.textContent = 'Sure?';
-          window.setTimeout(() => {
+          this._recordsResetTimer = window.setTimeout(() => {
             this._recordsResetArmed = false;
             recordsBtn.textContent = 'Reset Records';
           }, 3000);
@@ -1133,12 +1134,14 @@ export class CharacterSelect {
       if (!container) continue;
       container.innerHTML = '';
 
-      // A key bound to two actions of the same player only ever fires the
-      // first — flag both so the conflict is visible.
+      // A key bound twice for one player only fires the first action, and a
+      // key shared across players drives both fighters — flag either case.
       const codeCounts = {};
-      for (const [action] of BINDABLE_ACTIONS) {
-        const code = this._input.getBinding(player, action);
-        if (code) codeCounts[code] = (codeCounts[code] ?? 0) + 1;
+      for (let p = 0; p < 2; p++) {
+        for (const [action] of BINDABLE_ACTIONS) {
+          const code = this._input.getBinding(p, action);
+          if (code) codeCounts[code] = (codeCounts[code] ?? 0) + 1;
+        }
       }
 
       for (const [action, label] of BINDABLE_ACTIONS) {
@@ -1169,6 +1172,9 @@ export class CharacterSelect {
     liveBtn.classList.add('listening');
     liveBtn.textContent = 'PRESS KEY';
     const onKey = (e) => {
+      // Synthetic gamepad/touch events (stick drift becomes ArrowX keydowns)
+      // must not bind anything — keep waiting for a real key.
+      if (e._fromGamepad || e._synthetic) return;
       e.preventDefault();
       e.stopPropagation();
       this._cancelRebind();

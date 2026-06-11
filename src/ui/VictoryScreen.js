@@ -23,7 +23,11 @@ export class VictoryScreen {
     this._idleReset = this._resetIdleTimer.bind(this);
 
     this.rematchBtn?.addEventListener('click', () => {
-      if (!this._inGrace() && this.onRematch) this.onRematch();
+      if (this._inGrace() || !this.onRematch) return;
+      // Disable until the next show() so a double-click or key repeat can't
+      // start two matches (survival would re-roll a different foe).
+      this.rematchBtn.disabled = true;
+      this.onRematch();
     });
     this.replayBtn?.addEventListener('click', () => {
       if (!this._inGrace() && this.onReplay) this.onReplay();
@@ -84,7 +88,9 @@ export class VictoryScreen {
       const recordable =
         typeof MediaRecorder !== 'undefined' &&
         typeof HTMLCanvasElement !== 'undefined' &&
-        Boolean(HTMLCanvasElement.prototype.captureStream);
+        Boolean(HTMLCanvasElement.prototype.captureStream) &&
+        // Safari has MediaRecorder but not webm — hide rather than fail silently.
+        Boolean(MediaRecorder.isTypeSupported?.('video/webm'));
       this.clipBtn.style.display = detail.allowReplay && recordable ? '' : 'none';
     }
     this.el.style.display = 'flex';

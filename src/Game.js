@@ -173,6 +173,7 @@ export class Game {
       this._disconnectOnlineSession();
       this.gameState = GameState.SELECT;
       this.ui.showSelect();
+      this._syncSelectOnlineRefresh();
       this.ui.select.resetOnlineState();
       this.ui.select.setPublicLobbies([]);
       this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
@@ -314,7 +315,9 @@ export class Game {
         this.gameState === GameState.REPLAY &&
         (e.code === 'Escape' || e.code === 'Enter' || e.code === 'NumpadEnter')
       ) {
-        this._endKoReplay();
+        // Same grace as tap-skip: a held Enter's key repeat must not
+        // instantly skip the replay it just started.
+        if (performance.now() - (this._replayStartedAt ?? 0) >= 500) this._endKoReplay();
         return;
       }
       if (e._fromGamepad) return;
@@ -671,9 +674,18 @@ export class Game {
     this._cleanupFighters();
     this.gameState = GameState.SELECT;
     this.ui.showSelect();
+    this._syncSelectOnlineRefresh();
     this.ui.select.resetOnlineState();
     this.ui.select.setPublicLobbies([]);
     this.ui.select.setOnlineStatus('Browse a public room, host one, quick match, or enter a direct code manually.');
+  }
+
+  // A restored loadout can land on the online tab without a mode click —
+  // make sure the public lobby list refresh runs in that case too.
+  _syncSelectOnlineRefresh() {
+    if (this.ui.select.mode !== 'online') return;
+    this._startOnlineLobbyRefresh();
+    this._refreshPublicLobbies().catch(() => {});
   }
 
   // One-line feedback in training: what the last exchange was and how it
@@ -739,6 +751,7 @@ export class Game {
     this._replayIndex = 0;
     this._replayHold = 0;
     this._replayTick = 0;
+    this._replayStartedAt = performance.now();
     for (const fighter of [this.fighter1, this.fighter2]) {
       // The KO ragdolled the loser; undo it so snapshot playback drives the rig.
       fighter._ragdoll = null;
@@ -752,7 +765,12 @@ export class Game {
     this.ui.hideAll();
     this.input.touch.hide();
     if (!this._replayTapHandler) {
-      this._replayTapHandler = () => this._endKoReplay();
+      // Grace so a double-click on REPLAY/SAVE CLIP can't skip the replay
+      // (and abort the recording) it just started.
+      this._replayTapHandler = () => {
+        if (performance.now() - (this._replayStartedAt ?? 0) < 500) return;
+        this._endKoReplay();
+      };
     }
     window.addEventListener('pointerdown', this._replayTapHandler);
     if (options.record) this._startClipRecording();
@@ -774,23 +792,30 @@ export class Game {
         ? 'video/webm;codecs=vp9'
         : 'video/webm';
       this._clipChunks = [];
+      this._clipStream = stream;
       this._clipRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
       this._clipRecorder.ondataavailable = (e) => {
         if (e.data?.size) this._clipChunks.push(e.data);
       };
       this._clipRecorder.onstop = () => {
-        if (!this._clipChunks.length) return;
-        const blob = new Blob(this._clipChunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `ring-of-steel-ko-${Date.now()}.webm`;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+        if (this._clipChunks.length) {
+          const blob = new Blob(this._clipChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `ring-of-steel-ko-${Date.now()}.webm`;
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+        }
+        this._clipChunks = [];
+        this._clipStream?.getTracks().forEach((track) => track.stop());
+        this._clipStream = null;
       };
       this._clipRecorder.start();
     } catch (err) {
       console.warn('Clip recording unavailable:', err);
+      this._clipStream?.getTracks().forEach((track) => track.stop());
+      this._clipStream = null;
       this._clipRecorder = null;
     }
   }
@@ -1403,6 +1428,10 @@ export class Game {
     this.gameState = GameState.ROUND_INTRO;
     this.stateTimer = 0;
     this.ui.showHUD();
+    // Online length is server-authoritative; clear any stale offline setting
+    // (survival's first-to-1, custom match lengths) so winner resolution and
+    // pips are correct.
+    this.roundsToWin = ROUNDS_TO_WIN;
     this.ui.hud.setRoundsToWin(ROUNDS_TO_WIN);
     if (this.input.touch.available && this.onlineLocalSlot !== null) {
       this.input.touch.show();

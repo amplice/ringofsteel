@@ -1,23 +1,14 @@
 import { ARENA_RADIUS } from '../core/Constants.js';
 
 export const DEFAULT_STAGE = 'test';
+// What a fresh player sees selected — the engine fallback stays 'test'.
+export const DEFAULT_SELECT_STAGE = 'amphitheater';
 export const AMPHITHEATER_PIT_RADIUS = 6.77;
 export const BAMBOO_CLEARING_RADIUS = 4.6;
 export const MOUNTAINTOP_RADIUS = 3.35;
 export const WOODEN_PIER_RADIUS = 3.55;
 
 export const STAGE_DEFS = Object.freeze({
-  test: Object.freeze({
-    id: 'test',
-    displayName: 'Test',
-    description: 'Clean circular gameplay test arena',
-    environment: Object.freeze({
-      background: 0x111118,
-      fogColor: 0x111118,
-      fogDensity: 0.04,
-    }),
-    bounds: Object.freeze({ type: 'circle', radius: ARENA_RADIUS, boundary: 'cliff' }),
-  }),
   amphitheater: Object.freeze({
     id: 'amphitheater',
     displayName: 'Amphitheater',
@@ -825,6 +816,17 @@ export const STAGE_DEFS = Object.freeze({
       cloudY: -1.15,
     }),
     bounds: Object.freeze({ type: 'circle', radius: MOUNTAINTOP_RADIUS, boundary: 'cliff' }),
+  }),
+  test: Object.freeze({
+    id: 'test',
+    displayName: 'Test',
+    description: 'Clean circular gameplay test arena',
+    environment: Object.freeze({
+      background: 0x111118,
+      fogColor: 0x111118,
+      fogDensity: 0.04,
+    }),
+    bounds: Object.freeze({ type: 'circle', radius: ARENA_RADIUS, boundary: 'cliff' }),
   }),
 });
 

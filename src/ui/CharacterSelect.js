@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CHARACTER_DEFS, DEFAULT_CHAR } from '../entities/CharacterDefs.js';
 import { getDefaultMultiplayerWsUrl } from '../net/NetConfig.js';
-import { DEFAULT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
+import { DEFAULT_SELECT_STAGE, STAGE_DEFS, normalizeStageId } from '../arena/StageDefs.js';
 
 const CONTROLS_SEEN_KEY = 'ring-of-steel-controls-seen';
 const LOADOUT_KEY = 'ring-of-steel-loadout';
@@ -31,7 +31,7 @@ export class CharacterSelect {
 
     this.mode = 'ai';
     this.difficulty = 'medium';
-    this.stageId = DEFAULT_STAGE;
+    this.stageId = DEFAULT_SELECT_STAGE;
     this.p1Char = DEFAULT_CHAR;
     this.p2Char = DEFAULT_CHAR;
     this._restoreLoadout();

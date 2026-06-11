@@ -18,6 +18,9 @@ export class VictoryScreen {
     this._previewImages = new Map();
     this._focusEl = null;
     this._keyHandler = this._onKey.bind(this);
+    this.onIdle = null;
+    this._idleTimer = null;
+    this._idleReset = this._resetIdleTimer.bind(this);
 
     this.rematchBtn?.addEventListener('click', () => {
       if (!this._inGrace() && this.onRematch) this.onRematch();
@@ -88,12 +91,28 @@ export class VictoryScreen {
     this._shownAt = performance.now();
     this._setFocus(this._buttons()[0] ?? null);
     window.addEventListener('keydown', this._keyHandler);
+    window.addEventListener('keydown', this._idleReset);
+    window.addEventListener('pointerdown', this._idleReset);
+    window.addEventListener('pointermove', this._idleReset);
+    this._resetIdleTimer();
   }
 
   hide() {
     this.el.style.display = 'none';
     this._setFocus(null);
     window.removeEventListener('keydown', this._keyHandler);
+    window.removeEventListener('keydown', this._idleReset);
+    window.removeEventListener('pointerdown', this._idleReset);
+    window.removeEventListener('pointermove', this._idleReset);
+    window.clearTimeout(this._idleTimer);
+    this._idleTimer = null;
+  }
+
+  // An abandoned victory screen hands back to the title after 90s so the
+  // attract loop takes over (Game skips this for online matches).
+  _resetIdleTimer() {
+    window.clearTimeout(this._idleTimer);
+    this._idleTimer = window.setTimeout(() => this.onIdle?.(), 90000);
   }
 
   _setPortrait(charId) {

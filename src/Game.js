@@ -245,6 +245,13 @@ export class Game {
       if (this.gameState === GameState.SELECT) this._exitToTitle();
     };
 
+    this.ui.victory.onIdle = () => {
+      // Online victories stay put — the opponent may still request a rematch.
+      if (this.gameState === GameState.VICTORY && this.mode !== 'online') {
+        this._exitToTitle();
+      }
+    };
+
     this.ui.victory.onContinue = () => this._exitToTitle();
 
     this.ui.victory.onRematch = async () => {

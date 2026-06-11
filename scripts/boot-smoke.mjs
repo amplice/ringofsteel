@@ -402,6 +402,13 @@ const trainingP2Name = await page.$eval('.fighter-hud.p2 .fighter-name', (el) =>
 if (trainingP2Name !== 'DUMMY') {
   errors.push(`Training mode P2 label was ${JSON.stringify(trainingP2Name)}, expected "DUMMY".`);
 }
+const trainingHint = await page.evaluate(() => {
+  const el = document.getElementById('training-readout');
+  return el?.classList.contains('visible') ? el.textContent : null;
+});
+if (!trainingHint || !trainingHint.includes('DUMMY BEHAVIOR')) {
+  errors.push(`Training hint not shown: ${JSON.stringify(trainingHint)}`);
+}
 
 // Pause inside training: the dummy-behavior control should be visible and cycle.
 let dummyLabel = null;

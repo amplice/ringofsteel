@@ -972,7 +972,19 @@ export class Game {
     this.ui.hud.setFighterLoadouts(p1.charDef, p2.charDef);
     this.ui.hud.updateRoundPips(0, 0);
     this.ui.hud.setOnlineMeta({ visible: false });
+    if (this.mode === 'training') this._showTrainingHint();
     this._startRound();
+  }
+
+  // The dummy presets and round reset live in the pause menu — tell new
+  // players, and remind them how parrying works while they're here.
+  _showTrainingHint() {
+    const el = document.getElementById('training-readout');
+    if (!el) return;
+    el.textContent = 'PAUSE FOR DUMMY BEHAVIOR & ROUND RESET · PARRY = TAP BLOCK JUST BEFORE IMPACT';
+    el.classList.add('visible');
+    window.clearTimeout(this._trainingReadoutTimer);
+    this._trainingReadoutTimer = window.setTimeout(() => el.classList.remove('visible'), 8000);
   }
 
   _attachWeapon(fighter) {

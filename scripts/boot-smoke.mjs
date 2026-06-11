@@ -365,13 +365,13 @@ await page.waitForFunction(
   { timeout: 10000 }
 ).catch(() => errors.push('Victory CHANGE FIGHTERS did not return to the select screen.'));
 
-// The injected AI victory recorded a win for spearman — the fighter card's
-// record line should now show it.
+// The injected AI victory recorded a win for spearman, and the earlier
+// survival kill persisted a streak — the fighter card line shows both.
 const spearmanRecord = await page.evaluate(
   () => document.querySelector('#p1-char-options [data-char-record="spearman"]')?.textContent ?? null
 );
-if (spearmanRecord !== '1W-0L') {
-  errors.push(`Fighter card record line was ${JSON.stringify(spearmanRecord)}, expected "1W-0L".`);
+if (spearmanRecord !== '1W-0L · STREAK 1') {
+  errors.push(`Fighter card record line was ${JSON.stringify(spearmanRecord)}, expected "1W-0L · STREAK 1".`);
 }
 
 await page.click('#mode-options [data-mode="training"]');

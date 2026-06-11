@@ -389,6 +389,7 @@ export class Game {
       alive: true,
       stageIds,
       stageOffset: Math.floor(Math.random() * stageIds.length),
+      startBest: this._survivalBest(p1Char),
     };
     await this._nextSurvivalMatch();
   }
@@ -420,7 +421,9 @@ export class Game {
 
     if (playerWon) {
       s.streak++;
-      const best = this._survivalBest(s.player);
+      // Persist immediately so abandoning (or closing) a hot run keeps it.
+      this._persistSurvivalBest(s.player, s.streak);
+      const beatRecord = s.streak > s.startBest;
       this._lastVictoryView = {
         winnerName: 'PLAYER 1',
         p1: this.p1Score,
@@ -428,13 +431,15 @@ export class Game {
         detail: {
           ...detail,
           title: `STREAK ${s.streak}`,
-          subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()}${best > 0 ? ` · BEST ${best}` : ''}`,
+          subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()}${
+            beatRecord ? ' · NEW BEST' : s.startBest > 0 ? ` · BEST ${s.startBest}` : ''
+          }`,
           primaryLabel: 'NEXT FOE',
         },
       };
     } else {
       s.alive = false;
-      const best = this._recordSurvivalBest(s);
+      const isNew = s.streak > s.startBest;
       this._lastVictoryView = {
         winnerName: 'COMPUTER',
         p1: this.p1Score,
@@ -442,7 +447,9 @@ export class Game {
         detail: {
           ...detail,
           title: 'RUN OVER',
-          subtitle: `STREAK ${s.streak}${best.isNew ? ' · NEW BEST' : best.value > 0 ? ` · BEST ${best.value}` : ''}`,
+          subtitle: `STREAK ${s.streak}${
+            isNew ? ' · NEW BEST' : s.startBest > 0 ? ` · BEST ${s.startBest}` : ''
+          }`,
           primaryLabel: 'NEW RUN',
         },
       };
@@ -460,17 +467,13 @@ export class Game {
     }
   }
 
-  _recordSurvivalBest(s) {
-    const best = this._survivalBest(s.player);
-    const isNew = s.streak > best;
-    if (isNew) {
-      try {
-        window.localStorage?.setItem(`ring-of-steel-survival-best-${s.player}`, String(s.streak));
-      } catch {
-        // Storage unavailable.
-      }
+  _persistSurvivalBest(charId, streak) {
+    if (streak <= this._survivalBest(charId)) return;
+    try {
+      window.localStorage?.setItem(`ring-of-steel-survival-best-${charId}`, String(streak));
+    } catch {
+      // Storage unavailable.
     }
-    return { isNew, value: Math.max(best, s.streak) };
   }
 
   // Gauntlet: face every other character with ramping difficulty, then a

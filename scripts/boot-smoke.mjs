@@ -105,6 +105,19 @@ const reboundStored = await page.evaluate(
 if (reboundLabel !== 'U' || reboundStored !== 'KeyU') {
   errors.push(`Rebinding failed: label=${JSON.stringify(reboundLabel)} stored=${JSON.stringify(reboundStored)}`);
 }
+// Binding QUICK to A (P1 BACK's key) must flag both rows as conflicting.
+await page.click('[data-bind-player="0"][data-bind-action="quick"]');
+await new Promise((r) => setTimeout(r, 200));
+await page.keyboard.press('KeyA');
+await new Promise((r) => setTimeout(r, 200));
+const conflictFlags = await page.evaluate(() => ({
+  quick: document.querySelector('[data-bind-player="0"][data-bind-action="quick"]').classList.contains('conflict'),
+  left: document.querySelector('[data-bind-player="0"][data-bind-action="left"]').classList.contains('conflict'),
+}));
+if (!conflictFlags.quick || !conflictFlags.left) {
+  errors.push(`Conflict marking failed: ${JSON.stringify(conflictFlags)}`);
+}
+
 await page.click('#controls-reset-btn');
 await new Promise((r) => setTimeout(r, 200));
 const resetLabel = await page.evaluate(

@@ -1048,6 +1048,15 @@ export class CharacterSelect {
       const container = document.getElementById(player === 0 ? 'p1-bindings' : 'p2-bindings');
       if (!container) continue;
       container.innerHTML = '';
+
+      // A key bound to two actions of the same player only ever fires the
+      // first — flag both so the conflict is visible.
+      const codeCounts = {};
+      for (const [action] of BINDABLE_ACTIONS) {
+        const code = this._input.getBinding(player, action);
+        if (code) codeCounts[code] = (codeCounts[code] ?? 0) + 1;
+      }
+
       for (const [action, label] of BINDABLE_ACTIONS) {
         const row = document.createElement('div');
         row.className = 'help-row';
@@ -1056,9 +1065,11 @@ export class CharacterSelect {
         labelEl.textContent = label;
         const btn = document.createElement('button');
         btn.className = 'keycap-btn';
+        const code = this._input.getBinding(player, action);
+        if (code && codeCounts[code] > 1) btn.classList.add('conflict');
         btn.dataset.bindPlayer = String(player);
         btn.dataset.bindAction = action;
-        btn.textContent = prettyKeyLabel(this._input.getBinding(player, action));
+        btn.textContent = prettyKeyLabel(code);
         btn.addEventListener('click', () => this._startRebind(btn, player, action));
         row.append(labelEl, btn);
         container.appendChild(row);
@@ -1077,7 +1088,9 @@ export class CharacterSelect {
       e.preventDefault();
       e.stopPropagation();
       this._cancelRebind();
-      if (e.code !== 'Escape' && e.code !== 'Enter' && e.code !== 'NumpadEnter') {
+      // Escape cancels; Enter is the menu confirm; M and F3 are global toggles.
+      const reserved = ['Escape', 'Enter', 'NumpadEnter', 'KeyM', 'F3'];
+      if (!reserved.includes(e.code)) {
         this._input.setBinding(player, action, e.code);
       }
       this._buildBindingRows();

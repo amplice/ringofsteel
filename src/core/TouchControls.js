@@ -117,7 +117,10 @@ export class TouchControls {
   _bindButtons() {
     // Pause taps re-dispatch as Escape so Game's pause handling stays single-path.
     document.getElementById('touch-btn-pause')?.addEventListener('pointerdown', (e) => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true }));
+      const event = new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true });
+      // Tagged so InputManager ignores it (no matching keyup would ever come).
+      event._synthetic = true;
+      window.dispatchEvent(event);
       e.preventDefault();
     });
 

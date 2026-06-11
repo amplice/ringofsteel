@@ -18,17 +18,23 @@ export class VictoryScreen {
     this._keyHandler = this._onKey.bind(this);
 
     this.rematchBtn?.addEventListener('click', () => {
-      if (this.onRematch) this.onRematch();
+      if (!this._inGrace() && this.onRematch) this.onRematch();
     });
     this.replayBtn?.addEventListener('click', () => {
-      if (this.onReplay) this.onReplay();
+      if (!this._inGrace() && this.onReplay) this.onReplay();
     });
     this.selectBtn?.addEventListener('click', () => {
-      if (this.onCharacterSelect) this.onCharacterSelect();
+      if (!this._inGrace() && this.onCharacterSelect) this.onCharacterSelect();
     });
     this.titleBtn?.addEventListener('click', () => {
-      if (this.onContinue) this.onContinue();
+      if (!this._inGrace() && this.onContinue) this.onContinue();
     });
+  }
+
+  // Brief input grace after showing so KO-mashing or a replay skip tap can't
+  // immediately trigger a victory action.
+  _inGrace() {
+    return performance.now() - (this._shownAt ?? 0) < 600;
   }
 
   // The opponent has already readied up — make accepting one press away.
@@ -40,13 +46,13 @@ export class VictoryScreen {
   }
 
   // Online rematch requested: lock the button until the opponent responds.
+  // Focus is cleared (not moved) so a key-repeat Enter can't fall onto
+  // CHANGE FIGHTERS and abort the rematch.
   setRematchWaiting(label = 'WAITING...') {
     if (!this.rematchBtn) return;
     this.rematchBtn.textContent = label;
     this.rematchBtn.disabled = true;
-    if (this._focusEl === this.rematchBtn) {
-      this._setFocus(this._buttons()[0] ?? null);
-    }
+    this._setFocus(null);
   }
 
   setCharacterPreviews(previewImages) {
@@ -67,6 +73,7 @@ export class VictoryScreen {
       this.replayBtn.style.display = detail.allowReplay ? '' : 'none';
     }
     this.el.style.display = 'flex';
+    this._shownAt = performance.now();
     this._setFocus(this._buttons()[0] ?? null);
     window.addEventListener('keydown', this._keyHandler);
   }
@@ -111,6 +118,9 @@ export class VictoryScreen {
   }
 
   _onKey(e) {
+    // Grace window: ignore confirm/back right after showing so attack-button
+    // mashing through the KO can't blow past the victory screen.
+    const inGrace = this._inGrace();
     switch (e.code) {
       case 'ArrowLeft':
       case 'ArrowUp':
@@ -124,11 +134,20 @@ export class VictoryScreen {
         break;
       case 'Enter':
       case 'NumpadEnter': {
-        const target = this._buttons().includes(this._focusEl) ? this._focusEl : this._buttons()[0];
+        if (inGrace) break;
+        const buttons = this._buttons();
+        let target = buttons.includes(this._focusEl) ? this._focusEl : null;
+        if (!target) {
+          // No focus while waiting on an online rematch: do nothing rather
+          // than falling through to another action.
+          if (this.rematchBtn?.disabled) break;
+          target = buttons[0];
+        }
         target?.click();
         break;
       }
       case 'Escape':
+        if (inGrace) break;
         if (this.onContinue) this.onContinue();
         break;
     }

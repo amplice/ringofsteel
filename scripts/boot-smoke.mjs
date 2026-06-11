@@ -204,6 +204,7 @@ const replayBtnVisible = await page.evaluate(
 if (!replayBtnVisible) {
   errors.push('REPLAY KO button was not visible on an offline victory.');
 } else {
+  await new Promise((r) => setTimeout(r, 700)); // victory input grace window
   await page.click('#victory-replay-btn');
   await new Promise((r) => setTimeout(r, 600));
   replayState = await page.evaluate(() => ({
@@ -222,6 +223,7 @@ if (!replayBtnVisible) {
   if (!backAtVictory) errors.push('Escape did not return from the KO replay to the victory screen.');
 }
 
+await new Promise((r) => setTimeout(r, 700)); // victory input grace window
 await page.click('#victory-select-btn');
 await page.waitForFunction(
   () => getComputedStyle(document.getElementById('select-screen')).display !== 'none',

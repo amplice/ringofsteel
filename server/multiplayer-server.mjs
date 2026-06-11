@@ -65,6 +65,7 @@ class MatchRoom {
     this.roundNumber = 1;
     this.scores = [0, 0];
     this.restartTimer = null;
+    this.stopped = false;
   }
 
   start() {
@@ -119,6 +120,7 @@ class MatchRoom {
       this.restartTimer = null;
     }
     this.lobby.phase = reason === 'disconnect' ? 'lobby' : 'match_complete';
+    this.stopped = true;
     if (reason !== 'disconnect') {
       // Require a fresh ready handshake for a rematch in this lobby.
       for (const player of this.lobby.players) player.ready = false;
@@ -337,9 +339,17 @@ class LobbyManager {
     const player = lobby.players.find((entry) => entry.id === client.id);
     if (!player) throw new Error('Player is not in the lobby.');
     player.ready = ready;
+    // A live room (including the between-rounds gap, when its interval is
+    // momentarily cleared) must never be disturbed by READY messages.
+    if (lobby.room && !lobby.room.stopped) {
+      this._touchLobby(lobby);
+      return lobby;
+    }
     if (lobby.players.length === 2 && lobby.players.every((entry) => entry.ready && entry.connected)) {
       lobby.phase = 'match_pending';
-    } else if (lobby.phase !== 'match_running') {
+    } else if (lobby.phase === 'lobby' || lobby.phase === 'match_pending') {
+      // Keep 'match_complete' as-is so its sweep TTL still applies while
+      // players decide on a rematch.
       lobby.phase = 'lobby';
     }
     this._touchLobby(lobby);
@@ -348,7 +358,7 @@ class LobbyManager {
 
   ensureMatchStarted(lobby) {
     if (lobby.phase !== 'match_pending') return lobby;
-    if (lobby.room && !lobby.room.interval) {
+    if (lobby.room?.stopped) {
       // Previous match finished — discard the stopped room so a rematch
       // (both players ready again) starts a fresh one.
       lobby.room = null;

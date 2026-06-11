@@ -47,7 +47,7 @@ export class InputManager {
   }
 
   _onKeyDown(e) {
-    if (e._fromGamepad) return;
+    if (e._fromGamepad || e._synthetic) return;
     if (this._isEditableTarget(e.target)) return;
     if (!this.keysDown.has(e.code)) {
       this.keysPressed.add(e.code);
@@ -57,7 +57,7 @@ export class InputManager {
   }
 
   _onKeyUp(e) {
-    if (e._fromGamepad) return;
+    if (e._fromGamepad || e._synthetic) return;
     if (this._isEditableTarget(e.target)) return;
     this.keysDown.delete(e.code);
     this.keysReleased.add(e.code);

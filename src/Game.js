@@ -82,7 +82,7 @@ export class Game {
     this.onlineLobbyRefreshTimer = null;
     this.onlineLocalSlot = null;
     this.onlineMatchPlayers = null;
-    this._suppressOnlineClose = false;
+    this._suppressOnlineCloseUntil = 0;
     this.onlinePendingMatchResult = null;
     this.onlinePingMs = null;
     this._charCache = {};
@@ -375,6 +375,7 @@ export class Game {
 
   _endGauntletMatch(playerWon) {
     this.gameState = GameState.VICTORY;
+    this.input.touch.hide();
     const g = this._gauntlet;
     this._recordCharResult(g?.player, playerWon);
     const total = g?.opponents.length ?? 0;
@@ -593,10 +594,22 @@ export class Game {
     this._replayIndex = 0;
     this._replayHold = 0;
     this._replayTick = 0;
-    this.fighter1._hasRemoteTarget = false;
-    this.fighter2._hasRemoteTarget = false;
+    for (const fighter of [this.fighter1, this.fighter2]) {
+      // The KO ragdolled the loser; undo it so snapshot playback drives the rig.
+      fighter._ragdoll = null;
+      fighter.visualRoot.rotation.y = fighter.charDef.rootRotationY ?? 0;
+      fighter.visualRoot.rotation.x = fighter.charDef.modelRotationX ?? 0;
+      fighter.visualRoot.rotation.z = 0;
+      fighter.position.y = 0;
+      fighter._hasRemoteTarget = false;
+    }
     this.gameState = GameState.REPLAY;
     this.ui.hideAll();
+    this.input.touch.hide();
+    if (!this._replayTapHandler) {
+      this._replayTapHandler = () => this._endKoReplay();
+    }
+    window.addEventListener('pointerdown', this._replayTapHandler);
     const badge = document.getElementById('replay-indicator');
     if (badge) badge.style.display = 'block';
   }
@@ -631,6 +644,7 @@ export class Game {
   _endKoReplay() {
     if (this.gameState !== GameState.REPLAY) return;
     this._replayFrames = null;
+    window.removeEventListener('pointerdown', this._replayTapHandler);
     const badge = document.getElementById('replay-indicator');
     if (badge) badge.style.display = 'none';
     this.gameState = GameState.VICTORY;
@@ -658,6 +672,8 @@ export class Game {
     if (this.gameState !== GameState.PAUSED) return;
     this.gameState = GameState.FIGHTING;
     this.ui.pause.hide();
+    // The press that closed the menu must not fire as a buffered combat action.
+    this.input.clearBuffers();
   }
 
   async _startMatch(p1Char, p2Char) {
@@ -1041,12 +1057,20 @@ export class Game {
       const detail = event.detail;
       const message = detail?.message || detail?.error?.message || 'NETWORK ERROR';
       console.error('Online session error:', detail);
+      if (this.mode === 'online' && this.gameState === GameState.VICTORY) {
+        // e.g. rematch requested after the lobby expired — surface it instead
+        // of leaving the victory screen stuck on WAITING FOR OPPONENT.
+        this._handleOnlineDisconnect(`ERROR: ${String(message).toUpperCase()}`);
+        return;
+      }
       this.ui.select.setOnlineBusy(false);
       this.ui.select.setOnlineStatus(`ERROR: ${String(message).toUpperCase()}`);
     });
 
     session.addEventListener('close', (event) => {
-      if (this._suppressOnlineClose) return;
+      // The socket close lands a macrotask after an intentional disconnect,
+      // so suppression is time-based rather than flag-based.
+      if (Date.now() < this._suppressOnlineCloseUntil) return;
       const code = event.detail?.code ?? null;
       const reason = event.detail?.reason ?? '';
       const message = code === 1012
@@ -1222,11 +1246,8 @@ export class Game {
 
   _disconnectOnlineSession() {
     if (!this.onlineSession) return;
-    this._suppressOnlineClose = true;
+    this._suppressOnlineCloseUntil = Date.now() + 2000;
     this.onlineSession.disconnect();
-    queueMicrotask(() => {
-      this._suppressOnlineClose = false;
-    });
     this.onlineSession = null;
     this.onlineLocalSlot = null;
     this.onlineMatchPlayers = null;
@@ -1241,12 +1262,10 @@ export class Game {
   _handleOnlineDisconnect(message) {
     if (this.mode !== 'online') return;
     if (this.onlineSession) {
-      this._suppressOnlineClose = true;
+      this._suppressOnlineCloseUntil = Date.now() + 2000;
       this.onlineSession.disconnect();
-      queueMicrotask(() => {
-        this._suppressOnlineClose = false;
-      });
     }
+    this._stopAttract();
     this._startOnlineLobbyRefresh();
     this._cleanupFighters();
     this.matchSim = null;
@@ -1302,6 +1321,7 @@ export class Game {
         this._stopAnimationSandbox();
         this.gameState = GameState.TITLE;
         this.ui.showTitle();
+        this._startAttract();
       };
     }
 
@@ -1766,6 +1786,7 @@ export class Game {
 
   _showVictory(winnerName) {
     this.gameState = GameState.VICTORY;
+    this.input.touch.hide();
     if (this.mode === 'ai') {
       this._recordCharResult(this.fighter1?.charDef?.id, this.p1Score >= ROUNDS_TO_WIN);
       this.aiMatchRecorder.finishMatch({

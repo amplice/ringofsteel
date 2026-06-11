@@ -206,6 +206,10 @@ let replayState = null;
 const replayBtnVisible = await page.evaluate(
   () => document.getElementById('victory-replay-btn').offsetParent !== null
 );
+const clipBtnVisible = await page.evaluate(
+  () => document.getElementById('victory-clip-btn').offsetParent !== null
+);
+if (!clipBtnVisible) errors.push('SAVE CLIP button was not visible on an offline victory.');
 if (!replayBtnVisible) {
   errors.push('REPLAY KO button was not visible on an offline victory.');
 } else {

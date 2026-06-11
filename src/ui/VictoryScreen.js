@@ -7,11 +7,13 @@ export class VictoryScreen {
     this.statsEl = document.getElementById('victory-stats');
     this.rematchBtn = document.getElementById('victory-rematch-btn');
     this.replayBtn = document.getElementById('victory-replay-btn');
+    this.clipBtn = document.getElementById('victory-clip-btn');
     this.selectBtn = document.getElementById('victory-select-btn');
     this.titleBtn = document.getElementById('victory-title-btn');
     this.onContinue = null;
     this.onRematch = null;
     this.onReplay = null;
+    this.onSaveClip = null;
     this.onCharacterSelect = null;
     this._previewImages = new Map();
     this._focusEl = null;
@@ -22,6 +24,9 @@ export class VictoryScreen {
     });
     this.replayBtn?.addEventListener('click', () => {
       if (!this._inGrace() && this.onReplay) this.onReplay();
+    });
+    this.clipBtn?.addEventListener('click', () => {
+      if (!this._inGrace() && this.onSaveClip) this.onSaveClip();
     });
     this.selectBtn?.addEventListener('click', () => {
       if (!this._inGrace() && this.onCharacterSelect) this.onCharacterSelect();
@@ -72,6 +77,13 @@ export class VictoryScreen {
     if (this.replayBtn) {
       this.replayBtn.style.display = detail.allowReplay ? '' : 'none';
     }
+    if (this.clipBtn) {
+      const recordable =
+        typeof MediaRecorder !== 'undefined' &&
+        typeof HTMLCanvasElement !== 'undefined' &&
+        Boolean(HTMLCanvasElement.prototype.captureStream);
+      this.clipBtn.style.display = detail.allowReplay && recordable ? '' : 'none';
+    }
     this.el.style.display = 'flex';
     this._shownAt = performance.now();
     this._setFocus(this._buttons()[0] ?? null);
@@ -97,7 +109,7 @@ export class VictoryScreen {
   }
 
   _buttons() {
-    return [this.rematchBtn, this.replayBtn, this.selectBtn, this.titleBtn].filter(
+    return [this.rematchBtn, this.replayBtn, this.clipBtn, this.selectBtn, this.titleBtn].filter(
       (btn) => btn && btn.offsetParent !== null && !btn.disabled
     );
   }

@@ -266,6 +266,7 @@ export class Game {
 
     this.ui.victory.onCharacterSelect = () => this._exitToSelect();
     this.ui.victory.onReplay = () => this._startKoReplay();
+    this.ui.victory.onSaveClip = () => this._startKoReplay({ record: true });
 
     this.ui.pause.onResume = () => this._resumeFromPause();
     this.ui.pause.onCharacterSelect = () => this._exitToSelect();
@@ -590,7 +591,7 @@ export class Game {
 
   // KO replay: re-feed the recorded sim snapshots of the final round through
   // the same remote-view path online clients render with, at half speed.
-  _startKoReplay() {
+  _startKoReplay(options = {}) {
     if (!this._koReplayBuffer?.length || !this.fighter1 || !this.fighter2) return;
     this._replayFrames = this._koReplayBuffer.slice(-300);
     this._replayIndex = 0;
@@ -612,8 +613,54 @@ export class Game {
       this._replayTapHandler = () => this._endKoReplay();
     }
     window.addEventListener('pointerdown', this._replayTapHandler);
+    if (options.record) this._startClipRecording();
     const badge = document.getElementById('replay-indicator');
-    if (badge) badge.style.display = 'block';
+    if (badge) {
+      badge.innerHTML = this._clipRecorder
+        ? '&#9679; RECORDING CLIP &middot; TAP OR ESC TO STOP'
+        : '&#9679; REPLAY &middot; TAP OR ESC TO SKIP';
+      badge.style.display = 'block';
+    }
+  }
+
+  // Record the replay straight off the canvas; downloads a .webm when the
+  // replay ends (or is skipped).
+  _startClipRecording() {
+    try {
+      const stream = this.renderer.domElement.captureStream(60);
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm';
+      this._clipChunks = [];
+      this._clipRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+      this._clipRecorder.ondataavailable = (e) => {
+        if (e.data?.size) this._clipChunks.push(e.data);
+      };
+      this._clipRecorder.onstop = () => {
+        if (!this._clipChunks.length) return;
+        const blob = new Blob(this._clipChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ring-of-steel-ko-${Date.now()}.webm`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+      };
+      this._clipRecorder.start();
+    } catch (err) {
+      console.warn('Clip recording unavailable:', err);
+      this._clipRecorder = null;
+    }
+  }
+
+  _stopClipRecording() {
+    if (!this._clipRecorder) return;
+    try {
+      if (this._clipRecorder.state !== 'inactive') this._clipRecorder.stop();
+    } catch {
+      // Recorder already gone.
+    }
+    this._clipRecorder = null;
   }
 
   _updateReplay(dt) {
@@ -645,6 +692,7 @@ export class Game {
 
   _endKoReplay() {
     if (this.gameState !== GameState.REPLAY) return;
+    this._stopClipRecording();
     this._replayFrames = null;
     window.removeEventListener('pointerdown', this._replayTapHandler);
     const badge = document.getElementById('replay-indicator');

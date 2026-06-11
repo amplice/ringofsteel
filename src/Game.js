@@ -492,6 +492,7 @@ export class Game {
       this.matchSim.startRound(FIGHT_START_DISTANCE);
       this._attractActive = true;
       this._attractRestartTimer = 0;
+      this._attractKills = 0;
       this.ui.title.el?.classList.add('attract');
     } catch (err) {
       console.warn('Attract mode failed to start:', err);
@@ -520,6 +521,13 @@ export class Game {
       this._attractRestartTimer += dt;
       if (this._attractRestartTimer > 2.0) {
         this._attractRestartTimer = 0;
+        this._attractKills = (this._attractKills ?? 0) + 1;
+        if (this._attractKills >= 3) {
+          // Fresh matchup and stage every few kills so the title never stales.
+          this._stopAttract();
+          this._startAttract();
+          return;
+        }
         this.matchSim.startRound(FIGHT_START_DISTANCE);
         this.aiController1?.reset();
         this.aiController2?.reset();

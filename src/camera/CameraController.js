@@ -327,6 +327,8 @@ export class CameraController {
   }
 
   shake(intensity = 0.3) {
+    // Respect OS-level reduced-motion preference.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
     this.shakeIntensity = intensity;
   }
 

@@ -8,9 +8,13 @@ export class ScreenEffects {
     this.hitstopFrames = 0;
     this.onHitstop = false;
     this._linesBuilt = false;
+    this._reducedMotion =
+      typeof window !== 'undefined' &&
+      Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
   }
 
   flash(color = 'white', duration = 0.1) {
+    if (this._reducedMotion) return;
     if (!this.flashEl) return;
     this.flashEl.style.background = color;
     this.flashEl.style.opacity = '0.6';

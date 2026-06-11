@@ -26,12 +26,16 @@ attack, exchange feedback readout), AI VS AI.
 navigation. In-game controls are documented in the CONTROLS modal on the
 character select screen (auto-opens on first visit).
 
-**Fighters** — spearman, ronin, knight, huscarl. **Arenas** — amphitheater,
-bamboo clearing, moonlit grove, wooden pier, midnight squall, mountaintop
-(plus a clean test arena and a RANDOM card that re-rolls every match).
+**Fighters** — spearman, ronin, knight, huscarl. **Arenas** — amphitheater
+(noon and ember dusk), bamboo clearing (dawn and moonlit), wooden pier
+(sunset and midnight squall), mountaintop (plus a clean test arena and a
+RANDOM card that re-rolls every match). Offline matches can be first to
+1, 3, or 5 rounds.
 
 Esc / Start pauses offline fights. After a match: instant rematch, KO replay,
-match stats. M toggles sound.
+SAVE CLIP (downloads the KO as a webm), match stats. M toggles sound. The
+select screen remembers your last loadout, per-fighter records, and gauntlet
+best clear times.
 
 ## Testing
 

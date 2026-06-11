@@ -239,7 +239,7 @@ const survivalWin = survivalWon ? await page.evaluate(() => ({
   title: document.getElementById('winner-text').textContent,
   nextLabel: document.getElementById('victory-rematch-btn').textContent,
 })) : null;
-if (survivalWon && (survivalWin.title !== 'STREAK 1' || survivalWin.nextLabel !== 'NEXT FOE')) {
+if (survivalWon && (survivalWin.title !== 'STREAK 1' || !/^NEXT: /.test(survivalWin.nextLabel))) {
   errors.push(`Survival win screen wrong: ${JSON.stringify(survivalWin)}`);
 }
 let survivalNextName = null;

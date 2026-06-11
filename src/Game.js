@@ -398,7 +398,8 @@ export class Game {
     const s = this._survival;
     if (!s) return;
     const charIds = Object.keys(CHARACTER_DEFS);
-    const opponent = charIds[Math.floor(Math.random() * charIds.length)];
+    const opponent = s.nextOpponent ?? charIds[Math.floor(Math.random() * charIds.length)];
+    s.nextOpponent = null;
     this.difficulty = s.streak < 2 ? 'easy' : s.streak < 5 ? 'medium' : 'hard';
     this.currentStageId = normalizeStageId(
       s.stageIds[(s.stageOffset + s.streak) % s.stageIds.length]
@@ -424,6 +425,10 @@ export class Game {
       // Persist immediately so abandoning (or closing) a hot run keeps it.
       this._persistSurvivalBest(s.player, s.streak);
       const beatRecord = s.streak > s.startBest;
+      // Pre-roll the next foe so the button can name them.
+      const charIds = Object.keys(CHARACTER_DEFS);
+      s.nextOpponent = charIds[Math.floor(Math.random() * charIds.length)];
+      const nextName = (CHARACTER_DEFS[s.nextOpponent]?.displayName ?? 'FOE').toUpperCase();
       this._lastVictoryView = {
         winnerName: 'PLAYER 1',
         p1: this.p1Score,
@@ -434,7 +439,7 @@ export class Game {
           subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()}${
             beatRecord ? ' · NEW BEST' : s.startBest > 0 ? ` · BEST ${s.startBest}` : ''
           }`,
-          primaryLabel: 'NEXT FOE',
+          primaryLabel: `NEXT: ${nextName}`,
         },
       };
     } else {

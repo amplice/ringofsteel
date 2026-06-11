@@ -209,6 +209,51 @@ const survivalP2Name = await page.$eval('.fighter-hud.p2 .fighter-name', (el) =>
 if (!/ · STREAK 0$/.test(survivalP2Name ?? '')) {
   errors.push(`Survival HUD label was ${JSON.stringify(survivalP2Name)}, expected a STREAK 0 counter.`);
 }
+
+// Win-path: neutralize the AI so the duel is winnable deterministically,
+// walk in spamming quick attacks, and verify the streak flow end to end.
+await page.evaluate(() => {
+  const game = window.__ringOfSteelGame;
+  game.aiController2 = null;
+  game.aiController = null;
+});
+await page.waitForFunction(
+  () => window.__ringOfSteelGame.gameState === 'fighting',
+  { timeout: 15000 }
+).catch(() => errors.push('Survival duel never reached the fighting state.'));
+await page.keyboard.down('KeyD');
+let survivalWon = false;
+const winDeadline = Date.now() + 45000;
+while (!survivalWon && Date.now() < winDeadline) {
+  await page.keyboard.press('KeyJ');
+  await new Promise((r) => setTimeout(r, 130));
+  survivalWon = await page.evaluate(
+    () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
+  );
+}
+await page.keyboard.up('KeyD');
+if (!survivalWon) {
+  errors.push('Could not win the survival duel against a neutralized opponent.');
+}
+const survivalWin = survivalWon ? await page.evaluate(() => ({
+  title: document.getElementById('winner-text').textContent,
+  nextLabel: document.getElementById('victory-rematch-btn').textContent,
+})) : null;
+if (survivalWon && (survivalWin.title !== 'STREAK 1' || survivalWin.nextLabel !== 'NEXT FOE')) {
+  errors.push(`Survival win screen wrong: ${JSON.stringify(survivalWin)}`);
+}
+let survivalNextName = null;
+if (survivalWon) {
+  await new Promise((r) => setTimeout(r, 700)); // victory grace window
+  await page.click('#victory-rematch-btn');
+  await page.waitForFunction(
+    () => getComputedStyle(document.getElementById('hud')).display !== 'none' &&
+      / · STREAK 1$/.test(document.querySelector('.fighter-hud.p2 .fighter-name')?.textContent ?? ''),
+    { timeout: 45000 }
+  ).catch(() => errors.push('NEXT FOE did not start a second survival duel with streak 1.'));
+  survivalNextName = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent).catch(() => null);
+}
+
 let survivalPaused = false;
 const survivalPauseDeadline = Date.now() + 15000;
 while (!survivalPaused && Date.now() < survivalPauseDeadline) {
@@ -395,7 +440,7 @@ if (touchOverlayActive) {
 }
 await touchPage.close();
 
-console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, survivalUI, survivalP2Name, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
+console.log(JSON.stringify({ titleVisible, attractAtBoot, attractAfterExit, ...state, firstVisitControls, focusedAfterArrows, gauntletUI, gauntletP2Name, survivalUI, survivalP2Name, survivalWin, survivalNextName, randomStage, pauseVisible, pauseClosed, victoryInfo, replayState, trainingP2Name, dummyLabel, dummyLabelAfterCycle, touchSelectVisible, touchOverlayActive, touchPaused, errors: errors.slice(0, 10) }, null, 2));
 if (!focusedAfterArrows) {
   console.error('Select-screen arrow navigation produced no focused control.');
   process.exitCode = 1;

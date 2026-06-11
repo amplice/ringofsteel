@@ -420,6 +420,7 @@ export class Game {
 
     if (playerWon) {
       s.streak++;
+      const best = this._survivalBest(s.player);
       this._lastVictoryView = {
         winnerName: 'PLAYER 1',
         p1: this.p1Score,
@@ -427,7 +428,7 @@ export class Game {
         detail: {
           ...detail,
           title: `STREAK ${s.streak}`,
-          subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()} · BEST ${this._survivalBest(s.player)}`,
+          subtitle: `DIFFICULTY ${this.difficulty.toUpperCase()}${best > 0 ? ` · BEST ${best}` : ''}`,
           primaryLabel: 'NEXT FOE',
         },
       };
@@ -441,7 +442,7 @@ export class Game {
         detail: {
           ...detail,
           title: 'RUN OVER',
-          subtitle: `STREAK ${s.streak}${best.isNew ? ' · NEW BEST' : ` · BEST ${best.value}`}`,
+          subtitle: `STREAK ${s.streak}${best.isNew ? ' · NEW BEST' : best.value > 0 ? ` · BEST ${best.value}` : ''}`,
           primaryLabel: 'NEW RUN',
         },
       };

@@ -616,6 +616,10 @@ export class CharacterSelect {
       imageEl: this.p1VersusImg,
       sideEl: this.p1VersusSide,
     });
+    const record = this._charRecordLabel(this.p1Char);
+    if (record && this.p1VersusWeapon) {
+      this.p1VersusWeapon.textContent += ` · ${record}`;
+    }
     this._setVersusSide({
       charId: this.p2Char,
       nameEl: this.p2VersusName,
@@ -636,6 +640,21 @@ export class CharacterSelect {
     this._syncHeroLabels();
     this._updateHeroPreviewCharacter('p1', this.p1Char);
     this._updateHeroPreviewCharacter('p2', this.p2Char);
+  }
+
+  // Lifetime vs-computer record for a fighter, e.g. "12W-3L"; null if unplayed.
+  _charRecordLabel(charId) {
+    try {
+      const raw = window.localStorage?.getItem(`ring-of-steel-record-${charId}`);
+      if (!raw) return null;
+      const record = JSON.parse(raw);
+      const wins = record.w ?? 0;
+      const losses = record.l ?? 0;
+      if (!wins && !losses) return null;
+      return `${wins}W-${losses}L`;
+    } catch {
+      return null;
+    }
   }
 
   _gauntletBestLabel() {

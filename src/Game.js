@@ -376,6 +376,7 @@ export class Game {
   _endGauntletMatch(playerWon) {
     this.gameState = GameState.VICTORY;
     const g = this._gauntlet;
+    this._recordCharResult(g?.player, playerWon);
     const total = g?.opponents.length ?? 0;
     const detail = {
       winnerCharId: this._resolveWinnerCharId(),
@@ -415,6 +416,20 @@ export class Game {
 
   // Persist the fastest clear per fighter; returns the line shown under
   // GAUNTLET COMPLETE, e.g. "CLEARED IN 2:43 - NEW BEST".
+  // Lifetime W-L vs the computer, per fighter, shown on the select screen.
+  _recordCharResult(charId, won) {
+    if (!charId) return;
+    const key = `ring-of-steel-record-${charId}`;
+    try {
+      const record = JSON.parse(window.localStorage?.getItem(key) || '{"w":0,"l":0}');
+      if (won) record.w = (record.w ?? 0) + 1;
+      else record.l = (record.l ?? 0) + 1;
+      window.localStorage?.setItem(key, JSON.stringify(record));
+    } catch {
+      // Storage unavailable — records just don't persist.
+    }
+  }
+
   _recordGauntletClear(g) {
     const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
     const key = `ring-of-steel-gauntlet-best-${g.player}`;
@@ -1752,6 +1767,7 @@ export class Game {
   _showVictory(winnerName) {
     this.gameState = GameState.VICTORY;
     if (this.mode === 'ai') {
+      this._recordCharResult(this.fighter1?.charDef?.id, this.p1Score >= ROUNDS_TO_WIN);
       this.aiMatchRecorder.finishMatch({
         winnerName,
         p1Score: this.p1Score,

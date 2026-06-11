@@ -10,7 +10,10 @@ export class Renderer {
       antialias: true,
       alpha: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Phones get a lower cap — full retina resolution costs more than it shows
+    // at mobile screen sizes.
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? 1.5 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;

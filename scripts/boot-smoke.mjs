@@ -374,6 +374,24 @@ if (spearmanRecord !== '1W-0L · STREAK 1') {
   errors.push(`Fighter card record line was ${JSON.stringify(spearmanRecord)}, expected "1W-0L · STREAK 1".`);
 }
 
+// RESET RECORDS requires a two-step confirm and clears the card line.
+await page.click('#controls-btn');
+await new Promise((r) => setTimeout(r, 300));
+await page.click('#controls-records-btn');
+const armedLabel = await page.evaluate(() => document.getElementById('controls-records-btn').textContent);
+if (armedLabel !== 'Sure?') errors.push(`Reset records did not arm: ${JSON.stringify(armedLabel)}`);
+await page.click('#controls-records-btn');
+await new Promise((r) => setTimeout(r, 200));
+const recordAfterReset = await page.evaluate(() => {
+  const span = document.querySelector('#p1-char-options [data-char-record="spearman"]');
+  return { text: span?.textContent ?? null, hidden: span ? span.style.display === 'none' : null };
+});
+if (recordAfterReset.text !== '' || !recordAfterReset.hidden) {
+  errors.push(`Reset records did not clear the card line: ${JSON.stringify(recordAfterReset)}`);
+}
+await page.click('#controls-close-btn');
+await new Promise((r) => setTimeout(r, 300));
+
 await page.click('#mode-options [data-mode="training"]');
 await page.click('#start-fight-btn');
 await page.waitForFunction(

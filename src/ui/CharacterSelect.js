@@ -215,6 +215,24 @@ export class CharacterSelect {
     if (this.controlsBtn) {
       this.controlsBtn.addEventListener('click', () => this._setControlsOpen(true));
     }
+    const recordsBtn = document.getElementById('controls-records-btn');
+    if (recordsBtn) {
+      // Two-step confirm: records are not recoverable.
+      recordsBtn.addEventListener('click', () => {
+        if (!this._recordsResetArmed) {
+          this._recordsResetArmed = true;
+          recordsBtn.textContent = 'Sure?';
+          window.setTimeout(() => {
+            this._recordsResetArmed = false;
+            recordsBtn.textContent = 'Reset Records';
+          }, 3000);
+          return;
+        }
+        this._recordsResetArmed = false;
+        recordsBtn.textContent = 'Reset Records';
+        this._clearRecords();
+      });
+    }
     if (this.controlsCloseBtn) {
       this.controlsCloseBtn.addEventListener('click', () => this._setControlsOpen(false));
     }
@@ -731,6 +749,20 @@ export class CharacterSelect {
   _gauntletBestLabel() {
     const best = this._gauntletBestTime();
     return best > 0 ? `BEST CLEAR ${this._formatClearTime(best)}` : 'NO CLEAR YET';
+  }
+
+  _clearRecords() {
+    try {
+      for (const id of Object.keys(CHARACTER_DEFS)) {
+        window.localStorage?.removeItem(`ring-of-steel-record-${id}`);
+        window.localStorage?.removeItem(`ring-of-steel-gauntlet-best-${id}`);
+        window.localStorage?.removeItem(`ring-of-steel-survival-best-${id}`);
+      }
+    } catch {
+      // Storage unavailable — nothing to clear.
+    }
+    this._refreshCharRecords();
+    this._updateVersusPreview();
   }
 
   // Compact one-line history shown on each P1 fighter card.

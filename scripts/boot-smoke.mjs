@@ -309,6 +309,17 @@ if (dummyLabelAfterCycle !== 'DUMMY: BLOCK') {
   errors.push(`Dummy control did not cycle, got ${JSON.stringify(dummyLabelAfterCycle)}.`);
 }
 
+// RESET ROUND resets the training round and resumes the fight.
+await page.click('#pause-reset-btn');
+await new Promise((r) => setTimeout(r, 400));
+const trainingResumed = await page.evaluate(() => ({
+  pauseHidden: getComputedStyle(document.getElementById('pause-screen')).display === 'none',
+  gameState: window.__ringOfSteelGame.gameState,
+}));
+if (!trainingResumed.pauseHidden || trainingResumed.gameState !== 'fighting') {
+  errors.push(`RESET ROUND did not resume training: ${JSON.stringify(trainingResumed)}`);
+}
+
 // Touch device pass: tapping the title starts the game, and the combat
 // overlay appears once a fight begins.
 const touchPage = await browser.newPage();

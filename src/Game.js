@@ -285,6 +285,11 @@ export class Game {
     this.ui.pause.onResume = () => this._resumeFromPause();
     this.ui.pause.onCharacterSelect = () => this._exitToSelect();
     this.ui.pause.onMainMenu = () => this._exitToTitle();
+    this.ui.pause.onResetRound = () => {
+      if (this.mode !== 'training') return;
+      this._resetTrainingRound();
+      this._resumeFromPause();
+    };
     this.ui.pause.onDummyCycle = () => {
       const order = ['manual', 'block', 'attack'];
       this.trainingDummyMode = order[(order.indexOf(this.trainingDummyMode) + 1) % order.length];

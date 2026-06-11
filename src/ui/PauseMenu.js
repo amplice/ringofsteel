@@ -3,10 +3,12 @@ export class PauseMenu {
     this.el = document.getElementById('pause-screen');
     this.resumeBtn = document.getElementById('pause-resume-btn');
     this.dummyBtn = document.getElementById('pause-dummy-btn');
+    this.resetBtn = document.getElementById('pause-reset-btn');
     this.selectBtn = document.getElementById('pause-select-btn');
     this.titleBtn = document.getElementById('pause-title-btn');
     this.onResume = null;
     this.onDummyCycle = null;
+    this.onResetRound = null;
     this.onCharacterSelect = null;
     this.onMainMenu = null;
     this._focusEl = null;
@@ -17,6 +19,9 @@ export class PauseMenu {
     });
     this.dummyBtn?.addEventListener('click', () => {
       if (this.onDummyCycle) this.onDummyCycle();
+    });
+    this.resetBtn?.addEventListener('click', () => {
+      if (this.onResetRound) this.onResetRound();
     });
     this.selectBtn?.addEventListener('click', () => {
       if (this.onCharacterSelect) this.onCharacterSelect();
@@ -30,11 +35,15 @@ export class PauseMenu {
     return this.el ? this.el.style.display === 'flex' : false;
   }
 
-  // Show the dummy-behavior control (training mode only) and sync its label.
+  // Show the training-only controls (dummy behavior + round reset).
   setDummyControl(visible, mode = 'manual') {
-    if (!this.dummyBtn) return;
-    this.dummyBtn.style.display = visible ? '' : 'none';
-    this.dummyBtn.textContent = `DUMMY: ${mode.toUpperCase()}`;
+    if (this.dummyBtn) {
+      this.dummyBtn.style.display = visible ? '' : 'none';
+      this.dummyBtn.textContent = `DUMMY: ${mode.toUpperCase()}`;
+    }
+    if (this.resetBtn) {
+      this.resetBtn.style.display = visible ? '' : 'none';
+    }
   }
 
   show() {
@@ -52,7 +61,7 @@ export class PauseMenu {
   }
 
   _buttons() {
-    return [this.resumeBtn, this.dummyBtn, this.selectBtn, this.titleBtn].filter(
+    return [this.resumeBtn, this.dummyBtn, this.resetBtn, this.selectBtn, this.titleBtn].filter(
       (btn) => btn && btn.offsetParent !== null && !btn.disabled
     );
   }

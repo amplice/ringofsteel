@@ -1,11 +1,13 @@
-// Gauntlet clear smoke: plays a full 4-match gauntlet to completion in a
-// real browser (AI neutralized so every duel is deterministically winnable)
-// and verifies the interstitials, the GAUNTLET COMPLETE screen with its
-// clear time, and the persisted best showing up on the select screen.
+// Long-play smoke: real-browser playthroughs of the flows the fast boot
+// smoke can't afford. Clears a full 4-match gauntlet (AI neutralized),
+// verifies the completion screen and persisted best, then loses a survival
+// run (idle player vs live AI) to cover RUN OVER -> NEW RUN, and records a
+// KO clip on the way, asserting the webm actually downloads.
 import puppeteer from 'puppeteer';
 import { createServer } from 'http';
-import { readFile } from 'fs/promises';
+import { readFile, readdir, stat, mkdir, rm } from 'fs/promises';
 import { extname, join } from 'path';
+import { tmpdir } from 'os';
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -23,8 +25,14 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 
+const downloadDir = join(tmpdir(), `ros-longplay-${process.pid}`);
+await rm(downloadDir, { recursive: true, force: true });
+await mkdir(downloadDir, { recursive: true });
+
 const browser = await puppeteer.launch({ headless: 'new' });
 const page = await browser.newPage();
+const cdp = await page.createCDPSession();
+await cdp.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDir });
 const errors = [];
 page.on('pageerror', (err) => errors.push(`PAGEERROR: ${err.message}`));
 
@@ -112,12 +120,68 @@ try {
     errors.push(`Card record after clear was ${JSON.stringify(selectAfter.cardRecord)}.`);
   }
 
-  console.log(JSON.stringify({ interstitials, selectAfter, errors }, null, 2));
+  // SURVIVAL LOSS PATH: stand idle against a live easy AI until it kills us,
+  // then verify RUN OVER, record a KO clip of the death, and start a NEW RUN.
+  await page.click('#mode-options [data-mode="survival"]');
+  await page.click('#start-fight-btn');
+  await page.waitForFunction(
+    () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+    { timeout: 45000 }
+  );
+  let runOver = false;
+  const lossDeadline = Date.now() + 90000;
+  while (!runOver && Date.now() < lossDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    runOver = await page.evaluate(
+      () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
+    );
+  }
+  const lossScreen = runOver ? await page.evaluate(() => ({
+    title: document.getElementById('winner-text').textContent,
+    subtitle: document.getElementById('final-score').textContent,
+    nextLabel: document.getElementById('victory-rematch-btn').textContent,
+  })) : null;
+  if (!runOver) {
+    errors.push('The AI never finished off an idle player within 90s.');
+  } else if (lossScreen.title !== 'RUN OVER' || lossScreen.nextLabel !== 'NEW RUN') {
+    errors.push(`Survival loss screen wrong: ${JSON.stringify(lossScreen)}`);
+  }
+
+  let clipFile = null;
+  if (runOver) {
+    await new Promise((r) => setTimeout(r, 700)); // victory grace
+    await page.click('#victory-clip-btn');
+    const clipDeadline = Date.now() + 45000;
+    while (!clipFile && Date.now() < clipDeadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const files = await readdir(downloadDir).catch(() => []);
+      clipFile = files.find((f) => f.endsWith('.webm')) ?? null;
+    }
+    const clipSize = clipFile ? (await stat(join(downloadDir, clipFile))).size : 0;
+    if (!clipFile || clipSize < 10000) {
+      errors.push(`KO clip did not download (file=${clipFile}, size=${clipSize}).`);
+    }
+    // Replay has ended (download fires on stop); victory is back. New run:
+    await page.waitForFunction(
+      () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none',
+      { timeout: 15000 }
+    ).catch(() => errors.push('Victory screen did not return after the clip replay.'));
+    await new Promise((r) => setTimeout(r, 700));
+    await page.click('#victory-rematch-btn');
+    await page.waitForFunction(
+      () => getComputedStyle(document.getElementById('hud')).display !== 'none' &&
+        / · STREAK 0$/.test(document.querySelector('.fighter-hud.p2 .fighter-name')?.textContent ?? ''),
+      { timeout: 45000 }
+    ).catch(() => errors.push('NEW RUN did not start a fresh survival run.'));
+  }
+
+  console.log(JSON.stringify({ interstitials, selectAfter, lossScreen, clipFile, errors }, null, 2));
 } catch (err) {
   console.error(err);
   errors.push(String(err?.message ?? err));
 } finally {
   await browser.close();
   server.close();
+  await rm(downloadDir, { recursive: true, force: true });
   if (errors.length) process.exitCode = 1;
 }

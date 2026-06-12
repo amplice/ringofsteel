@@ -19,7 +19,7 @@
     "sim:analyze": "node scripts/analyze-selfplay.mjs",
     "stability:check": "npm run build && npm run sim:regression && npm run smoke:boot",
     "smoke:boot": "node scripts/boot-smoke.mjs dist",
-    "smoke:gauntlet": "node scripts/smoke-gauntlet-clear.mjs",
+    "smoke:longplay": "node scripts/smoke-longplay.mjs",
     "multiplayer:server": "node server/multiplayer-server.mjs",
     "multiplayer:smoke": "node scripts/smoke-multiplayer.mjs",
     "multiplayer:rematch-smoke": "node scripts/smoke-online-rematch.mjs",

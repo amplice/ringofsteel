@@ -1,8 +1,9 @@
 // Long-play smoke: real-browser playthroughs of the flows the fast boot
-// smoke can't afford. Clears a full 4-match gauntlet (AI neutralized),
-// verifies the completion screen and persisted best, then loses a survival
-// run (idle player vs live AI) to cover RUN OVER -> NEW RUN, and records a
-// KO clip on the way, asserting the webm actually downloads.
+// smoke can't afford. Fails the first gauntlet match (idle vs live AI) to
+// cover GAUNTLET FAILED -> TRY AGAIN retrying the same foe, then clears the
+// full 4-match ladder (AI neutralized), verifies the completion screen and
+// persisted best, loses a survival run to cover RUN OVER -> NEW RUN, and
+// records a KO clip on the way, asserting the webm actually downloads.
 import puppeteer from 'puppeteer';
 import { createServer } from 'http';
 import { readFile, readdir, stat, mkdir, rm } from 'fs/promises';
@@ -80,6 +81,41 @@ async function winCurrentMatch(matchIndex) {
 }
 
 try {
+  // GAUNTLET FAILURE PATH: idle against the live easy AI in match one,
+  // verify GAUNTLET FAILED, and confirm TRY AGAIN rematches the same foe.
+  await page.waitForFunction(
+    () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+    { timeout: 45000 }
+  );
+  const firstFoe = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent);
+  let failed = false;
+  const failDeadline = Date.now() + 90000;
+  while (!failed && Date.now() < failDeadline) {
+    await new Promise((r) => setTimeout(r, 500));
+    failed = await page.evaluate(
+      () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
+    );
+  }
+  const failScreen = failed ? await page.evaluate(() => ({
+    title: document.getElementById('winner-text').textContent,
+    retryLabel: document.getElementById('victory-rematch-btn').textContent,
+  })) : null;
+  if (!failed) {
+    errors.push('The AI never beat an idle player in the gauntlet within 90s.');
+  } else if (failScreen.title !== 'GAUNTLET FAILED' || failScreen.retryLabel !== 'TRY AGAIN') {
+    errors.push(`Gauntlet failure screen wrong: ${JSON.stringify(failScreen)}`);
+  }
+  await new Promise((r) => setTimeout(r, 700)); // victory grace
+  await page.click('#victory-rematch-btn');
+  await page.waitForFunction(
+    () => getComputedStyle(document.getElementById('hud')).display !== 'none',
+    { timeout: 45000 }
+  );
+  const retryFoe = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent);
+  if (retryFoe !== firstFoe) {
+    errors.push(`TRY AGAIN changed the foe: ${JSON.stringify({ firstFoe, retryFoe })}`);
+  }
+
   for (let match = 0; match < 4; match++) {
     const screen = await winCurrentMatch(match);
     interstitials.push(screen);
@@ -175,7 +211,7 @@ try {
     ).catch(() => errors.push('NEW RUN did not start a fresh survival run.'));
   }
 
-  console.log(JSON.stringify({ interstitials, selectAfter, lossScreen, clipFile, errors }, null, 2));
+  console.log(JSON.stringify({ failScreen, firstFoe, retryFoe, interstitials, selectAfter, lossScreen, clipFile, errors }, null, 2));
 } catch (err) {
   console.error(err);
   errors.push(String(err?.message ?? err));

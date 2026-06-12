@@ -110,13 +110,21 @@ async function readUiState(page) {
   return page.evaluate(() => {
     const game = window.__ringOfSteelGame;
     const select = document.getElementById('select-screen');
+    const visible = (id) => {
+      const el = document.getElementById(id);
+      return el ? getComputedStyle(el).display !== 'none' : false;
+    };
     return {
       gameState: game?.gameState ?? null,
       mode: game?.mode ?? null,
       onlineConnected: Boolean(game?.onlineSession?.connected),
       hasFighter1: Boolean(game?.fighter1),
       hasFighter2: Boolean(game?.fighter2),
-      selectVisible: select ? getComputedStyle(select).display !== 'none' : false,
+      selectVisible: visible('select-screen'),
+      titleVisible: visible('title-screen'),
+      hudVisible: visible('hud'),
+      loadingVisible: visible('loading-screen'),
+      attractActive: Boolean(game?._attractActive),
       statusText: select?.querySelector('.status-note')?.textContent?.trim() ?? null,
     };
   });

@@ -88,6 +88,9 @@ try {
     { timeout: 45000 }
   );
   const firstFoe = await page.$eval('.fighter-hud.p2 .fighter-name', (el) => el.textContent);
+  // Walk toward the AI without ever attacking or blocking — defensive AI
+  // profiles can stall forever against a target parked at spawn distance.
+  await page.keyboard.down('KeyD');
   let failed = false;
   const failDeadline = Date.now() + 90000;
   while (!failed && Date.now() < failDeadline) {
@@ -96,6 +99,7 @@ try {
       () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
     );
   }
+  await page.keyboard.up('KeyD');
   const failScreen = failed ? await page.evaluate(() => ({
     title: document.getElementById('winner-text').textContent,
     retryLabel: document.getElementById('victory-rematch-btn').textContent,
@@ -164,6 +168,9 @@ try {
     () => getComputedStyle(document.getElementById('hud')).display !== 'none',
     { timeout: 45000 }
   );
+  // Same walk-into-range trick as the gauntlet failure: stay in the AI's
+  // kill range without ever attacking or blocking.
+  await page.keyboard.down('KeyD');
   let runOver = false;
   const lossDeadline = Date.now() + 90000;
   while (!runOver && Date.now() < lossDeadline) {
@@ -172,6 +179,7 @@ try {
       () => getComputedStyle(document.getElementById('victory-screen')).display !== 'none'
     );
   }
+  await page.keyboard.up('KeyD');
   const lossScreen = runOver ? await page.evaluate(() => ({
     title: document.getElementById('winner-text').textContent,
     subtitle: document.getElementById('final-score').textContent,

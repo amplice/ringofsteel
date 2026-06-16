@@ -59,6 +59,8 @@ export class Fighter extends FighterCore {
     this.group.add(this.visualRoot);
     this.position = this.group.position;
 
+    this._applyPlayerTint();
+
     this.weapon = new Weapon(this.charDef.weapon);
 
     const trailColor = this.isP2 ? 0x4488ff : 0xff4444;
@@ -107,6 +109,26 @@ export class Fighter extends FighterCore {
     g.add(success);
 
     return { group: g, block, parry, success };
+  }
+
+  // A faint warm (P1) / cool (P2) cast on the fighter's albedo so the two
+  // stay tellable apart in mirror matches when the ground ring is occluded.
+  // Tinting the base color (not emissive) keeps it from glowing on the dark
+  // stages. Materials are cloned per-fighter in createFighterFromGLB, so this
+  // never bleeds across fighters.
+  _applyPlayerTint() {
+    const tint = this.isP2
+      ? new THREE.Color(0.40, 0.52, 0.78)
+      : new THREE.Color(0.78, 0.40, 0.40);
+    this.root?.traverse((child) => {
+      if (!child.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of mats) {
+        if (!mat?.color) continue;
+        mat.color.lerp(tint, 0.16);
+        mat.needsUpdate = true;
+      }
+    });
   }
 
   _createPlayerMarker() {

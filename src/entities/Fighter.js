@@ -564,6 +564,41 @@ export class Fighter extends FighterCore {
   removeFromScene(scene) {
     scene.remove(this.group);
     scene.remove(this.trail.mesh);
+    this.dispose();
+  }
+
+  // Free this fighter's GPU resources. The game spawns/destroys fighters
+  // endlessly (attract rotation, survival, every rematch), so skipping this
+  // leaks WebGL buffers/programs over long sessions. Careful: the character
+  // mesh geometries are shared with the cached source model via
+  // SkeletonUtils.clone — only its per-fighter cloned MATERIALS may be
+  // disposed, never its geometries. Material.dispose() leaves shared .map
+  // textures (and the static player-marker texture) untouched.
+  dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    this.root?.traverse((child) => {
+      if (!child.isMesh) return;
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      for (const m of mats) m?.dispose?.();
+    });
+
+    // Fighter-owned subtrees (built fresh per fighter) — geometry + material.
+    const disposeTree = (obj) => obj?.traverse?.((child) => {
+      child.geometry?.dispose?.();
+      const mats = Array.isArray(child.material)
+        ? child.material
+        : (child.material ? [child.material] : []);
+      for (const m of mats) m?.dispose?.();
+    });
+    disposeTree(this._stateIndicator?.group);
+    disposeTree(this.weapon?.group);
+    disposeTree(this.trail?.mesh);
+    if (this._playerMarker) {
+      this._playerMarker.geometry?.dispose?.();
+      this._playerMarker.material?.dispose?.();
+    }
   }
 }
 

@@ -23,12 +23,6 @@ export class HUD {
 
   show() {
     this.el.style.display = 'block';
-    // Hide removed elements if they still exist in DOM
-    const hide = (id) => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
-    hide('p1-stance');
-    hide('p2-stance');
-    hide('p1-body');
-    hide('p2-body');
   }
 
   hide() {

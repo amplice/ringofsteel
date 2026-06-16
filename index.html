@@ -715,37 +715,6 @@
       text-transform: uppercase;
       margin-bottom: 8px;
     }
-    .stance-indicator {
-      font-size: 16px;
-      color: #c8a84e;
-      letter-spacing: 2px;
-      margin-bottom: 6px;
-    }
-    .body-diagram {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-    .body-zone {
-      width: 60px;
-      height: 20px;
-      border: 1px solid #444;
-      background: rgba(0, 0, 0, 0.5);
-      transition: background 0.3s;
-      font-size: 9px;
-      color: #666;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      letter-spacing: 1px;
-    }
-    .body-zone.damaged {
-      background: rgba(180, 40, 40, 0.8);
-      border-color: #a33;
-      color: #faa;
-    }
-    .p2 .body-diagram { align-items: flex-end; }
-
     .round-pips {
       display: flex;
       gap: 6px;
@@ -2869,23 +2838,11 @@
         <div class="fighter-name">PLAYER 1</div>
         <div class="fighter-loadout" id="p1-loadout">SPEARMAN / SPEAR</div>
         <div class="round-pips" id="p1-pips"></div>
-        <div class="stance-indicator" id="p1-stance">MID</div>
-        <div class="body-diagram" id="p1-body">
-          <div class="body-zone" data-zone="high">HEAD</div>
-          <div class="body-zone" data-zone="mid">TORSO</div>
-          <div class="body-zone" data-zone="low">LEGS</div>
-        </div>
       </div>
       <div class="fighter-hud p2">
         <div class="fighter-name">PLAYER 2</div>
         <div class="fighter-loadout" id="p2-loadout">SPEARMAN / SPEAR</div>
         <div class="round-pips" id="p2-pips"></div>
-        <div class="stance-indicator" id="p2-stance">MID</div>
-        <div class="body-diagram" id="p2-body">
-          <div class="body-zone" data-zone="high">HEAD</div>
-          <div class="body-zone" data-zone="mid">TORSO</div>
-          <div class="body-zone" data-zone="low">LEGS</div>
-        </div>
       </div>
       <div id="round-announce">
         <div class="round-text"></div>

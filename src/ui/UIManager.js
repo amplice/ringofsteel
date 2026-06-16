@@ -75,7 +75,9 @@ export class UIManager {
   }
 
   showVictory(winner, p1Score, p2Score, detail = {}) {
-    this.hud.hide();
+    // Clear every screen first, like the other show* methods, so victory can
+    // never display with a stale overlay behind it regardless of entry path.
+    this.hideAll();
     this._blurActiveEditable();
     this.victory.show(winner, p1Score, p2Score, detail);
   }

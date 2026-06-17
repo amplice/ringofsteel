@@ -131,6 +131,17 @@ export class SoundManager {
     gainNode.connect(this.masterGain);
     const offset = Math.max(0, Math.min(startOffset, Math.max(0, buffer.duration - 0.001)));
     source.start(0, offset);
+    // Combat fires many sounds per second; explicitly tear the nodes out of
+    // the audio graph when each one finishes so they can't accumulate over a
+    // long session (fires after playback, so it never cuts a sound short).
+    source.onended = () => {
+      try {
+        source.disconnect();
+        gainNode.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    };
     return true;
   }
 }

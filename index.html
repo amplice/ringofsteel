@@ -487,7 +487,7 @@
     }
 
     .controls-modal {
-      position: absolute;
+      position: fixed;
       inset: 0;
       display: none;
       align-items: center;
@@ -2784,6 +2784,8 @@
 
       <button class="select-btn" id="start-fight-btn" style="margin-top: 20px; font-size: 22px; padding: 18px 60px;">FIGHT</button>
 
+    </div>
+
       <div class="controls-modal" id="controls-modal">
         <div class="controls-modal-card">
           <div class="controls-modal-header">
@@ -2833,7 +2835,6 @@
           <div class="help-note">In VS COMPUTER, Player 2 controls are unused. In AI VS AI, both fighters are controlled by CPU. In TRAINING, kills reset instantly and the dummy responds to Player 2 controls. GAUNTLET pits you against every fighter with rising difficulty. SURVIVAL is an endless streak run — one loss ends it. M toggles sound. Toggle debug with F3.</div>
         </div>
       </div>
-    </div>
 
     <!-- HUD -->
     <div id="hud">

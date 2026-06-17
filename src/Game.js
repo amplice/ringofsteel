@@ -1740,10 +1740,18 @@ export class Game {
   }
 
   _updateRoundIntro(dt) {
+    const previousTimer = this.stateTimer;
     this.stateTimer += dt;
 
-    if (this.stateTimer > ROUND_INTRO_DURATION * 0.6) {
+    const fightCue = ROUND_INTRO_DURATION * 0.6;
+    if (this.stateTimer > fightCue) {
       this.ui.hud.showFight();
+      // Edge-trigger the "fight begins" cue once, as the FIGHT prompt appears.
+      // Purely stateTimer-based so it fires for every round-intro entry
+      // (offline and online) with no flag to reset; attract never enters here.
+      if (previousTimer <= fightCue) {
+        this.gameAudio.playRoundStart();
+      }
     }
 
     if (this.stateTimer >= ROUND_INTRO_DURATION) {
@@ -1981,7 +1989,11 @@ export class Game {
     const dist = Math.sqrt(dx * dx + dz * dz) || 0.01;
     victim.startRagdoll(dx / dist, dz / dist);
 
-    if (reason !== 'ring_out') {
+    if (reason === 'ring_out') {
+      // Ring-out kills land no lethal hit, so they previously had no audio at
+      // all — give them their own cue in place of the blood gush.
+      this.gameAudio.playRingOut();
+    } else {
       const pos = victim.position.clone();
       pos.y += 1.0;
       const sprayDirection = new THREE.Vector3(dx / dist, 0.22, dz / dist).normalize();

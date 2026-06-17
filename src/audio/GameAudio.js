@@ -101,6 +101,14 @@ export class GameAudio {
     this.playEvent(AUDIO_EVENT_IDS.hitQuick);
   }
 
+  playRoundStart() {
+    this.playEvent(AUDIO_EVENT_IDS.roundStart);
+  }
+
+  playRingOut() {
+    this.playEvent(AUDIO_EVENT_IDS.ringOut);
+  }
+
   playEvent(eventId, overrides = {}) {
     const definition = AUDIO_EVENT_DEFS[eventId];
     if (!definition) return false;

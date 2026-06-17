@@ -25,6 +25,8 @@ export const AUDIO_EVENT_IDS = Object.freeze({
   movementSidestep: 'movement:sidestep',
   movementBackstep: 'movement:backstep',
   movementFootstep: 'movement:footstep',
+  roundStart: 'round:start',
+  ringOut: 'system:ring-out',
 });
 
 const attackStartEvents = {};
@@ -132,6 +134,24 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
     playbackRateMin: 0.97,
     playbackRateMax: 1.03,
     volume: 0.18,
+  }),
+  // Game-flow stings from shipped-but-previously-unused assets. The :02 takes
+  // are hotter than :01, so their per-variant volume is RMS-matched and the
+  // startOffset trims measured leading silence (same method as the combat
+  // variants above).
+  [AUDIO_EVENT_IDS.roundStart]: createEvent([
+    createVariant('round:start:01', '/audio/ui/round-start-01.ogg', 1),
+    createVariant('round:start:02', '/audio/ui/round-start-02.ogg', 1.46, 0.015),
+  ], {
+    cooldownMs: 300,
+    volume: 0.4,
+  }),
+  [AUDIO_EVENT_IDS.ringOut]: createEvent([
+    createVariant('system:ring-out:01', '/audio/system/ring-out-01.ogg', 1),
+    createVariant('system:ring-out:02', '/audio/system/ring-out-02.ogg', 1.41),
+  ], {
+    cooldownMs: 250,
+    volume: 0.5,
   }),
 });
 

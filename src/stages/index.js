@@ -817,6 +817,77 @@ export const STAGE_DEFS = Object.freeze({
     }),
     bounds: Object.freeze({ type: 'circle', radius: MOUNTAINTOP_RADIUS, boundary: 'cliff' }),
   }),
+  summit_sunrise: Object.freeze({
+    id: 'summit_sunrise',
+    displayName: 'Summit Sunrise',
+    description: 'The same summit at first light — calm gold over a sea of cloud',
+    modelPath: '/stages/mountaintop_rock_pillar_raw.glb',
+    modelScale: 11,
+    modelYOffset: -3.515,
+    showBoundaryMarkers: false,
+    camera: Object.freeze({
+      maxRadius: 5.4,
+    }),
+    decorModels: Object.freeze([
+      Object.freeze({
+        path: '/stages/pyramidal_mountain_raw.glb',
+        mode: 'placements',
+        materialTint: 0x3a2c3a,
+        materialOpacity: 0.92,
+        materialStyle: 'matte',
+        placements: Object.freeze([
+          Object.freeze({
+            position: Object.freeze([-30, -3.6, -18]),
+            rotationY: -0.8,
+            scale: Object.freeze([28, 20, 24]),
+          }),
+          Object.freeze({
+            position: Object.freeze([-9, -3.8, -28]),
+            rotationY: -0.12,
+            scale: Object.freeze([34, 26, 31]),
+          }),
+          Object.freeze({
+            position: Object.freeze([17, -3.7, -25]),
+            rotationY: 0.34,
+            scale: Object.freeze([32, 24, 29]),
+          }),
+          Object.freeze({
+            position: Object.freeze([39, -3.5, -17]),
+            rotationY: 0.9,
+            scale: Object.freeze([27, 19, 23]),
+          }),
+        ]),
+      }),
+    ]),
+    environment: Object.freeze({
+      background: 0xc99a7a,
+      fogColor: 0xb98f76,
+      fogDensity: 0.03,
+    }),
+    lighting: Object.freeze({
+      sun: Object.freeze({
+        color: 0xffd29a,
+        intensity: 1.6,
+        position: Object.freeze([9, 4.5, -7]),
+      }),
+      hemisphere: Object.freeze({
+        skyColor: 0xe6bd92,
+        groundColor: 0x4a342e,
+        intensity: 0.5,
+      }),
+      fill: Object.freeze({
+        color: 0x6f7ea2,
+        intensity: 0.16,
+      }),
+    }),
+    atmosphere: Object.freeze({
+      type: 'mountaintop_clouds',
+      cloudColor: 0xe8c4a4,
+      cloudOpacity: 0.82,
+      cloudY: -1.15,
+    }),
+    bounds: Object.freeze({ type: 'circle', radius: MOUNTAINTOP_RADIUS, boundary: 'cliff' }),
+  }),
   test: Object.freeze({
     id: 'test',
     displayName: 'Test',

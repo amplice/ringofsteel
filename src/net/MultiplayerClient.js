@@ -19,11 +19,17 @@ export class MultiplayerClient extends EventTarget {
       const socket = new WebSocket(url);
       this.socket = socket;
 
+      // These listeners can't be removed (anonymous), and a closed socket's
+      // close/message/error fire asynchronously. After disconnect()/reconnect
+      // the old socket is no longer this.socket, so ignore its stale events to
+      // avoid dispatching them onto a fresh session.
       socket.addEventListener('open', () => {
+        if (socket !== this.socket) return;
         this.connected = true;
       }, { once: true });
 
       socket.addEventListener('message', (event) => {
+        if (socket !== this.socket) return;
         const payload = this._parseMessage(event.data);
         if (!payload) return;
 
@@ -36,6 +42,7 @@ export class MultiplayerClient extends EventTarget {
       });
 
       socket.addEventListener('close', (event) => {
+        if (socket !== this.socket) return;
         this.connected = false;
         this.dispatchEvent(new CustomEvent('close', {
           detail: {
@@ -47,6 +54,7 @@ export class MultiplayerClient extends EventTarget {
       });
 
       socket.addEventListener('error', (err) => {
+        if (socket !== this.socket) return;
         if (!this.connected) reject(err);
         this.dispatchEvent(new CustomEvent('error', { detail: err }));
       });

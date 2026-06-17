@@ -305,7 +305,7 @@
     .select-section {
       position: relative;
       z-index: 1;
-      margin-bottom: 18px;
+      margin-bottom: 0;
       text-align: center;
       background: var(--ui-panel);
       border: 1px solid var(--ui-border);
@@ -1383,15 +1383,19 @@
 
     #select-screen {
       align-items: center;
-      gap: 14px;
-      padding: 22px 18px 34px;
-      overflow: hidden;
+      gap: 10px;
+      padding: 14px 18px 24px;
+      overflow-y: auto;
+      overflow-x: hidden;
       background:
         linear-gradient(90deg, rgba(37, 10, 15, 0.68), rgba(5, 6, 10, 0.38) 25%, rgba(5, 6, 10, 0.4) 75%, rgba(10, 25, 44, 0.68)),
         radial-gradient(circle at 50% 50%, rgba(5, 6, 10, 0.2), rgba(2, 3, 6, 0.74) 74%),
         var(--ui-scanlines);
       backdrop-filter: brightness(0.72) saturate(0.8);
     }
+    /* Keep the side fighter previews pinned while the settings/character
+       content scrolls, so they never scroll out of view. */
+    .select-character-preview { position: fixed; }
 
     #select-screen > :not(.select-character-preview) {
       position: relative;
@@ -1483,7 +1487,7 @@
 
     .select-section {
       width: min(1040px, calc(100vw - 44px));
-      padding: 16px;
+      padding: 11px 16px;
       margin-bottom: 0;
       text-align: left;
       background:
@@ -1527,7 +1531,15 @@
     }
 
     #mode-options {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    /* Seven modes share one row, so keep each label compact enough to fit. */
+    #mode-options .select-btn {
+      letter-spacing: 0.5px;
+      padding-left: 6px;
+      padding-right: 6px;
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     #difficulty-options,
@@ -1559,8 +1571,8 @@
     .select-btn {
       position: relative;
       width: 100%;
-      min-height: 48px;
-      padding: 12px 16px;
+      min-height: 40px;
+      padding: 9px 16px;
       overflow: hidden;
       color: var(--ui-ivory);
       background:
@@ -1888,8 +1900,8 @@
       grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr);
       align-items: stretch;
       gap: 10px;
-      min-height: 142px;
-      margin-bottom: 12px;
+      min-height: 104px;
+      margin-bottom: 0;
       padding: 10px;
       overflow: hidden;
       background:

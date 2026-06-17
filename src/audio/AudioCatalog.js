@@ -59,7 +59,10 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
     volume: 0.4,
   }),
   [AUDIO_EVENT_IDS.defenseParry]: createEvent([
+    // Second take added from a shipped-but-unused asset; per-variant volume and
+    // startOffset are RMS/onset-matched to :01 so neither take stands out.
     createVariant('defense:parry:01', '/audio/defense/parry-01.wav', 1),
+    createVariant('defense:parry:02', '/audio/defense/parry-02.wav', 0.87),
   ], {
     cooldownMs: 45,
     playbackRateMin: 0.99,
@@ -68,6 +71,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.defenseClash]: createEvent([
     createVariant('defense:clash:01', '/audio/defense/clash-01.wav', 1),
+    createVariant('defense:clash:02', '/audio/defense/clash-02.ogg', 1.75, 0.172),
   ], {
     cooldownMs: 55,
     playbackRateMin: 0.98,
@@ -76,6 +80,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.hitQuick]: createEvent([
     createVariant('hit:quick:01', '/audio/hit/light-01.wav', 1, 0.19),
+    createVariant('hit:quick:02', '/audio/hit/light-02.ogg', 0.82),
   ], {
     cooldownMs: 25,
     playbackRateMin: 0.99,
@@ -84,6 +89,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.hitHeavy]: createEvent([
     createVariant('hit:heavy:01', '/audio/hit/heavy-01.wav', 1, 0.19),
+    createVariant('hit:heavy:02', '/audio/hit/heavy-02.ogg', 1.33),
   ], {
     cooldownMs: 35,
     playbackRateMin: 0.985,
@@ -92,6 +98,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.hitThrust]: createEvent([
     createVariant('hit:thrust:01', '/audio/hit/thrust-01.wav', 1, 0.13),
+    createVariant('hit:thrust:02', '/audio/hit/thrust-02.ogg', 1.32),
   ], {
     cooldownMs: 25,
     playbackRateMin: 0.99,
@@ -100,6 +107,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.movementSidestep]: createEvent([
     createVariant('movement:sidestep:01', '/audio/movement/sidestep-01.ogg', 1),
+    createVariant('movement:sidestep:02', '/audio/movement/sidestep-02.wav', 0.2, 0.083),
   ], {
     cooldownMs: 65,
     playbackRateMin: 0.98,
@@ -108,6 +116,7 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.movementBackstep]: createEvent([
     createVariant('movement:backstep:01', '/audio/movement/backstep-01.ogg', 1),
+    createVariant('movement:backstep:02', '/audio/movement/backstep-02.wav', 0.21, 0.083),
   ], {
     cooldownMs: 80,
     playbackRateMin: 0.98,
@@ -116,6 +125,8 @@ export const AUDIO_EVENT_DEFS = Object.freeze({
   }),
   [AUDIO_EVENT_IDS.movementFootstep]: createEvent([
     createVariant('movement:footstep:01', '/audio/movement/footstep-01.wav', 1),
+    createVariant('movement:footstep:03', '/audio/movement/footstep-03.ogg', 0.08),
+    createVariant('movement:footstep:04', '/audio/movement/footstep-04.ogg', 0.07, 0.01),
   ], {
     cooldownMs: 70,
     playbackRateMin: 0.97,
